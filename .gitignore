@@ -32,6 +32,5 @@ go.work.sum
 # .vscode/
 
 # Yardmaster
-yard
 config.yaml
 tmp

@@ -12,7 +12,10 @@ func TestLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
 
 	configContent := `
 projects_root: /tmp/projects
@@ -23,13 +26,16 @@ defaults:
     - pattern: "^TEST-"
       repos: ["test-repo"]
 `
+
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
 	// Set environment variable to point to temp config
-	os.Setenv("HOME", tmpDir)
+	if err := os.Setenv("HOME", tmpDir); err != nil {
+		t.Fatalf("failed to set HOME: %v", err)
+	}
 	// Note: config.Load() looks in ~/.config/yardmaster/config.yaml or ./config.yaml
 	// We can mock the home directory or just put it in current directory?
 	// The Load() function checks current directory first.
@@ -39,22 +45,30 @@ defaults:
 
 	// Let's try to create the directory structure in tmpDir
 	configDir := filepath.Join(tmpDir, ".config", "yardmaster")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatalf("failed to create config dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(configContent), 0644); err != nil {
+
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(configContent), 0o644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
 	// We can't easily mock HOME in Go tests for os.UserHomeDir without external libs or modifying code.
 	// But config.Load() checks "." first.
 	// So let's run test in a temp dir.
-	wd, _ := os.Getwd()
-	defer os.Chdir(wd)
-	os.Chdir(tmpDir)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get wd: %v", err)
+	}
+
+	defer func() { _ = os.Chdir(wd) }()
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
 
 	// Write config.yaml to tmpDir (current dir)
-	if err := os.WriteFile("config.yaml", []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile("config.yaml", []byte(configContent), 0o644); err != nil {
 		t.Fatalf("failed to write local config file: %v", err)
 	}
 
@@ -66,6 +80,7 @@ defaults:
 	if cfg.ProjectsRoot != "/tmp/projects" {
 		t.Errorf("expected ProjectsRoot /tmp/projects, got %s", cfg.ProjectsRoot)
 	}
+
 	if cfg.WorkspacesRoot != "/tmp/workspaces" {
 		t.Errorf("expected WorkspacesRoot /tmp/workspaces, got %s", cfg.WorkspacesRoot)
 	}

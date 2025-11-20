@@ -1,3 +1,4 @@
+// Package workspace manages workspace metadata and directories.
 package workspace
 
 import (
@@ -5,8 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/alexisbeaulieu97/yard/internal/domain"
 	"gopkg.in/yaml.v3"
+
+	"github.com/alexisbeaulieu97/yard/internal/domain"
 )
 
 // Engine manages workspaces
@@ -27,7 +29,7 @@ func (e *Engine) Create(dirName, id, slug, branchName string, repos []domain.Rep
 		return fmt.Errorf("workspace already exists: %s", path)
 	}
 
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0o750); err != nil {
 		return fmt.Errorf("failed to create workspace directory: %w", err)
 	}
 
@@ -40,6 +42,7 @@ func (e *Engine) Create(dirName, id, slug, branchName string, repos []domain.Rep
 	}
 
 	metaPath := filepath.Join(path, "workspace.yaml")
+
 	return e.saveMetadata(metaPath, workspace)
 }
 
@@ -47,20 +50,23 @@ func (e *Engine) Create(dirName, id, slug, branchName string, repos []domain.Rep
 func (e *Engine) Save(dirName string, workspace domain.Workspace) error {
 	path := filepath.Join(e.WorkspacesRoot, dirName)
 	metaPath := filepath.Join(path, "workspace.yaml")
+
 	return e.saveMetadata(metaPath, workspace)
 }
 
 func (e *Engine) saveMetadata(path string, workspace domain.Workspace) error {
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o640) //nolint:gosec // path is constructed internally
 	if err != nil {
 		return fmt.Errorf("failed to create metadata file: %w", err)
 	}
-	defer f.Close()
+
+	defer func() { _ = f.Close() }()
 
 	enc := yaml.NewEncoder(f)
 	if err := enc.Encode(workspace); err != nil {
 		return fmt.Errorf("failed to encode metadata: %w", err)
 	}
+
 	return nil
 }
 
@@ -71,34 +77,42 @@ func (e *Engine) List() (map[string]domain.Workspace, error) {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
+
 		return nil, fmt.Errorf("failed to read workspaces root: %w", err)
 	}
 
 	workspaces := make(map[string]domain.Workspace)
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
 		metaPath := filepath.Join(e.WorkspacesRoot, entry.Name(), "workspace.yaml")
-		f, err := os.Open(metaPath)
+
+		f, err := os.Open(metaPath) //nolint:gosec // path is derived from workspace directory
 		if err != nil {
 			// Try legacy ticket.yaml for backward compatibility?
 			// For now, let's assume strict migration or new workspaces.
 			// Actually, let's try to read ticket.yaml if workspace.yaml missing
 			metaPath = filepath.Join(e.WorkspacesRoot, entry.Name(), "ticket.yaml")
-			f, err = os.Open(metaPath)
+
+			f, err = os.Open(metaPath) //nolint:gosec // path is derived from workspace directory
 			if err != nil {
 				continue
 			}
 		}
-		defer f.Close()
 
-		var w domain.Workspace
-		if err := yaml.NewDecoder(f).Decode(&w); err != nil {
-			continue
-		}
-		workspaces[entry.Name()] = w
+		func() {
+			defer func() { _ = f.Close() }()
+
+			var w domain.Workspace
+			if err := yaml.NewDecoder(f).Decode(&w); err != nil {
+				return
+			}
+
+			workspaces[entry.Name()] = w
+		}()
 	}
 
 	return workspaces, nil
@@ -109,21 +123,24 @@ func (e *Engine) Load(dirName string) (*domain.Workspace, error) {
 	path := filepath.Join(e.WorkspacesRoot, dirName)
 	metaPath := filepath.Join(path, "workspace.yaml")
 
-	f, err := os.Open(metaPath)
+	f, err := os.Open(metaPath) //nolint:gosec // path is derived from workspace directory
 	if err != nil {
 		// Try legacy ticket.yaml
 		metaPath = filepath.Join(path, "ticket.yaml")
-		f, err = os.Open(metaPath)
+
+		f, err = os.Open(metaPath) //nolint:gosec // path is derived from workspace directory
 		if err != nil {
 			return nil, fmt.Errorf("failed to open workspace metadata: %w", err)
 		}
 	}
-	defer f.Close()
+
+	defer func() { _ = f.Close() }()
 
 	var w domain.Workspace
 	if err := yaml.NewDecoder(f).Decode(&w); err != nil {
 		return nil, fmt.Errorf("failed to decode workspace metadata: %w", err)
 	}
+
 	return &w, nil
 }
 

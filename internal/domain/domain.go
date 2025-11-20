@@ -1,3 +1,4 @@
+// Package domain contains core domain models.
 package domain
 
 // Repo represents a git repository

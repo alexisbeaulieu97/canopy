@@ -1,3 +1,4 @@
+// Package gitx wraps git operations used by yard.
 package gitx
 
 import (
@@ -48,13 +49,13 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 
 	// Use git CLI for robustness
 	// 1. Clone
-	cmd := exec.Command("git", "clone", canonicalPath, worktreePath)
+	cmd := exec.Command("git", "clone", canonicalPath, worktreePath) //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git clone failed: %s: %w", string(output), err)
 	}
 
 	// 2. Checkout new branch
-	cmd = exec.Command("git", "-C", worktreePath, "checkout", "-b", branchName)
+	cmd = exec.Command("git", "-C", worktreePath, "checkout", "-b", branchName) //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git checkout -b failed: %s: %w", string(output), err)
 	}
@@ -86,6 +87,7 @@ func (g *GitEngine) Status(path string) (bool, int, string, error) {
 	if err != nil {
 		return isDirty, 0, "", fmt.Errorf("failed to get HEAD: %w", err)
 	}
+
 	branchName := head.Name().Short()
 
 	// Check unpushed commits
@@ -106,17 +108,15 @@ func (g *GitEngine) Status(path string) (bool, int, string, error) {
 			From: head.Hash(),
 		})
 		if err == nil {
-			err = commits.ForEach(func(c *object.Commit) error {
+			_ = commits.ForEach(func(c *object.Commit) error {
 				if c.Hash == remoteRef.Hash() {
 					return fmt.Errorf("found") // Stop iteration
 				}
+
 				unpushed++
+
 				return nil
 			})
-			if err != nil && err.Error() != "found" {
-				// Real error, but maybe just ignore for status?
-				// Let's just return what we have
-			}
 			// If we iterated everything and didn't find remote hash, it means we are ahead or diverged.
 			// Or remote ref is not in history (e.g. rebase).
 		}
@@ -135,10 +135,11 @@ func (g *GitEngine) Clone(url, name string) error {
 	}
 
 	// Use git CLI for robustness
-	cmd := exec.Command("git", "clone", "--bare", url, path)
+	cmd := exec.Command("git", "clone", "--bare", url, path) //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git clone failed: %s: %w", string(output), err)
 	}
+
 	return nil
 }
 
@@ -152,20 +153,22 @@ func (g *GitEngine) Fetch(name string) error {
 	}
 
 	// Use git CLI
-	cmd := exec.Command("git", "-C", path, "fetch", "--all")
+	cmd := exec.Command("git", "-C", path, "fetch", "--all") //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git fetch failed: %s: %w", string(output), err)
 	}
+
 	return nil
 }
 
 // Pull pulls updates for a repository worktree
 func (g *GitEngine) Pull(path string) error {
 	// Use git CLI
-	cmd := exec.Command("git", "-C", path, "pull")
+	cmd := exec.Command("git", "-C", path, "pull") //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git pull failed: %s: %w", string(output), err)
 	}
+
 	return nil
 }
 
@@ -176,10 +179,12 @@ func (g *GitEngine) List() ([]string, error) {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
+
 		return nil, fmt.Errorf("failed to read projects root: %w", err)
 	}
 
 	var repos []string
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -189,6 +194,7 @@ func (g *GitEngine) List() ([]string, error) {
 		// Let's keep it simple for MVP.
 		repos = append(repos, entry.Name())
 	}
+
 	return repos, nil
 }
 
@@ -198,11 +204,13 @@ func (g *GitEngine) Checkout(path, branchName string, create bool) error {
 	if create {
 		args = append(args, "-b")
 	}
+
 	args = append(args, branchName)
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", args...) //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git checkout failed: %s: %w", string(output), err)
 	}
+
 	return nil
 }

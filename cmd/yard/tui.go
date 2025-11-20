@@ -3,15 +3,16 @@ package main
 import (
 	"fmt"
 
-	"github.com/alexisbeaulieu97/yard/internal/tui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
+
+	"github.com/alexisbeaulieu97/yard/internal/tui"
 )
 
 var tuiCmd = &cobra.Command{
 	Use:   "tui",
 	Short: "Launch the terminal user interface",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		app, err := getApp(cmd)
 		if err != nil {
 			return err
@@ -28,7 +29,7 @@ var tuiCmd = &cobra.Command{
 		if printPath {
 			if model, ok := m.(tui.Model); ok {
 				if model.SelectedPath != "" {
-					fmt.Println(model.SelectedPath)
+					fmt.Println(model.SelectedPath) //nolint:forbidigo // user-facing CLI output
 				}
 			}
 		}

@@ -1,3 +1,4 @@
+// Package workspaces contains workspace-level business logic.
 package workspaces
 
 import (
@@ -21,6 +22,7 @@ type Service struct {
 	gitEngine *gitx.GitEngine
 	wsEngine  *workspace.Engine
 	logger    *logging.Logger
+	registry  *config.RepoRegistry
 }
 
 // NewService creates a new workspace service
@@ -30,6 +32,7 @@ func NewService(cfg *config.Config, gitEngine *gitx.GitEngine, wsEngine *workspa
 		gitEngine: gitEngine,
 		wsEngine:  wsEngine,
 		logger:    logger,
+		registry:  cfg.Registry,
 	}
 }
 
@@ -37,8 +40,10 @@ func NewService(cfg *config.Config, gitEngine *gitx.GitEngine, wsEngine *workspa
 func (s *Service) ResolveRepos(workspaceID string, requestedRepos []string) ([]domain.Repo, error) {
 	var repoNames []string
 
+	userRequested := len(requestedRepos) > 0
+
 	// 1. Use requested repos if provided
-	if len(requestedRepos) > 0 {
+	if userRequested {
 		repoNames = requestedRepos
 	} else {
 		// 2. Fallback to config patterns
@@ -50,47 +55,69 @@ func (s *Service) ResolveRepos(workspaceID string, requestedRepos []string) ([]d
 	}
 
 	var repos []domain.Repo
-	for _, val := range repoNames {
+
+	for _, raw := range repoNames {
+		val := strings.TrimSpace(raw)
 		if val == "" {
 			continue
 		}
 
-		name := val
-		url := "https://github.com/example/" + name
+		if isLikelyURL(val) {
+			repos = append(repos, domain.Repo{
+				Name: repoNameFromURL(val),
+				URL:  val,
+			})
 
-		// Check if it is a full URL
-		if strings.HasPrefix(val, "http://") || strings.HasPrefix(val, "https://") || strings.HasPrefix(val, "git@") {
-			url = val
-			// Extract name from URL
-			parts := strings.Split(val, "/")
-			if len(parts) > 0 {
-				name = parts[len(parts)-1]
-				name = strings.TrimSuffix(name, ".git")
-			}
-		} else if strings.Contains(val, "/") {
-			// If input is like "owner/repo", use that for URL and repo name
-			parts := strings.Split(val, "/")
-			if len(parts) == 2 {
-				name = parts[1]
-				url = "https://github.com/" + val
+			continue
+		}
+
+		if s.registry != nil {
+			if entry, ok := s.registry.Resolve(val); ok {
+				repos = append(repos, domain.Repo{
+					Name: repoNameFromURL(entry.URL),
+					URL:  entry.URL,
+				})
+
+				continue
 			}
 		}
 
-		repos = append(repos, domain.Repo{Name: name, URL: url})
+		if strings.Count(val, "/") == 1 {
+			parts := strings.Split(val, "/")
+			url := "https://github.com/" + val
+			repos = append(repos, domain.Repo{
+				Name: parts[1],
+				URL:  url,
+			})
+
+			continue
+		}
+
+		if userRequested {
+			return nil, fmt.Errorf("unknown repository '%s'. Use 'yard repo register %s <url>' to add it", val, val)
+		}
+
+		// Legacy fallback for pattern-based names without explicit URLs.
+		repos = append(repos, domain.Repo{
+			Name: val,
+			URL:  fmt.Sprintf("https://github.com/example/%s", val),
+		})
 	}
 
 	return repos, nil
 }
 
 // CreateWorkspace creates a new workspace directory and returns the directory name
-func (s *Service) CreateWorkspace(id string, slug string, branchName string, repos []domain.Repo) (string, error) {
+func (s *Service) CreateWorkspace(id, slug, branchName string, repos []domain.Repo) (string, error) {
 	// 1. Determine directory name
 	// Simplified naming: Use ID as-is.
 	// If slug is provided (legacy/optional), append it.
 	dirName := id
+
 	if slug != "" {
 		// Keep the template logic if slug is provided, for backward compatibility or advanced usage
 		var err error
+
 		dirName, err = s.renderWorkspaceDirName(id, slug)
 		if err != nil {
 			return "", fmt.Errorf("failed to render workspace directory name: %w", err)
@@ -101,14 +128,6 @@ func (s *Service) CreateWorkspace(id string, slug string, branchName string, rep
 	if branchName == "" {
 		branchName = id // Default branch name is the workspace ID
 	}
-
-	// Setup cleanup on failure
-	createdDir := false
-	defer func() {
-		if createdDir {
-			// Manual cleanup handled below
-		}
-	}()
 
 	if err := s.wsEngine.Create(dirName, id, slug, branchName, repos); err != nil {
 		return "", err
@@ -192,23 +211,9 @@ func (s *Service) renderWorkspaceDirName(id, slug string) (string, error) {
 
 // AddRepoToWorkspace adds a repository to an existing workspace
 func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
-	// 1. Get workspace details to find directory and branch
-	workspaces, err := s.wsEngine.List()
+	workspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
-		return fmt.Errorf("failed to list workspaces: %w", err)
-	}
-
-	var workspace *domain.Workspace
-	var dirName string
-	for dir, w := range workspaces {
-		if w.ID == workspaceID {
-			workspace = &w
-			dirName = dir
-			break
-		}
-	}
-	if workspace == nil {
-		return fmt.Errorf("workspace not found: %s", workspaceID)
+		return err
 	}
 
 	// 2. Check if repo already exists in workspace
@@ -223,6 +228,7 @@ func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve repo %s: %w", repoName, err)
 	}
+
 	repo := repos[0]
 
 	// 4. Clone repo
@@ -237,6 +243,7 @@ func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
 	if branchName == "" {
 		branchName = workspace.ID // Fallback for legacy workspaces
 	}
+
 	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
 	if err := s.gitEngine.CreateWorktree(repo.Name, worktreePath, branchName); err != nil {
 		return fmt.Errorf("failed to create worktree for %s: %w", repo.Name, err)
@@ -253,33 +260,21 @@ func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
 
 // RemoveRepoFromWorkspace removes a repository from an existing workspace
 func (s *Service) RemoveRepoFromWorkspace(workspaceID, repoName string) error {
-	// 1. Get workspace details
-	workspaces, err := s.wsEngine.List()
+	workspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
-		return fmt.Errorf("failed to list workspaces: %w", err)
-	}
-
-	var workspace *domain.Workspace
-	var dirName string
-	for dir, w := range workspaces {
-		if w.ID == workspaceID {
-			workspace = &w
-			dirName = dir
-			break
-		}
-	}
-	if workspace == nil {
-		return fmt.Errorf("workspace not found: %s", workspaceID)
+		return err
 	}
 
 	// 2. Check if repo exists in workspace
 	repoIndex := -1
+
 	for i, r := range workspace.Repos {
 		if r.Name == repoName {
 			repoIndex = i
 			break
 		}
 	}
+
 	if repoIndex == -1 {
 		return fmt.Errorf("repository %s not found in workspace %s", repoName, workspaceID)
 	}
@@ -308,6 +303,7 @@ func (s *Service) CloseWorkspace(workspaceID string, force bool) error {
 	}
 
 	var targetWorkspace *domain.Workspace
+
 	for _, w := range workspaces {
 		if w.ID == workspaceID {
 			targetWorkspace = &w
@@ -322,10 +318,12 @@ func (s *Service) CloseWorkspace(workspaceID string, force bool) error {
 	if !force {
 		for _, repo := range targetWorkspace.Repos {
 			worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, workspaceID, repo.Name)
+
 			isDirty, _, _, err := s.gitEngine.Status(worktreePath)
 			if err != nil {
 				continue
 			}
+
 			if isDirty {
 				return fmt.Errorf("repo %s has uncommitted changes. Use --force to close", repo.Name)
 			}
@@ -347,6 +345,7 @@ func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
 	for _, w := range workspaceMap {
 		workspaces = append(workspaces, w)
 	}
+
 	return workspaces, nil
 }
 
@@ -363,36 +362,24 @@ func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error)
 	// But we support custom naming.
 	// So we MUST List() to find the workspace by ID unless we enforce dirName == ID.
 	// Let's keep the List() logic for finding the workspace, but use the found workspace object directly.
-
-	workspaces, err := s.wsEngine.List()
+	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
 	}
 
-	var targetWorkspace *domain.Workspace
-	var dirName string
-	for dir, w := range workspaces {
-		if w.ID == workspaceID {
-			targetWorkspace = &w
-			dirName = dir
-			break
-		}
-	}
-
-	if targetWorkspace == nil {
-		return nil, fmt.Errorf("workspace %s not found", workspaceID)
-	}
-
 	// 2. Check status for each repo
 	var repoStatuses []domain.RepoStatus
+
 	for _, repo := range targetWorkspace.Repos {
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
+
 		isDirty, unpushed, branch, err := s.gitEngine.Status(worktreePath)
 		if err != nil {
 			repoStatuses = append(repoStatuses, domain.RepoStatus{
 				Name:   repo.Name,
 				Branch: "ERROR: " + err.Error(),
 			})
+
 			continue
 		}
 
@@ -416,22 +403,23 @@ func (s *Service) ListCanonicalRepos() ([]string, error) {
 	return s.gitEngine.List()
 }
 
-// AddCanonicalRepo adds a new repository to the cache
-func (s *Service) AddCanonicalRepo(url string) error {
+// AddCanonicalRepo adds a new repository to the cache and returns the canonical name.
+func (s *Service) AddCanonicalRepo(url string) (string, error) {
 	// Extract name from URL
 	// Assuming URL ends with /name.git or /name
 	parts := strings.Split(url, "/")
 	if len(parts) == 0 {
-		return fmt.Errorf("invalid URL: %s", url)
+		return "", fmt.Errorf("invalid URL: %s", url)
 	}
+
 	name := parts[len(parts)-1]
 	name = strings.TrimSuffix(name, ".git")
 
 	if name == "" {
-		return fmt.Errorf("could not determine repo name from URL: %s", url)
+		return "", fmt.Errorf("could not determine repo name from URL: %s", url)
 	}
 
-	return s.gitEngine.Clone(url, name)
+	return name, s.gitEngine.Clone(url, name)
 }
 
 // RemoveCanonicalRepo removes a repository from the cache
@@ -443,6 +431,7 @@ func (s *Service) RemoveCanonicalRepo(name string, force bool) error {
 	}
 
 	var usedBy []string
+
 	for _, t := range tickets {
 		for _, r := range t.Repos {
 			if r.Name == name {
@@ -465,6 +454,7 @@ func (s *Service) RemoveCanonicalRepo(name string, force bool) error {
 	if err := os.RemoveAll(path); err != nil {
 		return fmt.Errorf("failed to remove repo %s: %w", name, err)
 	}
+
 	return nil
 }
 
@@ -481,12 +471,16 @@ func (s *Service) SyncWorkspace(workspaceID string) error {
 		return fmt.Errorf("failed to list workspaces: %w", err)
 	}
 
-	var targetWorkspace *domain.Workspace
-	var dirName string
+	var (
+		targetWorkspace *domain.Workspace
+		dirName         string
+	)
+
 	for dir, w := range workspaces {
 		if w.ID == workspaceID {
 			targetWorkspace = &w
 			dirName = dir
+
 			break
 		}
 	}
@@ -500,6 +494,7 @@ func (s *Service) SyncWorkspace(workspaceID string) error {
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
 		s.logger.Info("Syncing repo", "repo", repo.Name)
 		s.logger.Debug("Pulling changes", "path", worktreePath)
+
 		if err := s.gitEngine.Pull(worktreePath); err != nil {
 			// Log error but continue? Or fail?
 			// For now, let's return error to alert user.
@@ -512,30 +507,16 @@ func (s *Service) SyncWorkspace(workspaceID string) error {
 
 // SwitchBranch switches the branch for all repos in a workspace
 func (s *Service) SwitchBranch(workspaceID, branchName string, create bool) error {
-	// 1. Get workspace details
-	workspaces, err := s.wsEngine.List()
+	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
-		return fmt.Errorf("failed to list workspaces: %w", err)
-	}
-
-	var targetWorkspace *domain.Workspace
-	var dirName string
-	for dir, w := range workspaces {
-		if w.ID == workspaceID {
-			targetWorkspace = &w
-			dirName = dir
-			break
-		}
-	}
-
-	if targetWorkspace == nil {
-		return fmt.Errorf("workspace %s not found", workspaceID)
+		return err
 	}
 
 	// 2. Iterate through repos and checkout
 	for _, repo := range targetWorkspace.Repos {
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
 		s.logger.Info("Switching branch", "repo", repo.Name, "branch", branchName)
+
 		if err := s.gitEngine.Checkout(worktreePath, branchName, create); err != nil {
 			return fmt.Errorf("failed to checkout branch %s in repo %s: %w", branchName, repo.Name, err)
 		}
@@ -548,4 +529,43 @@ func (s *Service) SwitchBranch(workspaceID, branchName string, create bool) erro
 	}
 
 	return nil
+}
+
+func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, error) {
+	workspaces, err := s.wsEngine.List()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to list workspaces: %w", err)
+	}
+
+	for dir, w := range workspaces {
+		if w.ID == workspaceID {
+			return &w, dir, nil
+		}
+	}
+
+	return nil, "", fmt.Errorf("workspace %s not found", workspaceID)
+}
+
+func isLikelyURL(val string) bool {
+	return strings.HasPrefix(val, "http://") ||
+		strings.HasPrefix(val, "https://") ||
+		strings.HasPrefix(val, "git@") ||
+		strings.HasPrefix(val, "file://")
+}
+
+func repoNameFromURL(url string) string {
+	// Strip scp-like prefix if present
+	if strings.Contains(url, ":") && !strings.HasPrefix(url, "http") {
+		parts := strings.Split(url, ":")
+		url = parts[len(parts)-1]
+	}
+
+	parts := strings.Split(url, "/")
+	if len(parts) == 0 {
+		return url
+	}
+
+	name := parts[len(parts)-1]
+
+	return strings.TrimSuffix(name, ".git")
 }

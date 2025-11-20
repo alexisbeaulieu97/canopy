@@ -73,6 +73,17 @@ This will:
 - **Remove**: `yard repo remove <NAME>`
 - **Sync**: `yard repo sync <NAME>` (fetches updates)
 
+#### Repository Registry
+
+Use short aliases instead of full URLs:
+
+- **Register**: `yard repo register <alias> <url> [--branch develop --description "..."] [--tags api,go]`
+- **Unregister**: `yard repo unregister <alias>`
+- **List registry**: `yard repo list-registry [--tags backend]`
+- **Show entry**: `yard repo show <alias>`
+
+`yard repo add` auto-registers a sensible alias (override with `--alias` or skip with `--no-register`).
+
 ### TUI
 
 Launch the interactive UI:

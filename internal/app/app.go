@@ -1,3 +1,4 @@
+// Package app provides the shared application container for CLI commands.
 package app
 
 import (

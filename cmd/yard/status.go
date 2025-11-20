@@ -12,7 +12,7 @@ import (
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show status of current workspace",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		app, err := getApp(cmd)
 		if err != nil {
 			return err
@@ -43,13 +43,13 @@ var statusCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Workspace: %s\n", status.ID)
+		fmt.Printf("Workspace: %s\n", status.ID) //nolint:forbidigo // user-facing CLI output
 		for _, r := range status.Repos {
 			statusStr := "Clean"
 			if r.IsDirty {
 				statusStr = "Dirty"
 			}
-			fmt.Printf("- %s: %s (Branch: %s, Unpushed: %d)\n", r.Name, statusStr, r.Branch, r.UnpushedCommits)
+			fmt.Printf("- %s: %s (Branch: %s, Unpushed: %d)\n", r.Name, statusStr, r.Branch, r.UnpushedCommits) //nolint:forbidigo // user-facing CLI output
 		}
 
 		return nil

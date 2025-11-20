@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
 	"regexp"
 
 	"github.com/spf13/viper"
@@ -12,10 +11,11 @@ import (
 
 // Config holds the global configuration
 type Config struct {
-	ProjectsRoot    string   `mapstructure:"projects_root"`
-	WorkspacesRoot  string   `mapstructure:"workspaces_root"`
-	WorkspaceNaming string   `mapstructure:"workspace_naming"`
-	Defaults        Defaults `mapstructure:"defaults"`
+	ProjectsRoot    string        `mapstructure:"projects_root"`
+	WorkspacesRoot  string        `mapstructure:"workspaces_root"`
+	WorkspaceNaming string        `mapstructure:"workspace_naming"`
+	Defaults        Defaults      `mapstructure:"defaults"`
+	Registry        *RepoRegistry `mapstructure:"-"`
 }
 
 // WorkspacePattern defines a regex pattern and default repos
@@ -65,6 +65,13 @@ func Load() (*Config, error) {
 	cfg.ProjectsRoot = expandPath(cfg.ProjectsRoot, home)
 	cfg.WorkspacesRoot = expandPath(cfg.WorkspacesRoot, home)
 
+	registry, err := LoadRepoRegistry("")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load repository registry: %w", err)
+	}
+
+	cfg.Registry = registry
+
 	return &cfg, nil
 }
 
@@ -72,9 +79,11 @@ func expandPath(path, home string) string {
 	if path == "~" {
 		return home
 	}
+
 	if len(path) > 1 && path[:2] == "~/" {
 		return filepath.Join(home, path[2:])
 	}
+
 	return path
 }
 
@@ -86,47 +95,18 @@ func (c *Config) GetReposForWorkspace(workspaceID string) []string {
 			return p.Repos
 		}
 	}
+
 	return nil
 }
 
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
-	// Check ProjectsRoot
-	if c.ProjectsRoot == "" {
-		return fmt.Errorf("projects_root is required")
-	}
-	if info, err := os.Stat(c.ProjectsRoot); err != nil {
-		if os.IsNotExist(err) {
-			// It's okay if it doesn't exist, we might create it.
-			// But for validation, maybe we warn?
-			// Let's say it's valid but note it doesn't exist?
-			// Actually, for 'check', we want to ensure it's usable.
-			// But yard creates it on demand. So maybe just check if parent exists?
-			// Let's just check if it's an absolute path for now.
-			if !filepath.IsAbs(c.ProjectsRoot) {
-				return fmt.Errorf("projects_root must be an absolute path: %s", c.ProjectsRoot)
-			}
-		} else {
-			return err
-		}
-	} else if !info.IsDir() {
-		return fmt.Errorf("projects_root must be a directory: %s", c.ProjectsRoot)
+	if err := validateRoot("projects_root", c.ProjectsRoot); err != nil {
+		return err
 	}
 
-	// Check WorkspacesRoot
-	if c.WorkspacesRoot == "" {
-		return fmt.Errorf("workspaces_root is required")
-	}
-	if info, err := os.Stat(c.WorkspacesRoot); err != nil {
-		if os.IsNotExist(err) {
-			if !filepath.IsAbs(c.WorkspacesRoot) {
-				return fmt.Errorf("workspaces_root must be an absolute path: %s", c.WorkspacesRoot)
-			}
-		} else {
-			return err
-		}
-	} else if !info.IsDir() {
-		return fmt.Errorf("workspaces_root must be a directory: %s", c.WorkspacesRoot)
+	if err := validateRoot("workspaces_root", c.WorkspacesRoot); err != nil {
+		return err
 	}
 
 	// Check Patterns
@@ -134,6 +114,31 @@ func (c *Config) Validate() error {
 		if _, err := regexp.Compile(p.Pattern); err != nil {
 			return fmt.Errorf("invalid regex pattern '%s': %w", p.Pattern, err)
 		}
+	}
+
+	return nil
+}
+
+func validateRoot(label, path string) error {
+	if path == "" {
+		return fmt.Errorf("%s is required", label)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if !filepath.IsAbs(path) {
+				return fmt.Errorf("%s must be an absolute path: %s", label, path)
+			}
+
+			return nil
+		}
+
+		return err
+	}
+
+	if !info.IsDir() {
+		return fmt.Errorf("%s must be a directory: %s", label, path)
 	}
 
 	return nil

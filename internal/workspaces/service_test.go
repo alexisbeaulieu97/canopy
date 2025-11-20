@@ -28,21 +28,25 @@ func TestResolveRepos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveRepos failed: %v", err)
 	}
+
 	if len(repos) != 1 || repos[0].Name != "repo-a" {
 		t.Errorf("expected [repo-a], got %v", repos)
 	}
 
 	// Test case 2: Explicit repos
-	repos, err = svc.ResolveRepos("OTHER-123", []string{"repo-b", "https://github.com/org/repo-c.git"})
+	repos, err = svc.ResolveRepos("OTHER-123", []string{"myorg/repo-b", "https://github.com/org/repo-c.git"})
 	if err != nil {
 		t.Fatalf("ResolveRepos failed: %v", err)
 	}
+
 	if len(repos) != 2 {
 		t.Errorf("expected 2 repos, got %d", len(repos))
 	}
+
 	if repos[0].Name != "repo-b" {
 		t.Errorf("expected repo-b, got %s", repos[0].Name)
 	}
+
 	if repos[1].Name != "repo-c" {
 		t.Errorf("expected repo-c, got %s", repos[1].Name)
 	}
@@ -54,12 +58,19 @@ func TestCreateWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	projectsRoot := filepath.Join(tmpDir, "projects")
 	workspacesRoot := filepath.Join(tmpDir, "workspaces")
-	os.MkdirAll(projectsRoot, 0755)
-	os.MkdirAll(workspacesRoot, 0755)
+
+	if err := os.MkdirAll(projectsRoot, 0o750); err != nil {
+		t.Fatalf("failed to create projects root: %v", err)
+	}
+
+	if err := os.MkdirAll(workspacesRoot, 0o750); err != nil {
+		t.Fatalf("failed to create workspaces root: %v", err)
+	}
 
 	cfg := &config.Config{
 		ProjectsRoot:    projectsRoot,
@@ -92,6 +103,7 @@ func TestCreateWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to load workspace: %v", err)
 	}
+
 	if ws.ID != "TEST-EMPTY" {
 		t.Errorf("expected ID TEST-EMPTY, got %s", ws.ID)
 	}

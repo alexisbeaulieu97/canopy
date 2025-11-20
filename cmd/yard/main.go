@@ -1,3 +1,4 @@
+// Package main implements the yard CLI.
 package main
 
 import (
@@ -5,8 +6,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/alexisbeaulieu97/yard/internal/app"
 	"github.com/spf13/cobra"
+
+	"github.com/alexisbeaulieu97/yard/internal/app"
 )
 
 type contextKey string
@@ -18,7 +20,7 @@ var (
 	rootCmd = &cobra.Command{
 		Use:   "yard",
 		Short: "Ticket-centric workspaces",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			appInstance, err := app.New(debug)
 			if err != nil {
 				return err

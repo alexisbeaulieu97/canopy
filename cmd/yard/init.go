@@ -11,28 +11,28 @@ import (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize configuration",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return err
 		}
 
 		configDir := filepath.Join(home, ".yard")
-		if err := os.MkdirAll(configDir, 0755); err != nil {
+		if err := os.MkdirAll(configDir, 0o750); err != nil {
 			return err
 		}
 
 		configFile := filepath.Join(configDir, "config.yaml")
 		if _, err := os.Stat(configFile); err == nil {
-			fmt.Println("Config file already exists:", configFile)
+			fmt.Println("Config file already exists:", configFile) //nolint:forbidigo // user-facing CLI output
 			return nil
 		}
 
-		f, err := os.Create(configFile)
+		f, err := os.Create(configFile) //nolint:gosec // path is within user config directory
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		// Write defaults
 		_, err = f.WriteString(`projects_root: ~/.yard/projects
@@ -43,7 +43,7 @@ ticket_naming: "{{.ID}}"
 			return err
 		}
 
-		fmt.Println("Initialized config at:", configFile)
+		fmt.Println("Initialized config at:", configFile) //nolint:forbidigo // user-facing CLI output
 		return nil
 	},
 }

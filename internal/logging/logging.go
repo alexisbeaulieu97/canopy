@@ -1,3 +1,4 @@
+// Package logging provides simple structured logging helpers.
 package logging
 
 import (
@@ -17,11 +18,13 @@ func New(debug bool) *Logger {
 	l := log.New(os.Stderr)
 	l.SetReportTimestamp(true)
 	l.SetTimeFormat(time.Kitchen)
+
 	if debug {
 		l.SetLevel(log.DebugLevel)
 	} else {
 		l.SetLevel(log.InfoLevel)
 	}
+
 	return &Logger{Logger: l}
 }
 

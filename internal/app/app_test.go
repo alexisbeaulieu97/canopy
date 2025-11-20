@@ -23,6 +23,7 @@ func TestNewInitializesDependencies(t *testing.T) {
 	}
 
 	configContent := []byte("projects_root: \"" + projectsRoot + "\"\nworkspaces_root: \"" + workspacesRoot + "\"\n")
+
 	configPath := filepath.Join(configDir, "config.yaml")
 	if err := os.WriteFile(configPath, configContent, 0o644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
@@ -38,15 +39,19 @@ func TestNewInitializesDependencies(t *testing.T) {
 	if app.Config == nil {
 		t.Fatalf("expected config to be initialized")
 	}
+
 	if app.Config.ProjectsRoot != projectsRoot {
 		t.Fatalf("unexpected projects root, got %s", app.Config.ProjectsRoot)
 	}
+
 	if app.Config.WorkspacesRoot != workspacesRoot {
 		t.Fatalf("unexpected workspaces root, got %s", app.Config.WorkspacesRoot)
 	}
+
 	if app.Logger == nil {
 		t.Fatalf("expected logger to be initialized")
 	}
+
 	if app.Service == nil {
 		t.Fatalf("expected service to be initialized")
 	}
