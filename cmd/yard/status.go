@@ -2,50 +2,60 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
+	"github.com/alexisbeaulieu97/yard/internal/config"
+	"github.com/alexisbeaulieu97/yard/internal/gitx"
 	"github.com/alexisbeaulieu97/yard/internal/workspace"
+	"github.com/alexisbeaulieu97/yard/internal/workspaces"
 	"github.com/spf13/cobra"
 )
 
 var statusCmd = &cobra.Command{
-	Use:   "status [TICKET-ID]",
-	Short: "Show status of ticket workspaces",
+	Use:   "status",
+	Short: "Show status of current workspace",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wsEngine := workspace.New(cfg.TicketsRoot)
-		// gitEngine := gitx.New(cfg.ProjectsRoot) // Unused for now
-
-		var tickets []string
-		if len(args) > 0 {
-			tickets = []string{args[0]}
-		} else {
-			// List all
-			list, err := wsEngine.List()
-			if err != nil {
-				return err
-			}
-			for _, t := range list {
-				tickets = append(tickets, t.ID)
-			}
+		cfg, err := config.Load()
+		if err != nil {
+			return err
 		}
 
-		for _, tID := range tickets {
-			fmt.Printf("Ticket: %s\n", tID)
-			// We need to load the ticket to get repos
-			// For now, just listing the directory contents as a proxy or assume we can load it.
-            // The List() returns Ticket structs, but if we passed an ID arg we need to load it.
-            // Let's just assume we iterate the repos found in the directory for now or load metadata.
-            
-            // Re-loading metadata logic (duplicated from List, should be in Workspace engine)
-            // For MVP, let's just say "Status not fully implemented for individual repos yet" 
-            // or try to scan the directory.
-            
-            // ticketDir := filepath.Join(cfg.TicketsRoot, tID)
-            // ...
-            
-            fmt.Println("  (Status check implementation pending full metadata loading)")
-            
-            // Example check on a repo if we knew the name
-            // isDirty, _, _ := gitEngine.Status(repoPath)
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+
+		// Check if we are inside a workspace
+		relPath, err := filepath.Rel(cfg.WorkspacesRoot, cwd)
+		if err != nil || strings.HasPrefix(relPath, "..") {
+			return fmt.Errorf("not inside a workspace")
+		}
+
+		// Extract workspace ID from path
+		parts := strings.Split(relPath, string(os.PathSeparator))
+		if len(parts) == 0 {
+			return fmt.Errorf("unable to determine workspace from path")
+		}
+		workspaceID := parts[0]
+
+		gitEngine := gitx.New(cfg.ProjectsRoot)
+		wsEngine := workspace.New(cfg.WorkspacesRoot)
+		service := workspaces.NewService(cfg, gitEngine, wsEngine, logger)
+
+		status, err := service.GetStatus(workspaceID)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Workspace: %s\n", status.ID)
+		for _, r := range status.Repos {
+			statusStr := "Clean"
+			if r.IsDirty {
+				statusStr = "Dirty"
+			}
+			fmt.Printf("- %s: %s (Branch: %s, Unpushed: %d)\n", r.Name, statusStr, r.Branch, r.UnpushedCommits)
 		}
 
 		return nil

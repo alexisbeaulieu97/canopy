@@ -13,11 +13,15 @@ type Logger struct {
 }
 
 // New creates a new logger instance
-func New() *Logger {
+func New(debug bool) *Logger {
 	l := log.New(os.Stderr)
 	l.SetReportTimestamp(true)
 	l.SetTimeFormat(time.Kitchen)
-	l.SetLevel(log.InfoLevel)
+	if debug {
+		l.SetLevel(log.DebugLevel)
+	} else {
+		l.SetLevel(log.InfoLevel)
+	}
 	return &Logger{Logger: l}
 }
 

@@ -12,6 +12,7 @@ import (
 var (
 	cfg    *config.Config
 	logger *logging.Logger
+	debug  bool
 )
 
 var rootCmd = &cobra.Command{
@@ -23,9 +24,13 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		logger = logging.New()
+		logger = logging.New(debug)
 		return nil
 	},
+}
+
+func init() {
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging")
 }
 
 func main() {
