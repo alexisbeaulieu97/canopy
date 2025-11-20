@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -137,6 +138,22 @@ func (s *Service) CreateWorkspace(id string, slug string, branchName string, rep
 	}
 
 	return dirName, nil
+}
+
+// WorkspacePath returns the absolute path for a workspace ID.
+func (s *Service) WorkspacePath(workspaceID string) (string, error) {
+	workspaces, err := s.wsEngine.List()
+	if err != nil {
+		return "", fmt.Errorf("failed to list workspaces: %w", err)
+	}
+
+	for dir, w := range workspaces {
+		if w.ID == workspaceID {
+			return filepath.Join(s.config.WorkspacesRoot, dir), nil
+		}
+	}
+
+	return "", fmt.Errorf("workspace %s not found", workspaceID)
 }
 
 func (s *Service) renderWorkspaceDirName(id, slug string) (string, error) {

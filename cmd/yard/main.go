@@ -1,33 +1,36 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
-	"github.com/alexisbeaulieu97/yard/internal/config"
-	"github.com/alexisbeaulieu97/yard/internal/logging"
+	"github.com/alexisbeaulieu97/yard/internal/app"
 	"github.com/spf13/cobra"
 )
 
-var (
-	cfg    *config.Config
-	logger *logging.Logger
-	debug  bool
-)
+type contextKey string
 
-var rootCmd = &cobra.Command{
-	Use:   "yard",
-	Short: "Ticket-centric workspaces",
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		var err error
-		cfg, err = config.Load()
-		if err != nil {
-			return err
-		}
-		logger = logging.New(debug)
-		return nil
-	},
-}
+const appContextKey contextKey = "app"
+
+var (
+	debug   bool
+	rootCmd = &cobra.Command{
+		Use:   "yard",
+		Short: "Ticket-centric workspaces",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			appInstance, err := app.New(debug)
+			if err != nil {
+				return err
+			}
+
+			ctx := context.WithValue(cmd.Context(), appContextKey, appInstance)
+			cmd.SetContext(ctx)
+			cmd.Root().SetContext(ctx)
+			return nil
+		},
+	}
+)
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging")
@@ -38,4 +41,18 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func getApp(cmd *cobra.Command) (*app.App, error) {
+	value := cmd.Context().Value(appContextKey)
+	if value == nil {
+		return nil, fmt.Errorf("app not initialized")
+	}
+
+	appInstance, ok := value.(*app.App)
+	if !ok {
+		return nil, fmt.Errorf("invalid app in context")
+	}
+
+	return appInstance, nil
 }

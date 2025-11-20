@@ -6,10 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/alexisbeaulieu97/yard/internal/config"
-	"github.com/alexisbeaulieu97/yard/internal/gitx"
-	"github.com/alexisbeaulieu97/yard/internal/workspace"
-	"github.com/alexisbeaulieu97/yard/internal/workspaces"
 	"github.com/spf13/cobra"
 )
 
@@ -17,10 +13,12 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show status of current workspace",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
+		app, err := getApp(cmd)
 		if err != nil {
 			return err
 		}
+
+		cfg := app.Config
 
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -40,11 +38,7 @@ var statusCmd = &cobra.Command{
 		}
 		workspaceID := parts[0]
 
-		gitEngine := gitx.New(cfg.ProjectsRoot)
-		wsEngine := workspace.New(cfg.WorkspacesRoot)
-		service := workspaces.NewService(cfg, gitEngine, wsEngine, logger)
-
-		status, err := service.GetStatus(workspaceID)
+		status, err := app.Service.GetStatus(workspaceID)
 		if err != nil {
 			return err
 		}
