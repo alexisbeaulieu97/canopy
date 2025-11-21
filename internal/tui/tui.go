@@ -205,7 +205,7 @@ func (m Model) View() string {
 
 func (m Model) closeWorkspace(id string) tea.Cmd {
 	return func() tea.Msg {
-		err := m.svc.CloseWorkspace(id, true) // Force close for now as we confirmed
+		err := m.svc.CloseWorkspace(id, false)
 		if err != nil {
 			return err
 		}

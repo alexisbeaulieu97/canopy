@@ -80,6 +80,10 @@ func (e *Engine) saveMetadata(path string, workspace domain.Workspace) error {
 		return fmt.Errorf("failed to encode metadata: %w", err)
 	}
 
+	if err := enc.Close(); err != nil {
+		return fmt.Errorf("failed to flush metadata: %w", err)
+	}
+
 	return nil
 }
 

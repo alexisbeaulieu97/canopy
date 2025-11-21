@@ -22,7 +22,7 @@ type RegistryEntry struct {
 
 // RepoRegistry stores repository aliases and metadata.
 type RepoRegistry struct {
-	path  string
+	path  string                   `yaml:"-"`
 	Repos map[string]RegistryEntry `yaml:"repos"`
 }
 
@@ -120,6 +120,7 @@ func (r *RepoRegistry) Register(alias string, entry RegistryEntry, force bool) e
 		return fmt.Errorf("alias is required")
 	}
 
+	entry.URL = strings.TrimSpace(entry.URL)
 	if !isLikelyURL(entry.URL) {
 		return fmt.Errorf("invalid repository URL: %s", entry.URL)
 	}
@@ -142,6 +143,7 @@ func (r *RepoRegistry) RegisterWithSuffix(alias string, entry RegistryEntry) (st
 		return "", fmt.Errorf("alias is required")
 	}
 
+	entry.URL = strings.TrimSpace(entry.URL)
 	if !isLikelyURL(entry.URL) {
 		return "", fmt.Errorf("invalid repository URL: %s", entry.URL)
 	}

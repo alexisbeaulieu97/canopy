@@ -16,8 +16,8 @@ func TestResolveRepos(t *testing.T) {
 
 	registry := config.RepoRegistry{
 		Repos: map[string]config.RegistryEntry{
-			"myorg/repo-a": {URL: "https://github.com/myorg/repo-a.git"},
-			"alias/repo":   {URL: "https://github.com/org/repo.git"},
+			"myorg/repo-a": {Alias: "myorg/repo-a", URL: "https://github.com/myorg/repo-a.git"},
+			"alias/repo":   {Alias: "alias/repo", URL: "https://github.com/org/repo.git"},
 		},
 	}
 
@@ -147,6 +147,9 @@ func TestRepoNameFromURL(t *testing.T) {
 		{name: "multiple trailing slashes", url: "https://github.com/org/repo///", want: "repo"},
 		{name: "empty input", url: "", want: ""},
 		{name: "slash only", url: "///", want: ""},
+		{name: "file scheme", url: "file:///tmp/repo.git", want: "repo"},
+		{name: "ssh scheme", url: "ssh://git@example.com/org/repo.git", want: "repo"},
+		{name: "https with user info", url: "https://user:token@github.com/org/repo.git", want: "repo"},
 	}
 
 	for _, tt := range tests {

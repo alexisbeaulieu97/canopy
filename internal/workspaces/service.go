@@ -263,28 +263,14 @@ func (s *Service) RemoveRepoFromWorkspace(workspaceID, repoName string) error {
 
 // CloseWorkspace removes a workspace with safety checks
 func (s *Service) CloseWorkspace(workspaceID string, force bool) error {
-	// 1. Check for uncommitted/unpushed changes
-	workspaces, err := s.wsEngine.List()
+	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return err
 	}
 
-	var targetWorkspace *domain.Workspace
-
-	for _, w := range workspaces {
-		if w.ID == workspaceID {
-			targetWorkspace = &w
-			break
-		}
-	}
-
-	if targetWorkspace == nil {
-		return fmt.Errorf("workspace %s not found", workspaceID)
-	}
-
 	if !force {
 		for _, repo := range targetWorkspace.Repos {
-			worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, workspaceID, repo.Name)
+			worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
 
 			isDirty, _, _, err := s.gitEngine.Status(worktreePath)
 			if err != nil {
@@ -298,7 +284,7 @@ func (s *Service) CloseWorkspace(workspaceID string, force bool) error {
 	}
 
 	// 2. Delete workspace
-	return s.wsEngine.Delete(workspaceID)
+	return s.wsEngine.Delete(dirName)
 }
 
 // ListWorkspaces returns all active workspaces
@@ -423,28 +409,9 @@ func (s *Service) SyncCanonicalRepo(name string) error {
 
 // SyncWorkspace pulls latest changes for all repos in a workspace
 func (s *Service) SyncWorkspace(workspaceID string) error {
-	// 1. Get workspace details
-	workspaces, err := s.wsEngine.List()
+	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
-		return fmt.Errorf("failed to list workspaces: %w", err)
-	}
-
-	var (
-		targetWorkspace *domain.Workspace
-		dirName         string
-	)
-
-	for dir, w := range workspaces {
-		if w.ID == workspaceID {
-			targetWorkspace = &w
-			dirName = dir
-
-			break
-		}
-	}
-
-	if targetWorkspace == nil {
-		return fmt.Errorf("workspace %s not found", workspaceID)
+		return err
 	}
 
 	// 2. Iterate through repos and pull
@@ -507,6 +474,8 @@ func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, 
 func isLikelyURL(val string) bool {
 	return strings.HasPrefix(val, "http://") ||
 		strings.HasPrefix(val, "https://") ||
+		strings.HasPrefix(val, "ssh://") ||
+		strings.HasPrefix(val, "git://") ||
 		strings.HasPrefix(val, "git@") ||
 		strings.HasPrefix(val, "file://")
 }
