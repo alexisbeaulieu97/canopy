@@ -1,0 +1,30 @@
+# Tasks: Initialize Canopy
+
+- [x] **Project Setup** <!-- id: 0 -->
+  - [x] Initialize Go module `github.com/alexisbeaulieu97/canopy` <!-- id: 1 -->
+  - [x] Create directory structure (`cmd`, `internal`, `pkg`) <!-- id: 2 -->
+  - [x] Add `golangci-lint` config <!-- id: 3 -->
+- [x] **Config & Logging** <!-- id: 4 -->
+  - [x] Implement `internal/config` with Viper <!-- id: 5 -->
+  - [x] Implement `internal/logging` with charmbracelet/log <!-- id: 6 -->
+  - [x] Create `canopy init` command to generate default config <!-- id: 7 -->
+- [x] **Git Engine (Core)** <!-- id: 8 -->
+  - [x] Implement `gitx.CloneCanonical` (clone bare/mirror) <!-- id: 9 -->
+  - [x] Implement `gitx.EnsureWorktree` (create worktree + branch) <!-- id: 10 -->
+  - [x] Implement `gitx.Status` (check dirty/unpushed) <!-- id: 11 -->
+  - [x] Add integration tests for `gitx` <!-- id: 12 -->
+- [x] **Workspace Engine** <!-- id: 13 -->
+  - [x] Define `Workspace` and `Repo` structs in `internal/domain` <!-- id: 14 -->
+  - [x] Implement `workspace.Create` (mkdir + metadata) <!-- id: 15 -->
+  - [x] Implement `workspace.List` (read metadata) <!-- id: 16 -->
+  - [x] Implement `workspace.Delete` (cleanup) <!-- id: 17 -->
+- [x] **CLI Commands** <!-- id: 18 -->
+  - [x] Implement `canopy workspace new` <!-- id: 19 -->
+  - [x] Implement `canopy workspace list` <!-- id: 20 -->
+  - [x] Implement `canopy workspace close` <!-- id: 21 -->
+  - [x] Implement `canopy status` <!-- id: 22 -->
+- [x] **TUI** <!-- id: 23 -->
+  - [x] Create basic Bubble Tea model <!-- id: 24 -->
+  - [x] Implement Workspace List view <!-- id: 25 -->
+  - [x] Implement Workspace Detail view <!-- id: 26 -->
+  - [x] Wire up TUI to `canopy tui` command <!-- id: 27 -->
