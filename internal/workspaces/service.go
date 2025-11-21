@@ -513,11 +513,7 @@ func (s *Service) resolveRepoIdentifier(raw string, userRequested bool) (domain.
 		return domain.Repo{}, false, fmt.Errorf("unknown repository '%s'. Register it first: yard repo register %s <repository-url>", val, val)
 	}
 
-	// Legacy fallback for pattern-based names without explicit URLs.
-	return domain.Repo{
-		Name: val,
-		URL:  fmt.Sprintf("https://github.com/example/%s", val),
-	}, true, nil
+	return domain.Repo{}, false, fmt.Errorf("unknown repository '%s': provide a URL or registered alias", val)
 }
 
 func repoNameFromURL(url string) string {

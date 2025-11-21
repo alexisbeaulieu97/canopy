@@ -31,13 +31,11 @@ func (e *Engine) Create(dirName, id, slug, branchName string, repos []domain.Rep
 
 	path := filepath.Join(e.WorkspacesRoot, safeDir)
 
-	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("workspace already exists: %s", path)
-	} else if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to stat workspace path: %w", err)
-	}
+	if err := os.Mkdir(path, 0o750); err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("workspace already exists: %s", path)
+		}
 
-	if err := os.MkdirAll(path, 0o750); err != nil {
 		return fmt.Errorf("failed to create workspace directory: %w", err)
 	}
 

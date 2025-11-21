@@ -168,7 +168,15 @@ var repoRegisterCmd = &cobra.Command{
 			return err
 		}
 		if err := app.Config.Registry.Save(); err != nil {
-			return err
+			if rollbackErr := app.Config.Registry.Unregister(alias); rollbackErr != nil {
+				return fmt.Errorf("failed to save registry: %v (rollback failed: %v)", err, rollbackErr)
+			}
+
+			if rollbackSaveErr := app.Config.Registry.Save(); rollbackSaveErr != nil {
+				return fmt.Errorf("failed to save registry: %v (rollback save failed: %v)", err, rollbackSaveErr)
+			}
+
+			return fmt.Errorf("failed to save registry: %w", err)
 		}
 
 		fmt.Printf("Registered '%s' -> %s\n", alias, url) //nolint:forbidigo // user-facing CLI output
@@ -188,11 +196,24 @@ var repoUnregisterCmd = &cobra.Command{
 			return err
 		}
 
+		entry, exists := app.Config.Registry.Resolve(alias)
+		if !exists {
+			return fmt.Errorf("alias '%s' not found", alias)
+		}
+
 		if err := app.Config.Registry.Unregister(alias); err != nil {
 			return err
 		}
 		if err := app.Config.Registry.Save(); err != nil {
-			return err
+			if restoreErr := app.Config.Registry.Register(alias, entry, true); restoreErr != nil {
+				return fmt.Errorf("failed to save registry: %v (restore failed: %v)", err, restoreErr)
+			}
+
+			if restoreSaveErr := app.Config.Registry.Save(); restoreSaveErr != nil {
+				return fmt.Errorf("failed to save registry: %v (restore save failed: %v)", err, restoreSaveErr)
+			}
+
+			return fmt.Errorf("failed to save registry: %w", err)
 		}
 
 		fmt.Printf("Unregistered '%s'\n", alias) //nolint:forbidigo // user-facing CLI output
@@ -368,7 +389,11 @@ func registerAlias(registry *config.RepoRegistry, alias string, entry config.Reg
 	}
 
 	if err := registry.Save(); err != nil {
-		return "", err
+		if unregErr := registry.Unregister(alias); unregErr != nil {
+			return "", fmt.Errorf("failed to persist registry: %v (rollback failed: %v)", err, unregErr)
+		}
+
+		return "", fmt.Errorf("failed to persist registry: %w", err)
 	}
 
 	return alias, nil
