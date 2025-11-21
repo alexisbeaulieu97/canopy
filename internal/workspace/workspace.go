@@ -25,8 +25,10 @@ func New(workspacesRoot string) *Engine {
 func (e *Engine) Create(dirName, id, slug, branchName string, repos []domain.Repo) error {
 	path := filepath.Join(e.WorkspacesRoot, dirName)
 
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("workspace already exists: %s", path)
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to stat workspace path: %w", err)
 	}
 
 	if err := os.MkdirAll(path, 0o750); err != nil {

@@ -3,6 +3,7 @@ package workspaces
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,6 +25,9 @@ type Service struct {
 	logger    *logging.Logger
 	registry  *config.RepoRegistry
 }
+
+// ErrNoReposConfigured indicates no repos were specified and none matched configuration.
+var ErrNoReposConfigured = errors.New("no repositories specified and no patterns matched")
 
 // NewService creates a new workspace service
 func NewService(cfg *config.Config, gitEngine *gitx.GitEngine, wsEngine *workspace.Engine, logger *logging.Logger) *Service {
@@ -51,7 +55,7 @@ func (s *Service) ResolveRepos(workspaceID string, requestedRepos []string) ([]d
 	}
 
 	if len(repoNames) == 0 {
-		return nil, fmt.Errorf("no repositories specified and no patterns matched for %s", workspaceID)
+		return nil, fmt.Errorf("%w for %s", ErrNoReposConfigured, workspaceID)
 	}
 
 	var repos []domain.Repo
@@ -74,7 +78,7 @@ func (s *Service) ResolveRepos(workspaceID string, requestedRepos []string) ([]d
 		if s.registry != nil {
 			if entry, ok := s.registry.Resolve(val); ok {
 				repos = append(repos, domain.Repo{
-					Name: repoNameFromURL(entry.URL),
+					Name: entry.Alias,
 					URL:  entry.URL,
 				})
 

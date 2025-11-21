@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/alexisbeaulieu97/yard/internal/domain"
+	"github.com/alexisbeaulieu97/yard/internal/workspaces"
 )
 
 var (
@@ -46,7 +48,11 @@ var (
 			} else {
 				resolvedRepos, err = service.ResolveRepos(id, nil)
 				if err != nil {
-					resolvedRepos = []domain.Repo{}
+					if errors.Is(err, workspaces.ErrNoReposConfigured) {
+						resolvedRepos = []domain.Repo{}
+					} else {
+						return err
+					}
 				}
 			}
 

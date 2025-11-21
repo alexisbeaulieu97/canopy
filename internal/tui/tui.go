@@ -47,6 +47,7 @@ type Model struct {
 	wsStatus        *domain.WorkspaceStatus
 	confirming      bool
 	actionToConfirm string // "close"
+	confirmingID    string
 }
 
 // NewModel creates a new TUI model.
@@ -252,10 +253,21 @@ func (m Model) handleConfirmKey(key string) (Model, tea.Cmd, bool) {
 	if key == "y" || key == "Y" {
 		m.confirming = false
 		if m.actionToConfirm == "close" {
-			if i, ok := m.list.SelectedItem().(item); ok {
-				return m, m.closeWorkspace(i.id), true
+			targetID := m.confirmingID
+			if targetID == "" {
+				if i, ok := m.list.SelectedItem().(item); ok {
+					targetID = i.id
+				}
+			}
+
+			m.confirmingID = ""
+
+			if targetID != "" {
+				return m, m.closeWorkspace(targetID), true
 			}
 		}
+
+		m.confirmingID = ""
 
 		return m, nil, true
 	}
@@ -263,11 +275,12 @@ func (m Model) handleConfirmKey(key string) (Model, tea.Cmd, bool) {
 	if key == "n" || key == "N" || key == "esc" {
 		m.confirming = false
 		m.actionToConfirm = ""
+		m.confirmingID = ""
 
 		return m, nil, true
 	}
 
-	return m, nil, false
+	return m, nil, true
 }
 
 func (m Model) handleListKey(key string) (Model, tea.Cmd, bool) {
@@ -311,9 +324,10 @@ func (m Model) handleSyncSelected() (Model, tea.Cmd, bool) {
 }
 
 func (m Model) handleCloseConfirm() (Model, tea.Cmd, bool) {
-	if _, ok := m.list.SelectedItem().(item); ok {
+	if selected, ok := m.list.SelectedItem().(item); ok {
 		m.confirming = true
 		m.actionToConfirm = "close"
+		m.confirmingID = selected.id
 
 		return m, nil, true
 	}
