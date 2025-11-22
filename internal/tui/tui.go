@@ -390,20 +390,16 @@ func (d workspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 		)
 	}
 
-	if _, err := fmt.Fprintf(
+	_, _ = fmt.Fprintf(
 		w,
 		"%s %s %s %s\n",
 		cursor,
 		statusStyle.Render("● "+statusText),
 		title,
 		badges,
-	); err != nil {
-		// Rendering errors can be safely ignored
-	}
+	)
 
-	if _, err := fmt.Fprintf(w, "  %s\n", descStyle.Render(secondary)); err != nil {
-		// Rendering errors can be safely ignored
-	}
+	_, _ = fmt.Fprintf(w, "  %s\n", descStyle.Render(secondary))
 }
 
 func healthForWorkspace(item workspaceItem, staleThreshold int) (string, lipgloss.Style) {
