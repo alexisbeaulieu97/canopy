@@ -12,13 +12,14 @@ import (
 
 // Config holds the global configuration
 type Config struct {
-	ProjectsRoot    string        `mapstructure:"projects_root"`
-	WorkspacesRoot  string        `mapstructure:"workspaces_root"`
-	ArchivesRoot    string        `mapstructure:"archives_root"`
-	CloseDefault    string        `mapstructure:"workspace_close_default"`
-	WorkspaceNaming string        `mapstructure:"workspace_naming"`
-	Defaults        Defaults      `mapstructure:"defaults"`
-	Registry        *RepoRegistry `mapstructure:"-"`
+	ProjectsRoot       string        `mapstructure:"projects_root"`
+	WorkspacesRoot     string        `mapstructure:"workspaces_root"`
+	ArchivesRoot       string        `mapstructure:"archives_root"`
+	CloseDefault       string        `mapstructure:"workspace_close_default"`
+	WorkspaceNaming    string        `mapstructure:"workspace_naming"`
+	StaleThresholdDays int           `mapstructure:"stale_threshold_days"`
+	Defaults           Defaults      `mapstructure:"defaults"`
+	Registry           *RepoRegistry `mapstructure:"-"`
 }
 
 // WorkspacePattern defines a regex pattern and default repos
@@ -50,6 +51,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("archives_root", filepath.Join(home, ".canopy", "archives"))
 	viper.SetDefault("workspace_close_default", "delete")
 	viper.SetDefault("workspace_naming", "{{.ID}}")
+	viper.SetDefault("stale_threshold_days", 14)
 
 	viper.SetEnvPrefix("CANOPY")
 	viper.AutomaticEnv()
@@ -133,6 +135,10 @@ func (c *Config) Validate() error {
 		if _, err := regexp.Compile(p.Pattern); err != nil {
 			return fmt.Errorf("invalid regex pattern '%s': %w", p.Pattern, err)
 		}
+	}
+
+	if c.StaleThresholdDays < 0 {
+		return fmt.Errorf("stale_threshold_days must be zero or positive, got %d", c.StaleThresholdDays)
 	}
 
 	return nil

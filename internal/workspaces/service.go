@@ -4,9 +4,11 @@ package workspaces
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
@@ -18,11 +20,20 @@ import (
 
 // Service manages workspace operations
 type Service struct {
-	config    *config.Config
-	gitEngine *gitx.GitEngine
-	wsEngine  *workspace.Engine
-	logger    *logging.Logger
-	registry  *config.RepoRegistry
+	config     *config.Config
+	gitEngine  *gitx.GitEngine
+	wsEngine   *workspace.Engine
+	logger     *logging.Logger
+	registry   *config.RepoRegistry
+	usageCache map[string]usageEntry
+	usageMu    sync.Mutex
+}
+
+type usageEntry struct {
+	usage     int64
+	lastMod   time.Time
+	scannedAt time.Time
+	err       error
 }
 
 // ErrNoReposConfigured indicates no repos were specified and none matched configuration.
@@ -31,11 +42,12 @@ var ErrNoReposConfigured = errors.New("no repositories specified and no patterns
 // NewService creates a new workspace service
 func NewService(cfg *config.Config, gitEngine *gitx.GitEngine, wsEngine *workspace.Engine, logger *logging.Logger) *Service {
 	return &Service{
-		config:    cfg,
-		gitEngine: gitEngine,
-		wsEngine:  wsEngine,
-		logger:    logger,
-		registry:  cfg.Registry,
+		config:     cfg,
+		gitEngine:  gitEngine,
+		wsEngine:   wsEngine,
+		logger:     logger,
+		registry:   cfg.Registry,
+		usageCache: make(map[string]usageEntry),
 	}
 }
 
@@ -264,11 +276,101 @@ func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
 	}
 
 	var workspaces []domain.Workspace
-	for _, w := range workspaceMap {
+	for dir, w := range workspaceMap {
+		wsPath := filepath.Join(s.config.WorkspacesRoot, dir)
+
+		usage, latest, sizeErr := s.cachedWorkspaceUsage(wsPath)
+		if sizeErr != nil {
+			if s.logger != nil {
+				s.logger.Debug("Failed to calculate workspace stats", "workspace", w.ID, "error", sizeErr)
+			}
+		}
+
+		if usage > 0 {
+			w.DiskUsageBytes = usage
+		}
+
+		if !latest.IsZero() {
+			w.LastModified = latest
+		} else if info, statErr := os.Stat(wsPath); statErr == nil {
+			w.LastModified = info.ModTime()
+		}
+
 		workspaces = append(workspaces, w)
 	}
 
 	return workspaces, nil
+}
+
+// cachedWorkspaceUsage returns cached workspace usage/mtime with a short TTL to avoid repeated scans.
+func (s *Service) cachedWorkspaceUsage(root string) (int64, time.Time, error) {
+	const ttl = time.Minute
+
+	s.usageMu.Lock()
+	entry, ok := s.usageCache[root]
+	if ok && time.Since(entry.scannedAt) < ttl {
+		s.usageMu.Unlock()
+		return entry.usage, entry.lastMod, entry.err
+	}
+	s.usageMu.Unlock()
+
+	usage, latest, err := s.CalculateDiskUsage(root)
+
+	s.usageMu.Lock()
+	s.usageCache[root] = usageEntry{
+		usage:     usage,
+		lastMod:   latest,
+		scannedAt: time.Now(),
+		err:       err,
+	}
+	s.usageMu.Unlock()
+
+	return usage, latest, err
+}
+
+// CalculateDiskUsage sums file sizes under the provided root and returns latest mtime.
+func (s *Service) CalculateDiskUsage(root string) (int64, time.Time, error) {
+	var (
+		total   int64
+		latest  time.Time
+		skipDir = map[string]struct{}{".git": {}}
+	)
+
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() {
+			if _, ok := skipDir[d.Name()]; ok {
+				return fs.SkipDir
+			}
+
+			return nil
+		}
+
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+
+		info, infoErr := d.Info()
+		if infoErr != nil {
+			return infoErr
+		}
+
+		total += info.Size()
+
+		if mod := info.ModTime(); mod.After(latest) {
+			latest = mod
+		}
+
+		return nil
+	})
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+
+	return total, latest, nil
 }
 
 // ListArchivedWorkspaces returns archived workspace metadata.
@@ -289,7 +391,7 @@ func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error)
 	for _, repo := range targetWorkspace.Repos {
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
 
-		isDirty, unpushed, branch, err := s.gitEngine.Status(worktreePath)
+		isDirty, unpushed, behind, branch, err := s.gitEngine.Status(worktreePath)
 		if err != nil {
 			repoStatuses = append(repoStatuses, domain.RepoStatus{
 				Name:   repo.Name,
@@ -303,6 +405,7 @@ func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error)
 			Name:            repo.Name,
 			IsDirty:         isDirty,
 			UnpushedCommits: unpushed,
+			BehindRemote:    behind,
 			Branch:          branch,
 		})
 	}
@@ -393,6 +496,31 @@ func (s *Service) SyncWorkspace(workspaceID string) error {
 	return nil
 }
 
+// PushWorkspace pushes all repos for a workspace.
+func (s *Service) PushWorkspace(workspaceID string) error {
+	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
+	if err != nil {
+		return err
+	}
+
+	for _, repo := range targetWorkspace.Repos {
+		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
+		branchName := targetWorkspace.BranchName
+
+		if branchName == "" {
+			if s.logger != nil {
+				s.logger.Debug("Branch missing in metadata, will let git infer", "workspace", workspaceID, "repo", repo.Name)
+			}
+		}
+
+		if err := s.gitEngine.Push(worktreePath, branchName); err != nil {
+			return fmt.Errorf("failed to push repo %s: %w", repo.Name, err)
+		}
+	}
+
+	return nil
+}
+
 // SwitchBranch switches the branch for all repos in a workspace
 func (s *Service) SwitchBranch(workspaceID, branchName string, create bool) error {
 	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
@@ -450,6 +578,11 @@ func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
 	return nil
 }
 
+// StaleThresholdDays returns the configured stale threshold in days.
+func (s *Service) StaleThresholdDays() int {
+	return s.config.StaleThresholdDays
+}
+
 func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, error) {
 	workspaces, err := s.wsEngine.List()
 	if err != nil {
@@ -473,7 +606,7 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, act
 	for _, repo := range workspace.Repos {
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
 
-		isDirty, _, _, err := s.gitEngine.Status(worktreePath)
+		isDirty, _, _, _, err := s.gitEngine.Status(worktreePath)
 		if err != nil {
 			continue
 		}
