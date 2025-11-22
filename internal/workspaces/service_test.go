@@ -389,6 +389,7 @@ func runGit(t *testing.T, dir string, args ...string) {
 
 	cmd := exec.Command("git", args...) //nolint:gosec // test helper
 	cmd.Dir = dir
+
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
 
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -401,6 +402,7 @@ func runGitOutput(t *testing.T, dir string, args ...string) string {
 
 	cmd := exec.Command("git", args...) //nolint:gosec // test helper
 	cmd.Dir = dir
+
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
 
 	output, err := cmd.CombinedOutput()

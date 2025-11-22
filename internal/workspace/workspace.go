@@ -273,7 +273,7 @@ func (e *Engine) Delete(workspaceID string) error {
 }
 
 // LatestArchive returns the newest archived entry for the given workspace ID.
-func (e *Engine) LatestArchive(workspaceID string) (*ArchivedWorkspace, error) {
+func (e *Engine) LatestArchive(workspaceID string) (*ArchivedWorkspace, error) { //nolint:gocyclo // handles filesystem traversal and selection
 	if e.ArchivesRoot == "" {
 		return nil, fmt.Errorf("archives root is not configured")
 	}
@@ -284,6 +284,7 @@ func (e *Engine) LatestArchive(workspaceID string) (*ArchivedWorkspace, error) {
 	}
 
 	workspaceDir := filepath.Join(e.ArchivesRoot, safeDir)
+
 	entries, err := os.ReadDir(workspaceDir)
 	if err != nil {
 		if os.IsNotExist(err) {

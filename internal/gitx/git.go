@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -63,21 +65,21 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 	return nil
 }
 
-// Status returns isDirty, unpushedCommits, branchName, error
-func (g *GitEngine) Status(path string) (bool, int, string, error) {
+// Status returns isDirty, unpushedCommits, behindRemote, branchName, error
+func (g *GitEngine) Status(path string) (bool, int, int, string, error) {
 	r, err := git.PlainOpen(path)
 	if err != nil {
-		return false, 0, "", fmt.Errorf("failed to open repo: %w", err)
+		return false, 0, 0, "", fmt.Errorf("failed to open repo: %w", err)
 	}
 
 	w, err := r.Worktree()
 	if err != nil {
-		return false, 0, "", fmt.Errorf("failed to get worktree: %w", err)
+		return false, 0, 0, "", fmt.Errorf("failed to get worktree: %w", err)
 	}
 
 	status, err := w.Status()
 	if err != nil {
-		return false, 0, "", fmt.Errorf("failed to get status: %w", err)
+		return false, 0, 0, "", fmt.Errorf("failed to get status: %w", err)
 	}
 
 	isDirty := !status.IsClean()
@@ -85,44 +87,43 @@ func (g *GitEngine) Status(path string) (bool, int, string, error) {
 	// Get current branch
 	head, err := r.Head()
 	if err != nil {
-		return isDirty, 0, "", fmt.Errorf("failed to get HEAD: %w", err)
+		return isDirty, 0, 0, "", fmt.Errorf("failed to get HEAD: %w", err)
 	}
 
 	branchName := head.Name().Short()
 
 	// Check unpushed commits
-	// This is a simplified check: count commits in HEAD that are not in origin/<branch>
-	// Note: This assumes 'origin' is the remote and we have fetched recently.
-	// For MVP, we won't auto-fetch to avoid network latency on 'status'.
-
 	unpushed := 0
+	behindRemote := 0
 
-	// Try to resolve remote reference
 	remoteName := "origin"
 	remoteRefName := plumbing.NewRemoteReferenceName(remoteName, branchName)
 
-	remoteRef, err := r.Reference(remoteRefName, true)
-	if err == nil {
-		// Calculate log between remote and HEAD
-		commits, err := r.Log(&git.LogOptions{
-			From: head.Hash(),
-		})
-		if err == nil {
-			_ = commits.ForEach(func(c *object.Commit) error {
-				if c.Hash == remoteRef.Hash() {
-					return fmt.Errorf("found") // Stop iteration
-				}
-
-				unpushed++
-
-				return nil
+	if ref, refErr := r.Reference(remoteRefName, true); refErr == nil {
+		// Prefer git CLI for accurate ahead/behind counts; fallback to go-git walk if it fails.
+		if ahead, behind, cliErr := g.aheadBehindCounts(path, branchName); cliErr == nil {
+			unpushed = ahead
+			behindRemote = behind
+		} else {
+			// Calculate log between remote and HEAD
+			commits, err := r.Log(&git.LogOptions{
+				From: head.Hash(),
 			})
-			// If we iterated everything and didn't find remote hash, it means we are ahead or diverged.
-			// Or remote ref is not in history (e.g. rebase).
+			if err == nil {
+				_ = commits.ForEach(func(c *object.Commit) error {
+					if c.Hash == ref.Hash() {
+						return fmt.Errorf("found") // Stop iteration
+					}
+
+					unpushed++
+
+					return nil
+				})
+			}
 		}
 	}
 
-	return isDirty, unpushed, branchName, nil
+	return isDirty, unpushed, behindRemote, branchName, nil
 }
 
 // Clone clones a repository to the projects root (bare)
@@ -172,6 +173,21 @@ func (g *GitEngine) Pull(path string) error {
 	return nil
 }
 
+// Push pushes the current branch to its upstream.
+func (g *GitEngine) Push(path, branch string) error {
+	args := []string{"-C", path, "push"}
+	if branch != "" {
+		args = append(args, "--set-upstream", "origin", branch)
+	}
+
+	cmd := exec.Command("git", args...) //nolint:gosec // arguments are constructed internally
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git push failed: %s: %w", strings.TrimSpace(string(output)), err)
+	}
+
+	return nil
+}
+
 // List returns a list of repository names in the projects root
 func (g *GitEngine) List() ([]string, error) {
 	entries, err := os.ReadDir(g.ProjectsRoot)
@@ -213,4 +229,41 @@ func (g *GitEngine) Checkout(path, branchName string, create bool) error {
 	}
 
 	return nil
+}
+
+func (g *GitEngine) aheadBehindCounts(path, branch string) (int, int, error) {
+	if branch == "" {
+		return 0, 0, fmt.Errorf("branch name is required")
+	}
+
+	cmd := exec.Command( //nolint:gosec // arguments are constructed internally
+		"git",
+		"-C", path,
+		"rev-list",
+		"--left-right",
+		"--count",
+		fmt.Sprintf("HEAD...origin/%s", branch),
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0, 0, fmt.Errorf("git rev-list failed: %s: %w", strings.TrimSpace(string(output)), err)
+	}
+
+	fields := strings.Fields(strings.TrimSpace(string(output)))
+	if len(fields) != 2 {
+		return 0, 0, fmt.Errorf("unexpected rev-list output: %s", strings.TrimSpace(string(output)))
+	}
+
+	ahead, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to parse ahead count: %w", err)
+	}
+
+	behind, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to parse behind count: %w", err)
+	}
+
+	return ahead, behind, nil
 }

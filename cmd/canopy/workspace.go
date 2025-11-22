@@ -433,6 +433,7 @@ func archiveAndPrint(service *workspaces.Service, id string, force bool) error {
 	}
 
 	printArchived(id, archivedAt)
+
 	return nil
 }
 
@@ -442,6 +443,7 @@ func closeAndPrint(service *workspaces.Service, id string, force bool) error {
 	}
 
 	fmt.Printf("Closed workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+
 	return nil
 }
 

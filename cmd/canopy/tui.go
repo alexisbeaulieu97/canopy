@@ -20,7 +20,7 @@ var tuiCmd = &cobra.Command{
 
 		printPath, _ := cmd.Flags().GetBool("print-path")
 
-		p := tea.NewProgram(tui.NewModel(app.Service, app.Config.WorkspacesRoot, printPath))
+		p := tea.NewProgram(tui.NewModel(app.Service, printPath))
 		m, err := p.Run()
 		if err != nil {
 			return err
