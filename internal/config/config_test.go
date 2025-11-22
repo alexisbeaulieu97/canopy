@@ -20,7 +20,9 @@ func TestLoad(t *testing.T) {
 	configContent := `
 projects_root: /tmp/projects
 workspaces_root: /tmp/workspaces
+archives_root: /tmp/archives
 workspace_naming: "{{.ID}}"
+workspace_close_default: archive
 defaults:
   workspace_patterns:
     - pattern: "^TEST-"
@@ -83,6 +85,14 @@ defaults:
 
 	if cfg.WorkspacesRoot != "/tmp/workspaces" {
 		t.Errorf("expected WorkspacesRoot /tmp/workspaces, got %s", cfg.WorkspacesRoot)
+	}
+
+	if cfg.ArchivesRoot != "/tmp/archives" {
+		t.Errorf("expected ArchivesRoot /tmp/archives, got %s", cfg.ArchivesRoot)
+	}
+
+	if cfg.CloseDefault != "archive" {
+		t.Errorf("expected CloseDefault archive, got %s", cfg.CloseDefault)
 	}
 }
 

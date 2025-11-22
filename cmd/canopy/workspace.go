@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -69,6 +72,56 @@ var (
 		},
 	}
 
+	workspaceArchiveCmd = &cobra.Command{
+		Use:   "archive <ID>",
+		Short: "Archive a workspace and remove its worktrees",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id := args[0]
+			force, _ := cmd.Flags().GetBool("force")
+
+			app, err := getApp(cmd)
+			if err != nil {
+				return err
+			}
+
+			archived, err := app.Service.ArchiveWorkspace(id, force)
+			if err != nil {
+				return err
+			}
+
+			if archived != nil && archived.Metadata.ArchivedAt != nil {
+				fmt.Printf("Archived workspace %s at %s\n", id, archived.Metadata.ArchivedAt.Format(time.RFC3339)) //nolint:forbidigo // user-facing CLI output
+			} else {
+				fmt.Printf("Archived workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+			}
+
+			return nil
+		},
+	}
+
+	workspaceRestoreCmd = &cobra.Command{
+		Use:   "restore <ID>",
+		Short: "Restore an archived workspace",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id := args[0]
+			force, _ := cmd.Flags().GetBool("force")
+
+			app, err := getApp(cmd)
+			if err != nil {
+				return err
+			}
+
+			if err := app.Service.RestoreWorkspace(id, force); err != nil {
+				return err
+			}
+
+			fmt.Printf("Restored workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+			return nil
+		},
+	}
+
 	workspaceListCmd = &cobra.Command{
 		Use:   "list",
 		Short: "List active workspaces",
@@ -80,12 +133,47 @@ var (
 
 			service := app.Service
 
+			jsonOutput, _ := cmd.Flags().GetBool("json")
+			archivedOnly, _ := cmd.Flags().GetBool("archived")
+
+			if archivedOnly {
+				archives, err := service.ListArchivedWorkspaces()
+				if err != nil {
+					return err
+				}
+
+				if jsonOutput {
+					var payload []domain.Workspace
+
+					for _, a := range archives {
+						payload = append(payload, a.Metadata)
+					}
+
+					encoder := json.NewEncoder(os.Stdout)
+					encoder.SetIndent("", "  ")
+					return encoder.Encode(payload)
+				}
+
+				for _, a := range archives {
+					archiveDate := "unknown"
+					if a.Metadata.ArchivedAt != nil {
+						archiveDate = a.Metadata.ArchivedAt.Format(time.RFC3339)
+					}
+
+					fmt.Printf("%s (Archived: %s)\n", a.Metadata.ID, archiveDate) //nolint:forbidigo // user-facing CLI output
+					for _, r := range a.Metadata.Repos {
+						fmt.Printf("  - %s (%s)\n", r.Name, r.URL) //nolint:forbidigo // user-facing CLI output
+					}
+				}
+
+				return nil
+			}
+
 			list, err := service.ListWorkspaces()
 			if err != nil {
 				return err
 			}
 
-			jsonOutput, _ := cmd.Flags().GetBool("json")
 			if jsonOutput {
 				encoder := json.NewEncoder(os.Stdout)
 				encoder.SetIndent("", "  ")
@@ -109,6 +197,12 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			force, _ := cmd.Flags().GetBool("force")
+			archiveFlag, _ := cmd.Flags().GetBool("archive")
+			noArchiveFlag, _ := cmd.Flags().GetBool("no-archive")
+
+			if archiveFlag && noArchiveFlag {
+				return fmt.Errorf("cannot use --archive and --no-archive together")
+			}
 
 			app, err := getApp(cmd)
 			if err != nil {
@@ -116,12 +210,116 @@ var (
 			}
 
 			service := app.Service
+			configDefaultArchive := strings.EqualFold(app.Config.CloseDefault, "archive")
 
-			if err := service.CloseWorkspace(id, force); err != nil {
+			if archiveFlag {
+				archived, err := service.ArchiveWorkspace(id, force)
+				if err != nil {
+					return err
+				}
+
+				if archived != nil && archived.Metadata.ArchivedAt != nil {
+					fmt.Printf("Archived workspace %s at %s\n", id, archived.Metadata.ArchivedAt.Format(time.RFC3339)) //nolint:forbidigo // user-facing CLI output
+				} else {
+					fmt.Printf("Archived workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+				}
+
+				return nil
+			}
+
+			if noArchiveFlag {
+				if err := service.CloseWorkspace(id, force); err != nil {
+					return err
+				}
+
+				fmt.Printf("Closed workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+				return nil
+			}
+
+			inputInfo, err := os.Stdin.Stat()
+			if err == nil && (inputInfo.Mode()&os.ModeCharDevice) == 0 {
+				if configDefaultArchive {
+					archived, err := service.ArchiveWorkspace(id, force)
+					if err != nil {
+						return err
+					}
+
+					if archived != nil && archived.Metadata.ArchivedAt != nil {
+						fmt.Printf("Archived workspace %s at %s\n", id, archived.Metadata.ArchivedAt.Format(time.RFC3339)) //nolint:forbidigo // user-facing CLI output
+					} else {
+						fmt.Printf("Archived workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+					}
+
+					return nil
+				}
+
+				if err := service.CloseWorkspace(id, force); err != nil {
+					return err
+				}
+
+				fmt.Printf("Closed workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+				return nil
+			}
+
+			reader := bufio.NewReader(os.Stdin)
+			promptSuffix := "[y/N]"
+			if configDefaultArchive {
+				promptSuffix = "[Y/n]"
+			}
+
+			fmt.Printf("Archive instead? %s: ", promptSuffix) //nolint:forbidigo // user prompt
+
+			answer, err := reader.ReadString('\n')
+			if err != nil {
+				answer = "n"
+			}
+
+			answer = strings.TrimSpace(answer)
+
+			if answer == "" {
+				if configDefaultArchive {
+					archived, err := service.ArchiveWorkspace(id, force)
+					if err != nil {
+						return err
+					}
+
+					if archived != nil && archived.Metadata.ArchivedAt != nil {
+						fmt.Printf("Archived workspace %s at %s\n", id, archived.Metadata.ArchivedAt.Format(time.RFC3339)) //nolint:forbidigo // user-facing CLI output
+					} else {
+						fmt.Printf("Archived workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+					}
+
+					return nil
+				}
+
+				if err := service.CloseWorkspace(id, force); err != nil {
+					return err
+				}
+
+				fmt.Printf("Closed workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+				return nil
+			}
+
+			if strings.EqualFold(answer, "n") || strings.EqualFold(answer, "no") {
+				if err := service.CloseWorkspace(id, force); err != nil {
+					return err
+				}
+
+				fmt.Printf("Closed workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+				return nil
+			}
+
+			archived, err := service.ArchiveWorkspace(id, force)
+			if err != nil {
 				return err
 			}
 
-			fmt.Printf("Closed workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+			if archived != nil && archived.Metadata.ArchivedAt != nil {
+				fmt.Printf("Archived workspace %s at %s\n", id, archived.Metadata.ArchivedAt.Format(time.RFC3339)) //nolint:forbidigo // user-facing CLI output
+			} else {
+				fmt.Printf("Archived workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+			}
+
 			return nil
 		},
 	}
@@ -294,6 +492,8 @@ func init() {
 	workspaceCmd.AddCommand(workspaceNewCmd)
 	workspaceCmd.AddCommand(workspaceListCmd)
 	workspaceCmd.AddCommand(workspaceCloseCmd)
+	workspaceCmd.AddCommand(workspaceArchiveCmd)
+	workspaceCmd.AddCommand(workspaceRestoreCmd)
 	workspaceCmd.AddCommand(workspaceViewCmd)
 	workspaceCmd.AddCommand(workspacePathCmd)
 	workspaceCmd.AddCommand(workspaceSyncCmd)
@@ -314,8 +514,13 @@ func init() {
 	workspaceNewCmd.Flags().Bool("print-path", false, "Print the created workspace path to stdout")
 
 	workspaceListCmd.Flags().Bool("json", false, "Output in JSON format")
+	workspaceListCmd.Flags().Bool("archived", false, "List archived workspaces")
 
 	workspaceCloseCmd.Flags().Bool("force", false, "Force close even if there are uncommitted changes")
+	workspaceCloseCmd.Flags().Bool("archive", false, "Archive instead of deleting")
+	workspaceCloseCmd.Flags().Bool("no-archive", false, "Delete without archiving")
+	workspaceArchiveCmd.Flags().Bool("force", false, "Archive even if there are uncommitted changes")
+	workspaceRestoreCmd.Flags().Bool("force", false, "Overwrite existing workspace if one already exists")
 
 	workspaceBranchCmd.Flags().Bool("create", false, "Create branch if it doesn't exist")
 }

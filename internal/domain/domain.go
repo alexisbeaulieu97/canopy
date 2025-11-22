@@ -1,6 +1,8 @@
 // Package domain contains core domain models.
 package domain
 
+import "time"
+
 // Repo represents a git repository
 type Repo struct {
 	Name string `yaml:"name"`
@@ -9,9 +11,10 @@ type Repo struct {
 
 // Workspace represents a work item
 type Workspace struct {
-	ID         string `yaml:"id"`
-	BranchName string `yaml:"branch_name,omitempty"`
-	Repos      []Repo `yaml:"repos"`
+	ID         string     `yaml:"id"`
+	BranchName string     `yaml:"branch_name,omitempty"`
+	Repos      []Repo     `yaml:"repos"`
+	ArchivedAt *time.Time `yaml:"archived_at,omitempty"`
 }
 
 // RepoStatus represents the git status of a repo

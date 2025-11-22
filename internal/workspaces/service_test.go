@@ -2,14 +2,54 @@ package workspaces
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	"github.com/alexisbeaulieu97/canopy/internal/gitx"
 	"github.com/alexisbeaulieu97/canopy/internal/workspace"
 )
+
+type testServiceDeps struct {
+	svc            *Service
+	wsEngine       *workspace.Engine
+	projectsRoot   string
+	workspacesRoot string
+	archivesRoot   string
+}
+
+func newTestService(t *testing.T) testServiceDeps {
+	t.Helper()
+
+	base := t.TempDir()
+	projectsRoot := filepath.Join(base, "projects")
+	workspacesRoot := filepath.Join(base, "workspaces")
+	archivesRoot := filepath.Join(base, "archives")
+
+	mustMkdir(t, projectsRoot)
+	mustMkdir(t, workspacesRoot)
+
+	cfg := &config.Config{
+		ProjectsRoot:   projectsRoot,
+		WorkspacesRoot: workspacesRoot,
+		ArchivesRoot:   archivesRoot,
+	}
+
+	gitEngine := gitx.New(projectsRoot)
+	wsEngine := workspace.New(workspacesRoot, archivesRoot)
+
+	return testServiceDeps{
+		svc:            NewService(cfg, gitEngine, wsEngine, nil),
+		wsEngine:       wsEngine,
+		projectsRoot:   projectsRoot,
+		workspacesRoot: workspacesRoot,
+		archivesRoot:   archivesRoot,
+	}
+}
 
 func TestResolveRepos(t *testing.T) {
 	t.Parallel()
@@ -87,6 +127,7 @@ func TestCreateWorkspace(t *testing.T) {
 
 	projectsRoot := filepath.Join(tmpDir, "projects")
 	workspacesRoot := filepath.Join(tmpDir, "workspaces")
+	archivesRoot := filepath.Join(tmpDir, "archives")
 
 	if err := os.MkdirAll(projectsRoot, 0o750); err != nil {
 		t.Fatalf("failed to create projects root: %v", err)
@@ -99,11 +140,12 @@ func TestCreateWorkspace(t *testing.T) {
 	cfg := &config.Config{
 		ProjectsRoot:    projectsRoot,
 		WorkspacesRoot:  workspacesRoot,
+		ArchivesRoot:    archivesRoot,
 		WorkspaceNaming: "{{.ID}}",
 	}
 
 	gitEngine := gitx.New(projectsRoot)
-	wsEngine := workspace.New(workspacesRoot)
+	wsEngine := workspace.New(workspacesRoot, archivesRoot)
 	svc := NewService(cfg, gitEngine, wsEngine, nil)
 
 	// We can't easily test full CreateWorkspace because it calls git commands.
@@ -162,4 +204,168 @@ func TestRepoNameFromURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestArchiveWorkspaceStoresMetadata(t *testing.T) {
+	deps := newTestService(t)
+
+	if _, err := deps.svc.CreateWorkspace("TEST-ARCHIVE", "", []domain.Repo{}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	archived, err := deps.svc.ArchiveWorkspace("TEST-ARCHIVE", true)
+	if err != nil {
+		t.Fatalf("ArchiveWorkspace failed: %v", err)
+	}
+
+	if archived == nil {
+		t.Fatalf("expected archive details")
+	}
+
+	if _, err := os.Stat(filepath.Join(deps.workspacesRoot, "TEST-ARCHIVE")); !os.IsNotExist(err) {
+		t.Fatalf("expected workspace directory to be removed")
+	}
+
+	archives, err := deps.wsEngine.ListArchived()
+	if err != nil {
+		t.Fatalf("ListArchived failed: %v", err)
+	}
+
+	if len(archives) != 1 {
+		t.Fatalf("expected 1 archive, got %d", len(archives))
+	}
+
+	if archives[0].Metadata.ArchivedAt == nil {
+		t.Fatalf("expected archived metadata to include timestamp")
+	}
+}
+
+func TestArchiveWorkspaceNonexistent(t *testing.T) {
+	deps := newTestService(t)
+
+	if _, err := deps.svc.ArchiveWorkspace("MISSING", false); err == nil {
+		t.Fatalf("expected error when archiving nonexistent workspace")
+	}
+}
+
+func TestRestoreWorkspaceConflict(t *testing.T) {
+	deps := newTestService(t)
+
+	if _, err := deps.svc.CreateWorkspace("TEST-CONFLICT", "", []domain.Repo{}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	_, err := deps.wsEngine.Archive("TEST-CONFLICT", domain.Workspace{ID: "TEST-CONFLICT"}, time.Now())
+	if err != nil {
+		t.Fatalf("failed to seed archive: %v", err)
+	}
+
+	if err := deps.svc.RestoreWorkspace("TEST-CONFLICT", false); err == nil {
+		t.Fatalf("expected restore conflict error")
+	}
+}
+
+func TestArchiveRestoreCycle(t *testing.T) {
+	deps := newTestService(t)
+
+	sourceRepo := filepath.Join(deps.projectsRoot, "source")
+	createRepoWithCommit(t, sourceRepo)
+
+	canonicalPath := filepath.Join(deps.projectsRoot, "sample")
+	runGit(t, "", "clone", "--bare", sourceRepo, canonicalPath)
+
+	repoURL := "file://" + sourceRepo
+
+	if _, err := deps.svc.CreateWorkspace("PROJ-1", "", []domain.Repo{{Name: "sample", URL: repoURL}}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	worktreePath := filepath.Join(deps.workspacesRoot, "PROJ-1", "sample")
+
+	if _, err := os.Stat(worktreePath); err != nil {
+		t.Fatalf("expected worktree at %s: %v", worktreePath, err)
+	}
+
+	archived, err := deps.svc.ArchiveWorkspace("PROJ-1", false)
+	if err != nil {
+		t.Fatalf("ArchiveWorkspace failed: %v", err)
+	}
+
+	if archived.Metadata.ArchivedAt == nil {
+		t.Fatalf("expected archive timestamp to be set")
+	}
+
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Fatalf("expected worktree to be removed on archive")
+	}
+
+	if err := deps.svc.RestoreWorkspace("PROJ-1", false); err != nil {
+		t.Fatalf("RestoreWorkspace failed: %v", err)
+	}
+
+	if _, err := os.Stat(worktreePath); err != nil {
+		t.Fatalf("expected restored worktree at %s: %v", worktreePath, err)
+	}
+
+	if _, err := os.Stat(archived.Path); !os.IsNotExist(err) {
+		t.Fatalf("expected archive path to be removed after restore")
+	}
+
+	branch := runGitOutput(t, worktreePath, "rev-parse", "--abbrev-ref", "HEAD")
+	if branch != "PROJ-1" {
+		t.Fatalf("expected branch PROJ-1 after restore, got %s", branch)
+	}
+}
+
+func mustMkdir(t *testing.T, path string) {
+	t.Helper()
+
+	if err := os.MkdirAll(path, 0o750); err != nil {
+		t.Fatalf("failed to create directory %s: %v", path, err)
+	}
+}
+
+func createRepoWithCommit(t *testing.T, path string) {
+	t.Helper()
+
+	mustMkdir(t, path)
+	runGit(t, path, "init")
+	runGit(t, path, "config", "user.email", "test@example.com")
+	runGit(t, path, "config", "user.name", "Test User")
+	runGit(t, path, "config", "credential.helper", "")
+
+	filePath := filepath.Join(path, "README.md")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	runGit(t, path, "add", ".")
+	runGit(t, path, "commit", "-m", "init")
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	cmd := exec.Command("git", args...) //nolint:gosec // test helper
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %s (%v)", args, strings.TrimSpace(string(output)), err)
+	}
+}
+
+func runGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", args...) //nolint:gosec // test helper
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %s (%v)", args, strings.TrimSpace(string(output)), err)
+	}
+
+	return strings.TrimSpace(string(output))
 }

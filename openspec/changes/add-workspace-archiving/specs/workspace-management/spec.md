@@ -33,3 +33,13 @@ The system SHALL support archiving workspaces to preserve metadata while removin
 - **WHEN** user attempts to restore workspace ID that already exists actively
 - **THEN** system returns error suggesting --force or different ID
 - **AND** no existing workspace is modified
+
+#### Scenario: Close with archive flags
+- **WHEN** user runs `canopy workspace close PROJ-123 --archive`
+- **THEN** the system archives the workspace instead of deleting
+- **AND** `--no-archive` overrides prompts to delete directly
+
+#### Scenario: Close default controlled by config
+- **GIVEN** `workspace_close_default: archive`
+- **WHEN** user closes a workspace without flags in non-interactive mode
+- **THEN** the workspace is archived instead of deleted

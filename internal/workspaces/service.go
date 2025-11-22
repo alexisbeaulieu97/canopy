@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -220,22 +221,38 @@ func (s *Service) CloseWorkspace(workspaceID string, force bool) error {
 	}
 
 	if !force {
-		for _, repo := range targetWorkspace.Repos {
-			worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
-
-			isDirty, _, _, err := s.gitEngine.Status(worktreePath)
-			if err != nil {
-				continue
-			}
-
-			if isDirty {
-				return fmt.Errorf("repo %s has uncommitted changes. Use --force to close", repo.Name)
-			}
+		if err := s.ensureWorkspaceClean(targetWorkspace, dirName, "close"); err != nil {
+			return err
 		}
 	}
 
 	// 2. Delete workspace
 	return s.wsEngine.Delete(dirName)
+}
+
+// ArchiveWorkspace moves workspace metadata to the archive store and removes the active worktree.
+func (s *Service) ArchiveWorkspace(workspaceID string, force bool) (*workspace.ArchivedWorkspace, error) {
+	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !force {
+		if err := s.ensureWorkspaceClean(targetWorkspace, dirName, "archive"); err != nil {
+			return nil, err
+		}
+	}
+
+	archived, err := s.wsEngine.Archive(dirName, *targetWorkspace, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.wsEngine.Delete(dirName); err != nil {
+		return nil, fmt.Errorf("failed to remove workspace directory: %w", err)
+	}
+
+	return archived, nil
 }
 
 // ListWorkspaces returns all active workspaces
@@ -251,6 +268,11 @@ func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
 	}
 
 	return workspaces, nil
+}
+
+// ListArchivedWorkspaces returns archived workspace metadata.
+func (s *Service) ListArchivedWorkspaces() ([]workspace.ArchivedWorkspace, error) {
+	return s.wsEngine.ListArchived()
 }
 
 // GetStatus returns the aggregate status of a workspace
@@ -396,6 +418,37 @@ func (s *Service) SwitchBranch(workspaceID, branchName string, create bool) erro
 	return nil
 }
 
+// RestoreWorkspace recreates a workspace from the newest archive entry.
+func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
+	if _, _, err := s.findWorkspace(workspaceID); err == nil {
+		if !force {
+			return fmt.Errorf("workspace %s already exists. Use --force to replace or choose a different ID", workspaceID)
+		}
+
+		if err := s.CloseWorkspace(workspaceID, true); err != nil {
+			return fmt.Errorf("failed to remove existing workspace: %w", err)
+		}
+	}
+
+	archive, err := s.wsEngine.LatestArchive(workspaceID)
+	if err != nil {
+		return err
+	}
+
+	ws := archive.Metadata
+	ws.ArchivedAt = nil
+
+	if _, err := s.CreateWorkspace(ws.ID, ws.BranchName, ws.Repos); err != nil {
+		return fmt.Errorf("failed to restore workspace %s: %w", workspaceID, err)
+	}
+
+	if err := s.wsEngine.DeleteArchive(archive.Path); err != nil {
+		return fmt.Errorf("failed to remove archive entry: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, error) {
 	workspaces, err := s.wsEngine.List()
 	if err != nil {
@@ -409,6 +462,27 @@ func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, 
 	}
 
 	return nil, "", fmt.Errorf("workspace %s not found", workspaceID)
+}
+
+func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, action string) error {
+	if s.gitEngine == nil {
+		return nil
+	}
+
+	for _, repo := range workspace.Repos {
+		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
+
+		isDirty, _, _, err := s.gitEngine.Status(worktreePath)
+		if err != nil {
+			continue
+		}
+
+		if isDirty {
+			return fmt.Errorf("repo %s has uncommitted changes. Use --force to %s", repo.Name, action)
+		}
+	}
+
+	return nil
 }
 
 func isLikelyURL(val string) bool {

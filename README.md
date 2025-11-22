@@ -68,7 +68,10 @@ This will:
 - **View**: `canopy workspace view <ID>`
 - **Path**: `canopy workspace path <ID>` (prints absolute path)
 - **Sync**: `canopy workspace sync <ID>` (pulls all repos)
-- **Close**: `canopy workspace close <ID>` (removes workspace and worktrees)
+- **List archived**: `canopy workspace list --archived`
+- **Archive**: `canopy workspace archive <ID>` (removes worktrees, keeps metadata in `archives_root`)
+- **Restore**: `canopy workspace restore <ID>` (recreates worktrees from archive)
+- **Close**: `canopy workspace close <ID> [--archive|--no-archive]` (prompts to archive in TTY; flags override)
 
 ### Repositories
 
@@ -107,9 +110,15 @@ Edit `~/.canopy/config.yaml`:
 ```yaml
 projects_root: ~/projects
 workspaces_root: ~/workspaces
+archives_root: ~/.canopy/archives
+workspace_close_default: delete # or archive
 ```
 
+- `workspace_close_default: delete` keeps existing close behavior; set to `archive` to make archiving the default when no flags are supplied. Explicit flags (`--archive` / `--no-archive`) always win.
+
 ### Advanced Configuration
+
+See `docs/configuration.md` for a concise list of config keys.
 
 #### Auto-Repositories (Regex)
 

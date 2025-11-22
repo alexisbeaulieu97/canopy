@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -13,6 +14,8 @@ import (
 type Config struct {
 	ProjectsRoot    string        `mapstructure:"projects_root"`
 	WorkspacesRoot  string        `mapstructure:"workspaces_root"`
+	ArchivesRoot    string        `mapstructure:"archives_root"`
+	CloseDefault    string        `mapstructure:"workspace_close_default"`
 	WorkspaceNaming string        `mapstructure:"workspace_naming"`
 	Defaults        Defaults      `mapstructure:"defaults"`
 	Registry        *RepoRegistry `mapstructure:"-"`
@@ -44,6 +47,8 @@ func Load() (*Config, error) {
 
 	viper.SetDefault("projects_root", filepath.Join(home, ".canopy", "projects"))
 	viper.SetDefault("workspaces_root", filepath.Join(home, ".canopy", "workspaces"))
+	viper.SetDefault("archives_root", filepath.Join(home, ".canopy", "archives"))
+	viper.SetDefault("workspace_close_default", "delete")
 	viper.SetDefault("workspace_naming", "{{.ID}}")
 
 	viper.SetEnvPrefix("CANOPY")
@@ -64,6 +69,8 @@ func Load() (*Config, error) {
 	// Expand tilde
 	cfg.ProjectsRoot = expandPath(cfg.ProjectsRoot, home)
 	cfg.WorkspacesRoot = expandPath(cfg.WorkspacesRoot, home)
+	cfg.ArchivesRoot = expandPath(cfg.ArchivesRoot, home)
+	cfg.CloseDefault = strings.ToLower(cfg.CloseDefault)
 
 	registry, err := LoadRepoRegistry("")
 	if err != nil {
@@ -107,6 +114,18 @@ func (c *Config) Validate() error {
 
 	if err := validateRoot("workspaces_root", c.WorkspacesRoot); err != nil {
 		return err
+	}
+
+	if err := validateRoot("archives_root", c.ArchivesRoot); err != nil {
+		return err
+	}
+
+	if c.CloseDefault == "" {
+		c.CloseDefault = "delete"
+	}
+
+	if c.CloseDefault != "delete" && c.CloseDefault != "archive" {
+		return fmt.Errorf("workspace_close_default must be either 'delete' or 'archive', got %q", c.CloseDefault)
 	}
 
 	// Check Patterns
