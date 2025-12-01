@@ -231,7 +231,26 @@ func (e *Engine) tryLoadMetadata(dirPath string) (domain.Workspace, bool) {
 		return domain.Workspace{}, false
 	}
 
+	// Fallback for older metadata: infer closed time from directory name when ClosedAt is missing.
+	if w.ClosedAt == nil {
+		if ts, ok := inferClosedTimeFromPath(dirPath); ok {
+			w.ClosedAt = &ts
+		}
+	}
+
 	return w, true
+}
+
+func inferClosedTimeFromPath(path string) (time.Time, bool) {
+	// Expect paths like .../<workspace>/<timestamp>/workspace.yaml
+	parent := filepath.Base(filepath.Dir(path))
+
+	ts, err := time.Parse("20060102T150405Z", parent)
+	if err != nil {
+		return time.Time{}, false
+	}
+
+	return ts, true
 }
 
 // Load reads the metadata for a specific workspace.

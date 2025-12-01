@@ -6,7 +6,7 @@
 The system SHALL support closing workspaces to preserve metadata while removing active worktrees, and reopening them later.
 
 #### Scenario: Close active workspace
-- **WHEN** user runs `canopy workspace close PROJ-123 --archive`
+- **WHEN** user runs `canopy workspace close PROJ-123 --keep`
 - **THEN** workspace metadata is moved to the configured `closed_root`
 - **AND** all worktrees are removed from workspaces_root
 - **AND** canonical repositories remain untouched

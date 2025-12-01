@@ -10,7 +10,7 @@ Currently, `canopy workspace close` permanently deletes workspace directories an
 - Remove worktrees but keep metadata for potential restoration
 - Add `canopy workspace reopen <ID>` command to recreate from closed entry
 - Add `canopy workspace list --closed` flag to view closed workspaces
-- Update `canopy workspace close` to prompt "Archive instead? [Y/n]"
+- Update `canopy workspace close` to prompt "Keep workspace instead? [Y/n]"
 
 ## Impact
 - Affected specs: `specs/workspace-management/spec.md`

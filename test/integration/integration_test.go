@@ -173,12 +173,12 @@ func TestWorkspaceLifecycle(t *testing.T) {
 func TestCloseFlagConflict(t *testing.T) {
 	setupConfig(t)
 
-	out, err := runCanopy("workspace", "close", "TEST-FLAGS", "--archive", "--no-archive")
+	out, err := runCanopy("workspace", "close", "TEST-FLAGS", "--keep", "--delete")
 	if err == nil {
 		t.Fatalf("expected error when using conflicting flags")
 	}
 
-	if !strings.Contains(out, "cannot use --archive and --no-archive together") {
+	if !strings.Contains(out, "cannot use --keep and --delete together") {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }
