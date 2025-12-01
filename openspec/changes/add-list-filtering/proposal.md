@@ -6,7 +6,7 @@ The current `workspace list` command has no filtering capabilities. As workspace
 ## What Changes
 - Add `--include` flag to `workspace list` (comma-separated status values)
 - Add `--exclude` flag to `workspace list` (comma-separated status values)
-- Support filter values: `stale`, `dirty`, `behind`, `clean`, `archived`
+- Support filter values: `stale`, `dirty`, `behind`, `clean`, `closed`
 - Add config option `workspace.list.include` and `workspace.list.exclude` for defaults
 - Special `*` value means "all statuses" (default for include)
 - Filters are additive: include first, then exclude

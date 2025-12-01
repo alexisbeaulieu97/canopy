@@ -23,7 +23,7 @@ func TestNewInitializesDependencies(t *testing.T) {
 	}
 
 	archivesRoot := filepath.Join(tempHome, "archives")
-	configContent := []byte("projects_root: \"" + projectsRoot + "\"\nworkspaces_root: \"" + workspacesRoot + "\"\narchives_root: \"" + archivesRoot + "\"\nworkspace_close_default: \"delete\"\n")
+	configContent := []byte("projects_root: \"" + projectsRoot + "\"\nworkspaces_root: \"" + workspacesRoot + "\"\nclosed_root: \"" + archivesRoot + "\"\nworkspace_close_default: \"delete\"\n")
 
 	configPath := filepath.Join(configDir, "config.yaml")
 	if err := os.WriteFile(configPath, configContent, 0o644); err != nil {
@@ -49,8 +49,8 @@ func TestNewInitializesDependencies(t *testing.T) {
 		t.Fatalf("unexpected workspaces root, got %s", app.Config.WorkspacesRoot)
 	}
 
-	if app.Config.ArchivesRoot != archivesRoot {
-		t.Fatalf("unexpected archives root, got %s", app.Config.ArchivesRoot)
+	if app.Config.ClosedRoot != archivesRoot {
+		t.Fatalf("unexpected closed root, got %s", app.Config.ClosedRoot)
 	}
 
 	if app.Config.CloseDefault != "delete" {

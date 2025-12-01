@@ -24,9 +24,9 @@ The `workspace list` command SHALL display all active workspaces with optional f
 
 #### Scenario: Combined include and exclude
 - **GIVEN** workspaces exist with varying statuses
-- **WHEN** I run `canopy workspace list --include=dirty,stale --exclude=archived`
+- **WHEN** I run `canopy workspace list --include=dirty,stale --exclude=closed`
 - **THEN** the output SHALL include dirty or stale workspaces
-- **AND** archived workspaces SHALL be excluded even if dirty or stale
+- **AND** closed workspaces SHALL be excluded even if dirty or stale
 
 #### Scenario: Config default filters
 - **GIVEN** config has `workspace.list.include: ["dirty"]`

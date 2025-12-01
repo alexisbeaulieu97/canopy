@@ -242,26 +242,26 @@ func (s *Service) CloseWorkspace(workspaceID string, force bool) error {
 	return s.wsEngine.Delete(dirName)
 }
 
-// ArchiveWorkspace moves workspace metadata to the archive store and removes the active worktree.
-func (s *Service) ArchiveWorkspace(workspaceID string, force bool) (*workspace.ArchivedWorkspace, error) {
+// CloseWorkspaceArchived moves workspace metadata to the closed store and removes the active worktree.
+func (s *Service) CloseWorkspaceArchived(workspaceID string, force bool) (*workspace.ClosedWorkspace, error) {
 	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
 	}
 
 	if !force {
-		if err := s.ensureWorkspaceClean(targetWorkspace, dirName, "archive"); err != nil {
+		if err := s.ensureWorkspaceClean(targetWorkspace, dirName, "close"); err != nil {
 			return nil, err
 		}
 	}
 
-	archived, err := s.wsEngine.Archive(dirName, *targetWorkspace, time.Now().UTC())
+	archived, err := s.wsEngine.Close(dirName, *targetWorkspace, time.Now().UTC())
 	if err != nil {
 		return nil, err
 	}
 
 	if err := s.wsEngine.Delete(dirName); err != nil {
-		_ = s.wsEngine.DeleteArchive(archived.Path)
+		_ = s.wsEngine.DeleteClosed(archived.Path)
 		return nil, fmt.Errorf("failed to remove workspace directory: %w", err)
 	}
 
@@ -377,9 +377,9 @@ func (s *Service) CalculateDiskUsage(root string) (int64, time.Time, error) {
 	return total, latest, nil
 }
 
-// ListArchivedWorkspaces returns archived workspace metadata.
-func (s *Service) ListArchivedWorkspaces() ([]workspace.ArchivedWorkspace, error) {
-	return s.wsEngine.ListArchived()
+// ListClosedWorkspaces returns closed workspace metadata.
+func (s *Service) ListClosedWorkspaces() ([]workspace.ClosedWorkspace, error) {
+	return s.wsEngine.ListClosed()
 }
 
 // GetStatus returns the aggregate status of a workspace
@@ -551,9 +551,9 @@ func (s *Service) SwitchBranch(workspaceID, branchName string, create bool) erro
 	return nil
 }
 
-// RestoreWorkspace recreates a workspace from the newest archive entry.
+// RestoreWorkspace recreates a workspace from the newest closed entry.
 func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
-	archive, err := s.wsEngine.LatestArchive(workspaceID)
+	archive, err := s.wsEngine.LatestClosed(workspaceID)
 	if err != nil {
 		return err
 	}
@@ -569,14 +569,14 @@ func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
 	}
 
 	ws := archive.Metadata
-	ws.ArchivedAt = nil
+	ws.ClosedAt = nil
 
 	if _, err := s.CreateWorkspace(ws.ID, ws.BranchName, ws.Repos); err != nil {
 		return fmt.Errorf("failed to restore workspace %s: %w", workspaceID, err)
 	}
 
-	if err := s.wsEngine.DeleteArchive(archive.Path); err != nil {
-		return fmt.Errorf("failed to remove archive entry: %w", err)
+	if err := s.wsEngine.DeleteClosed(archive.Path); err != nil {
+		return fmt.Errorf("failed to remove closed entry: %w", err)
 	}
 
 	return nil
