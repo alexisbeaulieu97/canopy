@@ -497,6 +497,7 @@ func relativeTime(t time.Time) string {
 
 func (m *Model) applyFilters() {
 	var items []list.Item
+
 	search := strings.ToLower(strings.TrimSpace(m.list.FilterValue()))
 
 	for _, it := range m.allItems {

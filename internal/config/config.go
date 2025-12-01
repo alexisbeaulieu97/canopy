@@ -48,7 +48,7 @@ func Load() (*Config, error) {
 
 	viper.SetDefault("projects_root", filepath.Join(home, ".canopy", "projects"))
 	viper.SetDefault("workspaces_root", filepath.Join(home, ".canopy", "workspaces"))
-	viper.SetDefault("closed_root", filepath.Join(home, ".canopy", "archives"))
+	viper.SetDefault("closed_root", filepath.Join(home, ".canopy", "closed"))
 	viper.SetDefault("workspace_close_default", "delete")
 	viper.SetDefault("workspace_naming", "{{.ID}}")
 	viper.SetDefault("stale_threshold_days", 14)

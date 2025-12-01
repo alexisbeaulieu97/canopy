@@ -213,7 +213,7 @@ func TestCloseWorkspaceStoresMetadata(t *testing.T) {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
-	archived, err := deps.svc.CloseWorkspaceArchived("TEST-ARCHIVE", true)
+	archived, err := deps.svc.CloseWorkspaceKeepMetadata("TEST-ARCHIVE", true)
 	if err != nil {
 		t.Fatalf("CloseWorkspaceArchived failed: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestCloseWorkspaceStoresMetadata(t *testing.T) {
 func TestCloseWorkspaceNonexistent(t *testing.T) {
 	deps := newTestService(t)
 
-	if _, err := deps.svc.CloseWorkspaceArchived("MISSING", false); err == nil {
+	if _, err := deps.svc.CloseWorkspaceKeepMetadata("MISSING", false); err == nil {
 		t.Fatalf("expected error when closing nonexistent workspace")
 	}
 }
@@ -286,7 +286,7 @@ func TestCloseRestoreCycle(t *testing.T) {
 		t.Fatalf("expected worktree at %s: %v", worktreePath, err)
 	}
 
-	archived, err := deps.svc.CloseWorkspaceArchived("PROJ-1", false)
+	archived, err := deps.svc.CloseWorkspaceKeepMetadata("PROJ-1", false)
 	if err != nil {
 		t.Fatalf("CloseWorkspaceArchived failed: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestCloseWorkspaceDirtyFailsWithoutForce(t *testing.T) {
 		t.Fatalf("failed to write dirty file: %v", err)
 	}
 
-	if _, err := deps.svc.CloseWorkspaceArchived("PROJ-2", false); err == nil {
+	if _, err := deps.svc.CloseWorkspaceKeepMetadata("PROJ-2", false); err == nil {
 		t.Fatalf("expected close/archive to fail on dirty workspace")
 	}
 }

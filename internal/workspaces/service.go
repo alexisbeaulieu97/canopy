@@ -242,8 +242,8 @@ func (s *Service) CloseWorkspace(workspaceID string, force bool) error {
 	return s.wsEngine.Delete(dirName)
 }
 
-// CloseWorkspaceArchived moves workspace metadata to the closed store and removes the active worktree.
-func (s *Service) CloseWorkspaceArchived(workspaceID string, force bool) (*workspace.ClosedWorkspace, error) {
+// CloseWorkspaceKeepMetadata moves workspace metadata to the closed store and removes the active worktree.
+func (s *Service) CloseWorkspaceKeepMetadata(workspaceID string, force bool) (*workspace.ClosedWorkspace, error) {
 	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return nil, err

@@ -373,7 +373,7 @@ var (
 )
 
 func archiveAndPrint(service *workspaces.Service, id string, force bool) error {
-	archived, err := service.CloseWorkspaceArchived(id, force)
+	archived, err := service.CloseWorkspaceKeepMetadata(id, force)
 	if err != nil {
 		return err
 	}
