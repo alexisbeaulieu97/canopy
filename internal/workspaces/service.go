@@ -477,29 +477,6 @@ func (s *Service) SyncCanonicalRepo(name string) error {
 	return s.gitEngine.Fetch(name)
 }
 
-// SyncWorkspace pulls latest changes for all repos in a workspace
-func (s *Service) SyncWorkspace(workspaceID string) error {
-	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-
-	// 2. Iterate through repos and pull
-	for _, repo := range targetWorkspace.Repos {
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
-		s.logger.Info("Syncing repo", "repo", repo.Name)
-		s.logger.Debug("Pulling changes", "path", worktreePath)
-
-		if err := s.gitEngine.Pull(worktreePath); err != nil {
-			// Log error but continue? Or fail?
-			// For now, let's return error to alert user.
-			return fmt.Errorf("failed to sync repo %s: %w", repo.Name, err)
-		}
-	}
-
-	return nil
-}
-
 // PushWorkspace pushes all repos for a workspace.
 func (s *Service) PushWorkspace(workspaceID string) error {
 	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)

@@ -128,12 +128,12 @@ var (
 				}
 
 				for _, a := range archives {
-					archiveDate := "unknown"
+					closedDate := "unknown"
 					if a.Metadata.ClosedAt != nil {
-						archiveDate = a.Metadata.ClosedAt.Format(time.RFC3339)
+						closedDate = a.Metadata.ClosedAt.Format(time.RFC3339)
 					}
 
-					fmt.Printf("%s (Closed: %s)\n", a.Metadata.ID, archiveDate) //nolint:forbidigo // user-facing CLI output
+					fmt.Printf("%s (Closed: %s)\n", a.Metadata.ID, closedDate) //nolint:forbidigo // user-facing CLI output
 					for _, r := range a.Metadata.Repos {
 						fmt.Printf("  - %s (%s)\n", r.Name, r.URL) //nolint:forbidigo // user-facing CLI output
 					}
@@ -165,7 +165,7 @@ var (
 
 	workspaceCloseCmd = &cobra.Command{
 		Use:   "close <ID>",
-		Short: "Close a workspace (archive or delete)",
+		Short: "Close a workspace (keep metadata or delete)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
@@ -187,7 +187,7 @@ var (
 			interactive := isInteractiveTerminal()
 
 			if keepFlag {
-				return archiveAndPrint(service, id, force)
+				return keepAndPrint(service, id, force)
 			}
 
 			if deleteFlag {
@@ -196,7 +196,7 @@ var (
 
 			if !interactive {
 				if configDefaultArchive {
-					return archiveAndPrint(service, id, force)
+					return keepAndPrint(service, id, force)
 				}
 
 				return closeAndPrint(service, id, force)
@@ -208,12 +208,12 @@ var (
 				promptSuffix = "[Y/n]"
 			}
 
-			fmt.Printf("Keep metadata (close without deleting)? %s: ", promptSuffix) //nolint:forbidigo // user prompt
+			fmt.Printf("Keep workspace record without files? %s: ", promptSuffix) //nolint:forbidigo // user prompt
 
 			answer, err := reader.ReadString('\n')
 			if err != nil {
 				if configDefaultArchive {
-					return archiveAndPrint(service, id, force)
+					return keepAndPrint(service, id, force)
 				}
 
 				return closeAndPrint(service, id, force)
@@ -223,18 +223,18 @@ var (
 
 			switch answer {
 			case "y", "yes":
-				return archiveAndPrint(service, id, force)
+				return keepAndPrint(service, id, force)
 			case "n", "no":
 				return closeAndPrint(service, id, force)
 			case "":
 				if configDefaultArchive {
-					return archiveAndPrint(service, id, force)
+					return keepAndPrint(service, id, force)
 				}
 
 				return closeAndPrint(service, id, force)
 			default:
 				if configDefaultArchive {
-					return archiveAndPrint(service, id, force)
+					return keepAndPrint(service, id, force)
 				}
 
 				return closeAndPrint(service, id, force)
@@ -372,7 +372,7 @@ var (
 	}
 )
 
-func archiveAndPrint(service *workspaces.Service, id string, force bool) error {
+func keepAndPrint(service *workspaces.Service, id string, force bool) error {
 	archived, err := service.CloseWorkspaceKeepMetadata(id, force)
 	if err != nil {
 		return err
@@ -383,7 +383,7 @@ func archiveAndPrint(service *workspaces.Service, id string, force bool) error {
 		archivedAt = archived.Metadata.ClosedAt
 	}
 
-	printArchived(id, archivedAt)
+	printClosed(id, archivedAt)
 
 	return nil
 }
@@ -398,9 +398,9 @@ func closeAndPrint(service *workspaces.Service, id string, force bool) error {
 	return nil
 }
 
-func printArchived(id string, archivedAt *time.Time) {
-	if archivedAt != nil {
-		fmt.Printf("Closed workspace %s at %s\n", id, archivedAt.Format(time.RFC3339)) //nolint:forbidigo // user-facing CLI output
+func printClosed(id string, closedAt *time.Time) {
+	if closedAt != nil {
+		fmt.Printf("Closed workspace %s at %s\n", id, closedAt.Format(time.RFC3339)) //nolint:forbidigo // user-facing CLI output
 		return
 	}
 
