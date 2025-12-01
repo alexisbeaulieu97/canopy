@@ -110,10 +110,10 @@ Edit `~/.canopy/config.yaml`:
 projects_root: ~/projects
 workspaces_root: ~/workspaces
 closed_root: ~/.canopy/closed
-workspace_close_default: delete # or archive
+workspace_close_default: delete # or keep
 ```
 
-- `workspace_close_default: delete` keeps delete behavior; set to `archive` to make keeping metadata the default when no flags are supplied. Explicit flags (`--keep` / `--delete`) always win.
+- `workspace_close_default: delete` keeps delete behavior; set to `keep` to make keeping metadata the default when no flags are supplied. Explicit flags (`--keep` / `--delete`) always win.
 
 ### Advanced Configuration
 
