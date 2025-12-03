@@ -13,6 +13,7 @@ import (
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
@@ -136,7 +137,7 @@ func (s *Service) WorkspacePath(workspaceID string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("workspace %s not found", workspaceID)
+	return "", cerrors.NewWorkspaceNotFound(workspaceID)
 }
 
 // AddRepoToWorkspace adds a repository to an existing workspace
@@ -149,7 +150,7 @@ func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
 	// 2. Check if repo already exists in workspace
 	for _, r := range workspace.Repos {
 		if r.Name == repoName {
-			return fmt.Errorf("repository %s already exists in workspace %s", repoName, workspaceID)
+			return cerrors.NewRepoAlreadyExists(repoName, workspaceID)
 		}
 	}
 
@@ -206,7 +207,7 @@ func (s *Service) RemoveRepoFromWorkspace(workspaceID, repoName string) error {
 	}
 
 	if repoIndex == -1 {
-		return fmt.Errorf("repository %s not found in workspace %s", repoName, workspaceID)
+		return cerrors.NewRepoNotFound(repoName).WithContext("workspace_id", workspaceID)
 	}
 
 	// 3. Remove worktree directory
@@ -575,7 +576,7 @@ func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, 
 		}
 	}
 
-	return nil, "", fmt.Errorf("workspace %s not found", workspaceID)
+	return nil, "", cerrors.NewWorkspaceNotFound(workspaceID)
 }
 
 func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, action string) error {
@@ -592,7 +593,7 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, act
 		}
 
 		if isDirty {
-			return fmt.Errorf("repo %s has uncommitted changes. Use --force to %s", repo.Name, action)
+			return cerrors.NewRepoNotClean(repo.Name, action)
 		}
 	}
 
@@ -638,10 +639,10 @@ func (s *Service) resolveRepoIdentifier(raw string, userRequested bool) (domain.
 	}
 
 	if userRequested {
-		return domain.Repo{}, false, fmt.Errorf("unknown repository '%s'. Register it first: canopy repo register %s <repository-url>", val, val)
+		return domain.Repo{}, false, cerrors.NewUnknownRepository(val, true)
 	}
 
-	return domain.Repo{}, false, fmt.Errorf("unknown repository '%s': provide a URL or registered alias", val)
+	return domain.Repo{}, false, cerrors.NewUnknownRepository(val, false)
 }
 
 func repoNameFromURL(url string) string {
