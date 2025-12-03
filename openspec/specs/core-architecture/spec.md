@@ -129,3 +129,46 @@ The codebase SHALL follow hexagonal architecture patterns.
 - **WHEN** adapters implement these interfaces
 - **THEN** the domain layer SHALL remain decoupled from infrastructure
 
+### Requirement: Typed Error System
+The application SHALL use typed errors with error codes for all domain errors.
+
+#### Scenario: Create workspace not found error
+- **WHEN** `NewWorkspaceNotFound("my-ws")` is called
+- **THEN** returned CanopyError SHALL have Code `WORKSPACE_NOT_FOUND`
+- **AND** Message SHALL contain the workspace ID "my-ws"
+
+#### Scenario: Create repo not clean error
+- **WHEN** `NewRepoNotClean("/path/to/repo")` is called
+- **THEN** returned CanopyError SHALL have Code `REPO_NOT_CLEAN`
+- **AND** Context SHALL contain the repo path
+
+### Requirement: Error Wrapping
+The application SHALL support wrapping errors to preserve root cause using a general-purpose `Wrap` function.
+
+#### Scenario: Wrap error with operation context
+- **WHEN** `errors.Wrap(err, errors.ErrGitOperationFailed, "clone failed")` is called
+- **THEN** returned CanopyError SHALL have the specified Code
+- **AND** Cause SHALL contain the original error
+- **AND** `errors.Unwrap()` SHALL return the original error
+
+**Note**: The wrapping pattern uses a single `Wrap(cause error, code ErrorCode, message string)` function rather than domain-specific wrappers. Callers specify the appropriate error code for their domain.
+
+### Requirement: Error Matching
+Errors SHALL support standard Go error matching with `errors.Is()` and `errors.As()`.
+
+#### Scenario: Match error by code
+- **WHEN** CanopyError is returned and `errors.Is()` is used
+- **THEN** matching SHALL succeed for errors with same ErrorCode
+
+#### Scenario: Extract error details
+- **WHEN** `errors.As()` is used with `*CanopyError`
+- **THEN** full error details SHALL be accessible including Code, Message, and Context
+
+### Requirement: Error Context
+Errors SHALL support contextual key-value pairs for debugging.
+
+#### Scenario: Include context in error
+- **WHEN** error is created with Context map
+- **THEN** Context SHALL contain all provided key-value pairs
+- **AND** Context SHALL be accessible for logging and debugging
+
