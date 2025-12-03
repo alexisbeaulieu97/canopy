@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
@@ -48,7 +49,7 @@ func (e *Engine) Create(dirName, id, branchName string, repos []domain.Repo) err
 
 	if err := os.Mkdir(path, 0o750); err != nil {
 		if os.IsExist(err) {
-			return fmt.Errorf("workspace already exists: %s", path)
+			return cerrors.NewWorkspaceExists(id)
 		}
 
 		return fmt.Errorf("failed to create workspace directory: %w", err)
@@ -299,7 +300,7 @@ func (e *Engine) LatestClosed(workspaceID string) (*ClosedWorkspace, error) { //
 	entries, err := os.ReadDir(workspaceDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("closed workspace %s not found", workspaceID)
+			return nil, cerrors.NewWorkspaceNotFound(workspaceID).WithContext("state", "closed")
 		}
 
 		return nil, fmt.Errorf("failed to read closed entries: %w", err)
@@ -328,7 +329,7 @@ func (e *Engine) LatestClosed(workspaceID string) (*ClosedWorkspace, error) { //
 	}
 
 	if latest == nil {
-		return nil, fmt.Errorf("closed workspace %s not found", workspaceID)
+		return nil, cerrors.NewWorkspaceNotFound(workspaceID).WithContext("state", "closed")
 	}
 
 	return latest, nil
