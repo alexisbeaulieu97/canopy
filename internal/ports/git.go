@@ -1,0 +1,36 @@
+// Package ports defines interfaces for external dependencies (hexagonal architecture).
+package ports
+
+import (
+	"github.com/go-git/go-git/v5"
+)
+
+// GitOperations defines the interface for git operations.
+type GitOperations interface {
+	// EnsureCanonical ensures the repo is cloned in ProjectsRoot (bare).
+	EnsureCanonical(repoURL, repoName string) (*git.Repository, error)
+
+	// CreateWorktree creates a worktree for a workspace branch.
+	CreateWorktree(repoName, worktreePath, branchName string) error
+
+	// Status returns isDirty, unpushedCommits, behindRemote, branchName, error.
+	Status(path string) (isDirty bool, unpushed int, behind int, branch string, err error)
+
+	// Clone clones a repository to the projects root (bare).
+	Clone(url, name string) error
+
+	// Fetch fetches updates for a canonical repository.
+	Fetch(name string) error
+
+	// Pull pulls updates for a repository worktree.
+	Pull(path string) error
+
+	// Push pushes the current branch to its upstream.
+	Push(path, branch string) error
+
+	// List returns a list of repository names in the projects root.
+	List() ([]string, error)
+
+	// Checkout checks out a branch in the given path, optionally creating it.
+	Checkout(path, branchName string, create bool) error
+}

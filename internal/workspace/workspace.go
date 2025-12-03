@@ -12,7 +12,11 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
+
+// Compile-time check that Engine implements ports.WorkspaceStorage.
+var _ ports.WorkspaceStorage = (*Engine)(nil)
 
 // Engine manages workspaces.
 type Engine struct {
@@ -28,21 +32,9 @@ func New(workspacesRoot, closedRoot string) *Engine {
 	}
 }
 
-// ClosedWorkspace describes a stored closed workspace entry.
-type ClosedWorkspace struct {
-	DirName  string
-	Path     string
-	Metadata domain.Workspace
-}
-
-// ClosedAt returns the time the workspace was closed, if recorded.
-func (a ClosedWorkspace) ClosedAt() time.Time {
-	if a.Metadata.ClosedAt != nil {
-		return *a.Metadata.ClosedAt
-	}
-
-	return time.Time{}
-}
+// ClosedWorkspace is an alias for domain.ClosedWorkspace for backward compatibility.
+// Deprecated: Use domain.ClosedWorkspace directly.
+type ClosedWorkspace = domain.ClosedWorkspace
 
 // Create creates a new workspace directory and metadata.
 func (e *Engine) Create(dirName, id, branchName string, repos []domain.Repo) error {

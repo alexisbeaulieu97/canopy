@@ -1,8 +1,33 @@
 # core-architecture Specification
 
 ## Purpose
-Defines the core architecture patterns for Canopy including service initialization, dependency injection via App context, command registration, and project branding conventions.
+Defines the core architecture patterns for Canopy including service initialization, dependency injection via App context, command registration, hexagonal architecture, and project branding conventions.
+
 ## Requirements
+
+### Requirement: Hexagonal Architecture with Port Interfaces
+The system SHALL use hexagonal architecture with interface-defined ports to decouple the service layer from infrastructure implementations.
+
+#### Scenario: Service depends on interfaces
+- **WHEN** the Service struct is initialized
+- **THEN** it accepts interface types (GitOperations, WorkspaceStorage, ConfigProvider)
+- **AND** concrete implementations are injected at runtime
+
+#### Scenario: Interface definitions in ports package
+- **WHEN** a developer looks for interface contracts
+- **THEN** they find all port interfaces in `internal/ports/`
+- **AND** each interface is documented with its contract
+
+#### Scenario: Mock implementations for testing
+- **WHEN** a test needs to isolate the Service
+- **THEN** mock implementations from `internal/mocks/` can be injected
+- **AND** error scenarios can be tested without filesystem or git access
+
+#### Scenario: Compile-time interface checks
+- **WHEN** an implementation is updated
+- **THEN** compile-time assertions verify interface compliance
+- **EXAMPLES**: `var _ ports.GitOperations = (*gitx.GitEngine)(nil)`
+
 ### Requirement: Centralized Service Initialization
 The system SHALL initialize all services through a centralized App struct that manages dependencies and lifecycle.
 

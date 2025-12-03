@@ -12,12 +12,18 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
+
+// Compile-time check that GitEngine implements ports.GitOperations.
+var _ ports.GitOperations = (*GitEngine)(nil)
 
 // GitEngine wraps git operations
 type GitEngine struct {
 	ProjectsRoot string
 }
+
 
 // New creates a new GitEngine
 func New(projectsRoot string) *GitEngine {

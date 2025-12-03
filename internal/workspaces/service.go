@@ -13,16 +13,15 @@ import (
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
-	"github.com/alexisbeaulieu97/canopy/internal/gitx"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
-	"github.com/alexisbeaulieu97/canopy/internal/workspace"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
 // Service manages workspace operations
 type Service struct {
-	config     *config.Config
-	gitEngine  *gitx.GitEngine
-	wsEngine   *workspace.Engine
+	config     ports.ConfigProvider
+	gitEngine  ports.GitOperations
+	wsEngine   ports.WorkspaceStorage
 	logger     *logging.Logger
 	registry   *config.RepoRegistry
 	usageCache map[string]usageEntry
@@ -40,16 +39,17 @@ type usageEntry struct {
 var ErrNoReposConfigured = errors.New("no repositories specified and no patterns matched")
 
 // NewService creates a new workspace service
-func NewService(cfg *config.Config, gitEngine *gitx.GitEngine, wsEngine *workspace.Engine, logger *logging.Logger) *Service {
+func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngine ports.WorkspaceStorage, logger *logging.Logger) *Service {
 	return &Service{
 		config:     cfg,
 		gitEngine:  gitEngine,
 		wsEngine:   wsEngine,
 		logger:     logger,
-		registry:   cfg.Registry,
+		registry:   cfg.GetRegistry(),
 		usageCache: make(map[string]usageEntry),
 	}
 }
+
 
 // ResolveRepos determines which repos should be part of the workspace
 func (s *Service) ResolveRepos(workspaceID string, requestedRepos []string) ([]domain.Repo, error) {
@@ -100,7 +100,7 @@ func (s *Service) CreateWorkspace(id, branchName string, repos []domain.Repo) (s
 
 	// Manual cleanup helper
 	cleanup := func() {
-		path := fmt.Sprintf("%s/%s", s.config.WorkspacesRoot, dirName)
+		path := fmt.Sprintf("%s/%s", s.config.GetWorkspacesRoot(), dirName)
 		_ = os.RemoveAll(path)
 	}
 
@@ -114,7 +114,7 @@ func (s *Service) CreateWorkspace(id, branchName string, repos []domain.Repo) (s
 		}
 
 		// Create worktree
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
+		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		if err := s.gitEngine.CreateWorktree(repo.Name, worktreePath, branchName); err != nil {
 			cleanup()
 			return "", fmt.Errorf("failed to create worktree for %s: %w", repo.Name, err)
@@ -133,7 +133,7 @@ func (s *Service) WorkspacePath(workspaceID string) (string, error) {
 
 	for dir, w := range workspaces {
 		if w.ID == workspaceID {
-			return filepath.Join(s.config.WorkspacesRoot, dir), nil
+			return filepath.Join(s.config.GetWorkspacesRoot(), dir), nil
 		}
 	}
 
@@ -175,7 +175,7 @@ func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
 		return fmt.Errorf("workspace %s has no branch set in metadata", workspaceID)
 	}
 
-	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
+	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 	if err := s.gitEngine.CreateWorktree(repo.Name, worktreePath, branchName); err != nil {
 		return fmt.Errorf("failed to create worktree for %s: %w", repo.Name, err)
 	}
@@ -211,7 +211,7 @@ func (s *Service) RemoveRepoFromWorkspace(workspaceID, repoName string) error {
 	}
 
 	// 3. Remove worktree directory
-	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repoName)
+	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repoName)
 	if err := os.RemoveAll(worktreePath); err != nil {
 		return fmt.Errorf("failed to remove worktree %s: %w", worktreePath, err)
 	}
@@ -243,7 +243,7 @@ func (s *Service) CloseWorkspace(workspaceID string, force bool) error {
 }
 
 // CloseWorkspaceKeepMetadata moves workspace metadata to the closed store and removes the active worktree.
-func (s *Service) CloseWorkspaceKeepMetadata(workspaceID string, force bool) (*workspace.ClosedWorkspace, error) {
+func (s *Service) CloseWorkspaceKeepMetadata(workspaceID string, force bool) (*domain.ClosedWorkspace, error) {
 	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
@@ -278,7 +278,7 @@ func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
 	var workspaces []domain.Workspace
 
 	for dir, w := range workspaceMap {
-		wsPath := filepath.Join(s.config.WorkspacesRoot, dir)
+		wsPath := filepath.Join(s.config.GetWorkspacesRoot(), dir)
 
 		usage, latest, sizeErr := s.cachedWorkspaceUsage(wsPath)
 		if sizeErr != nil {
@@ -378,7 +378,7 @@ func (s *Service) CalculateDiskUsage(root string) (int64, time.Time, error) {
 }
 
 // ListClosedWorkspaces returns closed workspace metadata.
-func (s *Service) ListClosedWorkspaces() ([]workspace.ClosedWorkspace, error) {
+func (s *Service) ListClosedWorkspaces() ([]domain.ClosedWorkspace, error) {
 	return s.wsEngine.ListClosed()
 }
 
@@ -393,7 +393,7 @@ func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error)
 	var repoStatuses []domain.RepoStatus
 
 	for _, repo := range targetWorkspace.Repos {
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
+		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		isDirty, unpushed, behind, branch, err := s.gitEngine.Status(worktreePath)
 		if err != nil {
@@ -460,7 +460,7 @@ func (s *Service) RemoveCanonicalRepo(name string, force bool) error {
 	}
 
 	// 2. Remove repo
-	path := fmt.Sprintf("%s/%s", s.config.ProjectsRoot, name)
+	path := fmt.Sprintf("%s/%s", s.config.GetProjectsRoot(), name)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return fmt.Errorf("repository %s does not exist", name)
 	}
@@ -485,7 +485,7 @@ func (s *Service) PushWorkspace(workspaceID string) error {
 	}
 
 	for _, repo := range targetWorkspace.Repos {
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
+		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		branchName := targetWorkspace.BranchName
 
 		if branchName == "" {
@@ -511,7 +511,7 @@ func (s *Service) SwitchBranch(workspaceID, branchName string, create bool) erro
 
 	// 2. Iterate through repos and checkout
 	for _, repo := range targetWorkspace.Repos {
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
+		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		s.logger.Info("Switching branch", "repo", repo.Name, "branch", branchName)
 
 		if err := s.gitEngine.Checkout(worktreePath, branchName, create); err != nil {
@@ -561,7 +561,7 @@ func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
 
 // StaleThresholdDays returns the configured stale threshold in days.
 func (s *Service) StaleThresholdDays() int {
-	return s.config.StaleThresholdDays
+	return s.config.GetStaleThresholdDays()
 }
 
 func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, error) {
@@ -585,7 +585,7 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, act
 	}
 
 	for _, repo := range workspace.Repos {
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.WorkspacesRoot, dirName, repo.Name)
+		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		isDirty, _, _, _, err := s.gitEngine.Status(worktreePath)
 		if err != nil {
