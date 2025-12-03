@@ -1,35 +1,55 @@
 # Design Document: Extract Interfaces for Testability
 
-## Design Decisions
+## Context
 
-### Goals
+The current `Service` struct in `internal/workspaces/service.go` directly depends on concrete types:
+- `*gitx.Engine` for git operations
+- `*workspace.Engine` for workspace filesystem operations
+- `*config.Config` for configuration
+
+This tight coupling requires real filesystem and git I/O in tests, making unit tests slow and brittle. Tests cannot run in isolation and depend on external state.
+
+## Goals
+
 - Enable fast, isolated unit tests without filesystem/git I/O
 - Adopt hexagonal architecture with clear ports and adapters
 - Reduce coupling between service layer and infrastructure
+- Allow mock implementations for deterministic testing
 
-### Rationale
-The current `Service` struct directly depends on concrete types (`gitx.Engine`, `workspace.Engine`), requiring real git operations and filesystem access in tests. Extracting interfaces allows:
-- Mock implementations for unit tests
-- Clear boundaries between business logic and infrastructure
-- Easier swapping of implementations (e.g., in-memory storage for tests)
+## Non-Goals
 
-### Interfaces to Extract
+- Changing the public API of existing commands
+- Introducing a DI framework or container
+- Refactoring the TUI layer (separate change)
+- Modifying git operation semantics
+
+## Decisions
+
+### Interface Extraction Strategy
+
+Extract three core interfaces to decouple the service layer:
+
 1. **GitOperations** - Git clone, fetch, pull, push, status
 2. **WorkspaceStorage** - CRUD for workspaces on filesystem
 3. **ConfigProvider** - Configuration loading and validation
 
-## Dependency Injection
+### Rationale
 
-### Constructor Signature Changes
+Extracting interfaces allows:
+- Mock implementations for unit tests
+- Clear boundaries between business logic and infrastructure
+- Easier swapping of implementations (e.g., in-memory storage for tests)
+- Better adherence to dependency inversion principle
+
+### Constructor Signature
+
 ```go
-// Before
-func NewService(cfg *config.Config, gitEngine *gitx.Engine) *Service
-
-// After
+// Interface-driven signature
 func NewService(cfg ConfigProvider, git GitOperations, storage WorkspaceStorage) *Service
 ```
 
-### Recommended DI Patterns
+### Dependency Injection Patterns (Decision Details)
+
 - Constructor injection (preferred for required dependencies)
 - Functional options for optional/configurable behavior
 - No DI framework needed; manual wiring is sufficient for this codebase size
