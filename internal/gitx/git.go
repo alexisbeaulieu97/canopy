@@ -24,7 +24,6 @@ type GitEngine struct {
 	ProjectsRoot string
 }
 
-
 // New creates a new GitEngine
 func New(projectsRoot string) *GitEngine {
 	return &GitEngine{ProjectsRoot: projectsRoot}

@@ -48,6 +48,7 @@ func (m *MockConfigProvider) GetReposForWorkspace(workspaceID string) []string {
 	if m.GetReposForWorkspaceFunc != nil {
 		return m.GetReposForWorkspaceFunc(workspaceID)
 	}
+
 	return m.RepoNames
 }
 
@@ -56,6 +57,7 @@ func (m *MockConfigProvider) Validate() error {
 	if m.ValidateFunc != nil {
 		return m.ValidateFunc()
 	}
+
 	return nil
 }
 
@@ -64,6 +66,7 @@ func (m *MockConfigProvider) GetProjectsRoot() string {
 	if m.GetProjectsRootFunc != nil {
 		return m.GetProjectsRootFunc()
 	}
+
 	return m.ProjectsRoot
 }
 
@@ -72,6 +75,7 @@ func (m *MockConfigProvider) GetWorkspacesRoot() string {
 	if m.GetWorkspacesRootFunc != nil {
 		return m.GetWorkspacesRootFunc()
 	}
+
 	return m.WorkspacesRoot
 }
 
@@ -80,6 +84,7 @@ func (m *MockConfigProvider) GetClosedRoot() string {
 	if m.GetClosedRootFunc != nil {
 		return m.GetClosedRootFunc()
 	}
+
 	return m.ClosedRoot
 }
 
@@ -88,6 +93,7 @@ func (m *MockConfigProvider) GetCloseDefault() string {
 	if m.GetCloseDefaultFunc != nil {
 		return m.GetCloseDefaultFunc()
 	}
+
 	return m.CloseDefault
 }
 
@@ -96,6 +102,7 @@ func (m *MockConfigProvider) GetStaleThresholdDays() int {
 	if m.GetStaleThresholdDaysFunc != nil {
 		return m.GetStaleThresholdDaysFunc()
 	}
+
 	return m.StaleThresholdDays
 }
 
@@ -104,5 +111,6 @@ func (m *MockConfigProvider) GetRegistry() *config.RepoRegistry {
 	if m.GetRegistryFunc != nil {
 		return m.GetRegistryFunc()
 	}
+
 	return m.Registry
 }

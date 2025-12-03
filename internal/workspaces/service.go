@@ -50,7 +50,6 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 	}
 }
 
-
 // ResolveRepos determines which repos should be part of the workspace
 func (s *Service) ResolveRepos(workspaceID string, requestedRepos []string) ([]domain.Repo, error) {
 	var repoNames []string

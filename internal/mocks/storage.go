@@ -39,11 +39,13 @@ func (m *MockWorkspaceStorage) Create(dirName, id, branchName string, repos []do
 	if m.CreateFunc != nil {
 		return m.CreateFunc(dirName, id, branchName, repos)
 	}
+
 	m.Workspaces[dirName] = domain.Workspace{
 		ID:         id,
 		BranchName: branchName,
 		Repos:      repos,
 	}
+
 	return nil
 }
 
@@ -52,7 +54,9 @@ func (m *MockWorkspaceStorage) Save(dirName string, ws domain.Workspace) error {
 	if m.SaveFunc != nil {
 		return m.SaveFunc(dirName, ws)
 	}
+
 	m.Workspaces[dirName] = ws
+
 	return nil
 }
 
@@ -61,6 +65,7 @@ func (m *MockWorkspaceStorage) Close(dirName string, ws domain.Workspace, closed
 	if m.CloseFunc != nil {
 		return m.CloseFunc(dirName, ws, closedAt)
 	}
+
 	return &domain.ClosedWorkspace{
 		DirName:  dirName,
 		Path:     "/closed/" + dirName,
@@ -73,6 +78,7 @@ func (m *MockWorkspaceStorage) List() (map[string]domain.Workspace, error) {
 	if m.ListFunc != nil {
 		return m.ListFunc()
 	}
+
 	return m.Workspaces, nil
 }
 
@@ -81,6 +87,7 @@ func (m *MockWorkspaceStorage) ListClosed() ([]domain.ClosedWorkspace, error) {
 	if m.ListClosedFunc != nil {
 		return m.ListClosedFunc()
 	}
+
 	return nil, nil
 }
 
@@ -89,9 +96,11 @@ func (m *MockWorkspaceStorage) Load(dirName string) (*domain.Workspace, error) {
 	if m.LoadFunc != nil {
 		return m.LoadFunc(dirName)
 	}
+
 	if ws, ok := m.Workspaces[dirName]; ok {
 		return &ws, nil
 	}
+
 	return nil, nil
 }
 
@@ -100,7 +109,9 @@ func (m *MockWorkspaceStorage) Delete(workspaceID string) error {
 	if m.DeleteFunc != nil {
 		return m.DeleteFunc(workspaceID)
 	}
+
 	delete(m.Workspaces, workspaceID)
+
 	return nil
 }
 
@@ -109,6 +120,7 @@ func (m *MockWorkspaceStorage) LatestClosed(workspaceID string) (*domain.ClosedW
 	if m.LatestClosedFunc != nil {
 		return m.LatestClosedFunc(workspaceID)
 	}
+
 	return nil, nil
 }
 
@@ -117,5 +129,6 @@ func (m *MockWorkspaceStorage) DeleteClosed(path string) error {
 	if m.DeleteClosedFunc != nil {
 		return m.DeleteClosedFunc(path)
 	}
+
 	return nil
 }

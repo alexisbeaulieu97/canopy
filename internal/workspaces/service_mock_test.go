@@ -71,6 +71,7 @@ func TestServiceWithMocks(t *testing.T) {
 			if workspaceID == "TEST-123" {
 				return []string{"org/repo-a", "org/repo-b"}
 			}
+
 			return nil
 		}
 

@@ -14,7 +14,7 @@ type GitOperations interface {
 	CreateWorktree(repoName, worktreePath, branchName string) error
 
 	// Status returns isDirty, unpushedCommits, behindRemote, branchName, error.
-	Status(path string) (isDirty bool, unpushed int, behind int, branch string, err error)
+	Status(path string) (isDirty bool, unpushed, behind int, branch string, err error)
 
 	// Clone clones a repository to the projects root (bare).
 	Clone(url, name string) error
