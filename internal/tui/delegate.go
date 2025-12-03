@@ -78,7 +78,7 @@ func (d workspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 	}
 
 	// Get health status
-	statusText, statusIcon, statusStyle := healthForWorkspace(wsItem, d.staleThreshold)
+	_, statusIcon, statusStyle := healthForWorkspace(wsItem, d.staleThreshold)
 
 	// Choose title style based on selection
 	titleStyle := d.styles.NormalTitle
@@ -114,20 +114,18 @@ func (d workspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 		secondary = fmt.Sprintf("%s  •  %s  •  %s", repoText, diskSize, lastUpdated)
 	}
 
-	// Third line: status summary (only if loaded and has issues)
+	// Third line: status summary (always render for consistent height)
 	var statusLine string
 
 	if wsItem.loaded && wsItem.err == nil {
-		statusLine = buildStatusLine(wsItem.summary, statusText)
+		statusLine = buildStatusLine(wsItem.summary)
 	}
 
-	// Output with proper indentation
+	// Output with proper indentation (always 3 lines to match Height())
 	_, _ = fmt.Fprintf(w, "%s\n", line1)
 
 	_, _ = fmt.Fprintf(w, "    %s\n", descStyle.Render(secondary))
-	if statusLine != "" {
-		_, _ = fmt.Fprintf(w, "    %s\n", statusLine)
-	}
+	_, _ = fmt.Fprintf(w, "    %s\n", statusLine)
 }
 
 // healthForWorkspace determines the health status of a workspace.
@@ -181,7 +179,7 @@ func renderBadges(item workspaceItem, staleThreshold int) string {
 }
 
 // buildStatusLine creates a summary line for workspace status.
-func buildStatusLine(summary workspaceSummary, _ string) string {
+func buildStatusLine(summary workspaceSummary) string {
 	if summary.dirtyRepos == 0 && summary.unpushedRepos == 0 && summary.behindRepos == 0 {
 		return statusCleanStyle.Render("✓ All repos clean")
 	}

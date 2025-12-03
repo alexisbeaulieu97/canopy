@@ -13,7 +13,7 @@ import (
 func (m Model) loadWorkspaces() tea.Msg {
 	workspaces, err := m.svc.ListWorkspaces()
 	if err != nil {
-		return err
+		return loadWorkspacesErrMsg{err: err}
 	}
 
 	items := make([]workspaceItem, 0, len(workspaces))
@@ -53,12 +53,12 @@ func (m Model) loadWorkspaceDetails(id string) tea.Cmd {
 	return func() tea.Msg {
 		wsItem, ok := m.workspaceItemByID(id)
 		if !ok {
-			return fmt.Errorf("workspace not found")
+			return workspaceDetailsErrMsg{id: id, err: fmt.Errorf("workspace not found")}
 		}
 
 		status, err := m.svc.GetStatus(id)
 		if err != nil {
-			return err
+			return workspaceDetailsErrMsg{id: id, err: err}
 		}
 
 		wsCopy := wsItem.workspace
@@ -82,7 +82,7 @@ func (m Model) closeWorkspace(id string) tea.Cmd {
 	return func() tea.Msg {
 		err := m.svc.CloseWorkspace(id, false)
 		if err != nil {
-			return err
+			return closeWorkspaceErrMsg{id: id, err: err}
 		}
 		// Reload list
 		return m.loadWorkspaces()
@@ -107,6 +107,10 @@ func (m Model) openWorkspace(id string) tea.Cmd {
 		}
 
 		parts := strings.Fields(editor)
+		if len(parts) == 0 {
+			return openEditorResultMsg{err: fmt.Errorf("set $EDITOR or $VISUAL to open workspaces")}
+		}
+
 		cmd := exec.Command(parts[0], append(parts[1:], path)...) //nolint:gosec // editor command is user-provided
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

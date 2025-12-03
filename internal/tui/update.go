@@ -37,6 +37,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 		}
 
 		return m, tea.Batch(cmds...)
+	case loadWorkspacesErrMsg:
+		m.err = msg.err
 	case workspaceStatusMsg:
 		m.statusCache[msg.id] = msg.status
 		m.updateWorkspaceSummary(msg.id, msg.status, nil)
@@ -61,6 +63,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 		m.selectedWS = msg.workspace
 		m.wsStatus = msg.status
 		m.loadingDetail = false
+	case workspaceDetailsErrMsg:
+		m.err = msg.err
+		m.loadingDetail = false
+	case closeWorkspaceErrMsg:
+		m.err = msg.err
 	case openEditorResultMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -70,6 +77,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 		}
 	case error:
 		m.err = msg
+		m.loadingDetail = false
+
 		return m, nil
 	}
 

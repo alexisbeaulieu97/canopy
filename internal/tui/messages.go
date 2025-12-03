@@ -37,3 +37,20 @@ type workspaceDetailsMsg struct {
 	workspace *domain.Workspace
 	status    *domain.WorkspaceStatus
 }
+
+// loadWorkspacesErrMsg is sent when loading workspaces fails.
+type loadWorkspacesErrMsg struct {
+	err error
+}
+
+// workspaceDetailsErrMsg is sent when loading workspace details fails.
+type workspaceDetailsErrMsg struct {
+	id  string
+	err error
+}
+
+// closeWorkspaceErrMsg is sent when closing a workspace fails.
+type closeWorkspaceErrMsg struct {
+	id  string
+	err error
+}
