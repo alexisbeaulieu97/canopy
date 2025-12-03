@@ -275,10 +275,15 @@ func (g *GitEngine) aheadBehindCounts(path, branch string) (int, int, error) {
 
 // RunCommand executes an arbitrary git command in the specified repository path.
 func (g *GitEngine) RunCommand(repoPath string, args ...string) (*ports.CommandResult, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("git command requires at least one argument")
+	}
+
 	cmdArgs := append([]string{"-C", repoPath}, args...)
-	cmd := exec.Command("git", cmdArgs...) //nolint:gosec // arguments are constructed internally
+	cmd := exec.Command("git", cmdArgs...) //nolint:gosec // git binary is hardcoded, args passed safely as separate parameters
 
 	var stdout, stderr strings.Builder
+
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 

@@ -110,7 +110,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 
 		callCount := 0
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.RunCommandFunc = func(repoPath string, args ...string) (*ports.CommandResult, error) {
+		mockGit.RunCommandFunc = func(_ string, _ ...string) (*ports.CommandResult, error) {
 			callCount++
 
 			return &ports.CommandResult{
@@ -164,7 +164,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 		mockConfig.WorkspacesRoot = "/workspaces"
 
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.RunCommandFunc = func(repoPath string, args ...string) (*ports.CommandResult, error) {
+		mockGit.RunCommandFunc = func(_ string, _ ...string) (*ports.CommandResult, error) {
 			return &ports.CommandResult{
 				Stdout:   "parallel-output",
 				Stderr:   "",
@@ -210,7 +210,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 
 		callCount := 0
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.RunCommandFunc = func(repoPath string, args ...string) (*ports.CommandResult, error) {
+		mockGit.RunCommandFunc = func(_ string, _ ...string) (*ports.CommandResult, error) {
 			callCount++
 			// First call fails
 			if callCount == 1 {
@@ -232,7 +232,6 @@ func TestRunGitInWorkspace(t *testing.T) {
 		results, err := svc.RunGitInWorkspace("test-ws", []string{"push"}, GitRunOptions{
 			ContinueOnError: false,
 		})
-
 		if err == nil {
 			t.Fatal("expected error when repo fails")
 		}
@@ -261,7 +260,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 
 		callCount := 0
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.RunCommandFunc = func(repoPath string, args ...string) (*ports.CommandResult, error) {
+		mockGit.RunCommandFunc = func(_ string, _ ...string) (*ports.CommandResult, error) {
 			callCount++
 			// First call fails
 			if callCount == 1 {
@@ -283,7 +282,6 @@ func TestRunGitInWorkspace(t *testing.T) {
 		results, err := svc.RunGitInWorkspace("test-ws", []string{"push"}, GitRunOptions{
 			ContinueOnError: true,
 		})
-
 		// Should not return error with ContinueOnError
 		if err != nil {
 			t.Fatalf("unexpected error with ContinueOnError: %v", err)

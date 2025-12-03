@@ -420,12 +420,10 @@ Examples:
 
 			if failures > 0 {
 				fmt.Printf("\n%d/%d repos failed\n", failures, len(results)) //nolint:forbidigo // user-facing CLI output
-				if !continueOnError {
-					return fmt.Errorf("%d repos failed", failures)
-				}
-			} else {
-				fmt.Printf("\nAll %d repos completed successfully\n", len(results)) //nolint:forbidigo // user-facing CLI output
+				return fmt.Errorf("%d repos failed", failures)
 			}
+
+			fmt.Printf("\nAll %d repos completed successfully\n", len(results)) //nolint:forbidigo // user-facing CLI output
 
 			return nil
 		},

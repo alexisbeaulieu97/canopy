@@ -571,15 +571,26 @@ func (s *Service) runGitSequential(workspace *domain.Workspace, dirName string, 
 	return results, nil
 }
 
+const defaultMaxParallel = 10
+
 func (s *Service) runGitParallel(workspace *domain.Workspace, dirName string, args []string, continueOnError bool) ([]RepoGitResult, error) {
 	results := make([]RepoGitResult, len(workspace.Repos))
+
 	var wg sync.WaitGroup
+
+	// Bounded worker pool to avoid exhausting resources for large workspaces
+	sem := make(chan struct{}, defaultMaxParallel)
 
 	for i, repo := range workspace.Repos {
 		wg.Add(1)
 
 		go func(idx int, r domain.Repo) {
 			defer wg.Done()
+
+			// Acquire semaphore
+			sem <- struct{}{}
+
+			defer func() { <-sem }()
 
 			worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, r.Name)
 
@@ -591,6 +602,7 @@ func (s *Service) runGitParallel(workspace *domain.Workspace, dirName string, ar
 			if err != nil {
 				result.Error = err
 				results[idx] = result
+
 				return
 			}
 
