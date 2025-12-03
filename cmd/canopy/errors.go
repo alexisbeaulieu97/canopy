@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
@@ -58,6 +57,10 @@ func exitCodeForError(err error) ExitCode {
 
 // userFriendlyMessage returns a user-friendly message for an error.
 func userFriendlyMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+
 	var canopyErr *cerrors.CanopyError
 	if !errors.As(err, &canopyErr) {
 		return err.Error()
@@ -87,35 +90,4 @@ func formatErrorJSON(err error) string {
 	}
 
 	return string(data)
-}
-
-// handleError processes an error and exits with appropriate code.
-// If jsonOutput is true, outputs JSON error format.
-func handleError(err error, jsonOutput bool) {
-	if err == nil {
-		return
-	}
-
-	if jsonOutput {
-		fmt.Fprintln(os.Stderr, formatErrorJSON(err)) //nolint:forbidigo // error output
-	} else {
-		fmt.Fprintln(os.Stderr, "Error:", userFriendlyMessage(err)) //nolint:forbidigo // error output
-	}
-
-	os.Exit(int(exitCodeForError(err)))
-}
-
-// isCanopyError checks if the error is a typed CanopyError.
-func isCanopyError(err error) bool {
-	var canopyErr *cerrors.CanopyError
-	return errors.As(err, &canopyErr)
-}
-
-// getCanopyError extracts a CanopyError from an error chain, if present.
-func getCanopyError(err error) *cerrors.CanopyError {
-	var canopyErr *cerrors.CanopyError
-	if errors.As(err, &canopyErr) {
-		return canopyErr
-	}
-	return nil
 }

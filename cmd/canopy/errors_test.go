@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -110,6 +109,13 @@ func TestUserFriendlyMessage(t *testing.T) {
 	}
 }
 
+func TestUserFriendlyMessageNil(t *testing.T) {
+	msg := userFriendlyMessage(nil)
+	if msg != "" {
+		t.Errorf("userFriendlyMessage(nil) = %q, want empty string", msg)
+	}
+}
+
 func TestFormatErrorJSON(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -142,77 +148,10 @@ func TestFormatErrorJSON(t *testing.T) {
 			if tt.wantCode != "" && !strings.Contains(json, tt.wantCode) {
 				t.Errorf("formatErrorJSON() missing code %q in %s", tt.wantCode, json)
 			}
+
 			if !strings.Contains(json, tt.wantContains) {
 				t.Errorf("formatErrorJSON() missing %q in %s", tt.wantContains, json)
 			}
 		})
 	}
-}
-
-func TestIsCanopyError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "canopy error",
-			err:  cerrors.NewWorkspaceNotFound("test"),
-			want: true,
-		},
-		{
-			name: "wrapped canopy error",
-			err:  fmt.Errorf("outer: %w", cerrors.NewWorkspaceNotFound("test")),
-			want: true,
-		},
-		{
-			name: "generic error",
-			err:  fmt.Errorf("generic"),
-			want: false,
-		},
-		{
-			name: "nil error",
-			err:  nil,
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := isCanopyError(tt.err); got != tt.want {
-				t.Errorf("isCanopyError() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGetCanopyError(t *testing.T) {
-	t.Run("returns canopy error", func(t *testing.T) {
-		err := cerrors.NewWorkspaceNotFound("test")
-		got := getCanopyError(err)
-		if got == nil {
-			t.Fatal("getCanopyError() = nil, want non-nil")
-		}
-		if got.Code != cerrors.ErrWorkspaceNotFound {
-			t.Errorf("Code = %q, want %q", got.Code, cerrors.ErrWorkspaceNotFound)
-		}
-	})
-
-	t.Run("extracts from wrapped error", func(t *testing.T) {
-		wrapped := fmt.Errorf("outer: %w", cerrors.NewRepoNotFound("test"))
-		got := getCanopyError(wrapped)
-		if got == nil {
-			t.Fatal("getCanopyError() = nil, want non-nil")
-		}
-		if got.Code != cerrors.ErrRepoNotFound {
-			t.Errorf("Code = %q, want %q", got.Code, cerrors.ErrRepoNotFound)
-		}
-	})
-
-	t.Run("returns nil for generic error", func(t *testing.T) {
-		err := errors.New("generic")
-		if got := getCanopyError(err); got != nil {
-			t.Errorf("getCanopyError() = %v, want nil", got)
-		}
-	})
 }

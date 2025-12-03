@@ -34,6 +34,7 @@ func (e *CanopyError) Error() string {
 	if e.Cause != nil {
 		return fmt.Sprintf("%s: %s: %v", e.Code, e.Message, e.Cause)
 	}
+
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
 }
 
@@ -48,16 +49,26 @@ func (e *CanopyError) Is(target error) bool {
 	if errors.As(target, &t) {
 		return e.Code == t.Code
 	}
+
 	return false
 }
 
-// WithContext adds or updates context key-value pairs.
+// WithContext returns a copy of the error with additional context key-value pairs.
+// This creates a shallow copy to avoid mutating sentinel errors.
 func (e *CanopyError) WithContext(key, value string) *CanopyError {
-	if e.Context == nil {
-		e.Context = make(map[string]string)
+	newContext := make(map[string]string)
+	for k, v := range e.Context {
+		newContext[k] = v
 	}
-	e.Context[key] = value
-	return e
+
+	newContext[key] = value
+
+	return &CanopyError{
+		Code:    e.Code,
+		Message: e.Message,
+		Cause:   e.Cause,
+		Context: newContext,
+	}
 }
 
 // NewWorkspaceNotFound creates an error for when a workspace is not found.
@@ -113,6 +124,7 @@ func NewUnknownRepository(identifier string, userRequested bool) *CanopyError {
 	} else {
 		msg = fmt.Sprintf("unknown repository '%s': provide a URL or registered alias", identifier)
 	}
+
 	return &CanopyError{
 		Code:    ErrUnknownRepository,
 		Message: msg,
