@@ -19,6 +19,22 @@ type Workspace struct {
 	DiskUsageBytes int64      `yaml:"-"`
 }
 
+// ClosedWorkspace describes a stored closed workspace entry.
+type ClosedWorkspace struct {
+	DirName  string
+	Path     string
+	Metadata Workspace
+}
+
+// ClosedAt returns the time the workspace was closed, if recorded.
+func (a ClosedWorkspace) ClosedAt() time.Time {
+	if a.Metadata.ClosedAt != nil {
+		return *a.Metadata.ClosedAt
+	}
+
+	return time.Time{}
+}
+
 // RepoStatus represents the git status of a repo
 type RepoStatus struct {
 	Name            string

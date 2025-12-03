@@ -1,8 +1,31 @@
 # core-architecture Specification
 
 ## Purpose
-Defines the core architecture patterns for Canopy including service initialization, dependency injection via App context, command registration, and project branding conventions.
+Defines the core architecture patterns for Canopy including service initialization, dependency injection via App context, command registration, hexagonal architecture, and project branding conventions.
 ## Requirements
+### Requirement: Hexagonal Architecture with Port Interfaces
+The system SHALL use hexagonal architecture with interface-defined ports to decouple the service layer from infrastructure implementations.
+
+#### Scenario: Service depends on interfaces
+- **WHEN** the Service struct is initialized
+- **THEN** it accepts interface types (GitOperations, WorkspaceStorage, ConfigProvider)
+- **AND** concrete implementations are injected at runtime
+
+#### Scenario: Interface definitions in ports package
+- **WHEN** a developer looks for interface contracts
+- **THEN** they find all port interfaces in `internal/ports/`
+- **AND** each interface is documented with its contract
+
+#### Scenario: Mock implementations for testing
+- **WHEN** a test needs to isolate the Service
+- **THEN** mock implementations from `internal/mocks/` can be injected
+- **AND** error scenarios can be tested without filesystem or git access
+
+#### Scenario: Compile-time interface checks
+- **WHEN** an implementation is updated
+- **THEN** compile-time assertions verify interface compliance
+- **EXAMPLES**: `var _ ports.GitOperations = (*gitx.GitEngine)(nil)`
+
 ### Requirement: Centralized Service Initialization
 The system SHALL initialize all services through a centralized App struct that manages dependencies and lifecycle.
 
@@ -84,4 +107,25 @@ The README SHALL include an explanation of the canopy metaphor in the introducti
 - **THEN** they see an explanation that canopy represents a bird's-eye view above the forest
 - **AND** the explanation connects the metaphor to managing git workspaces and branches
 - **AND** it clarifies that the TUI provides a literal canopy-level view of all workspaces
+
+### Requirement: Interface-Based Dependencies
+Core services SHALL depend on interfaces rather than concrete implementations.
+
+#### Scenario: Git operations via interface
+- **GIVEN** the Service depends on GitOperations interface
+- **WHEN** tests provide a mock implementation
+- **THEN** tests SHALL run without real git operations
+
+#### Scenario: Workspace storage via interface
+- **GIVEN** the Service depends on WorkspaceStorage interface
+- **WHEN** tests provide a mock implementation
+- **THEN** tests SHALL run without filesystem access
+
+### Requirement: Hexagonal Architecture
+The codebase SHALL follow hexagonal architecture patterns.
+
+#### Scenario: Port definitions
+- **GIVEN** interfaces are defined in `internal/ports/`
+- **WHEN** adapters implement these interfaces
+- **THEN** the domain layer SHALL remain decoupled from infrastructure
 

@@ -168,3 +168,33 @@ func validateRoot(label, path string) error {
 
 	return nil
 }
+
+// GetProjectsRoot returns the projects root directory.
+func (c *Config) GetProjectsRoot() string {
+	return c.ProjectsRoot
+}
+
+// GetWorkspacesRoot returns the workspaces root directory.
+func (c *Config) GetWorkspacesRoot() string {
+	return c.WorkspacesRoot
+}
+
+// GetClosedRoot returns the closed workspaces root directory.
+func (c *Config) GetClosedRoot() string {
+	return c.ClosedRoot
+}
+
+// GetCloseDefault returns the default close behavior.
+func (c *Config) GetCloseDefault() string {
+	return c.CloseDefault
+}
+
+// GetStaleThresholdDays returns the stale threshold in days.
+func (c *Config) GetStaleThresholdDays() int {
+	return c.StaleThresholdDays
+}
+
+// GetRegistry returns the repository registry.
+func (c *Config) GetRegistry() *RepoRegistry {
+	return c.Registry
+}
