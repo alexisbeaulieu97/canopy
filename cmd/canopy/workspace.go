@@ -370,7 +370,92 @@ var (
 			return nil
 		},
 	}
+
+	workspaceGitCmd = &cobra.Command{
+		Use:   "git <WORKSPACE-ID> [--] <git-args...>",
+		Short: "Run a git command across all repositories in a workspace",
+		Long: `Execute any git command in all repositories within a workspace.
+
+The command is run in each repository and results are displayed with clear separation.
+Use -- to separate flags for the git command from canopy flags.
+
+Examples:
+  canopy workspace git my-workspace status
+  canopy workspace git my-workspace -- fetch --all
+  canopy workspace git my-workspace --parallel pull`,
+		Args: cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			workspaceID := args[0]
+			gitArgs := args[1:]
+
+			parallel, _ := cmd.Flags().GetBool("parallel")
+			continueOnError, _ := cmd.Flags().GetBool("continue-on-error")
+
+			app, err := getApp(cmd)
+			if err != nil {
+				return err
+			}
+
+			opts := workspaces.GitRunOptions{
+				Parallel:        parallel,
+				ContinueOnError: continueOnError,
+			}
+
+			results, err := app.Service.RunGitInWorkspace(workspaceID, gitArgs, opts)
+			if err != nil && !continueOnError {
+				// Print any results we got before the error
+				printGitResults(results)
+				return err
+			}
+
+			printGitResults(results)
+
+			// Count failures for exit code
+			var failures int
+			for _, r := range results {
+				if r.Error != nil || r.ExitCode != 0 {
+					failures++
+				}
+			}
+
+			if failures > 0 {
+				fmt.Printf("\n%d/%d repos failed\n", failures, len(results)) //nolint:forbidigo // user-facing CLI output
+				return fmt.Errorf("%d repos failed", failures)
+			}
+
+			fmt.Printf("\nAll %d repos completed successfully\n", len(results)) //nolint:forbidigo // user-facing CLI output
+
+			return nil
+		},
+	}
 )
+
+func printGitResults(results []workspaces.RepoGitResult) {
+	for i, r := range results {
+		if i > 0 {
+			fmt.Println() //nolint:forbidigo // user-facing CLI output
+		}
+
+		fmt.Printf("\033[1;36m=== %s ===\033[0m\n", r.RepoName) //nolint:forbidigo // user-facing CLI output
+
+		if r.Error != nil {
+			fmt.Printf("\033[1;31mError: %s\033[0m\n", r.Error) //nolint:forbidigo // user-facing CLI output
+			continue
+		}
+
+		if r.Stdout != "" {
+			fmt.Print(r.Stdout) //nolint:forbidigo // user-facing CLI output
+		}
+
+		if r.Stderr != "" {
+			fmt.Print(r.Stderr) //nolint:forbidigo // user-facing CLI output
+		}
+
+		if r.ExitCode != 0 {
+			fmt.Printf("\033[1;31mExit code: %d\033[0m\n", r.ExitCode) //nolint:forbidigo // user-facing CLI output
+		}
+	}
+}
 
 func keepAndPrint(service *workspaces.Service, id string, force bool) error {
 	archived, err := service.CloseWorkspaceKeepMetadata(id, force)
@@ -425,6 +510,7 @@ func init() {
 	workspaceCmd.AddCommand(workspaceViewCmd)
 	workspaceCmd.AddCommand(workspacePathCmd)
 	workspaceCmd.AddCommand(workspaceBranchCmd)
+	workspaceCmd.AddCommand(workspaceGitCmd)
 
 	// Repo subcommands
 	workspaceRepoCmd := &cobra.Command{
@@ -448,4 +534,7 @@ func init() {
 	workspaceReopenCmd.Flags().Bool("force", false, "Overwrite existing workspace if one already exists")
 
 	workspaceBranchCmd.Flags().Bool("create", false, "Create branch if it doesn't exist")
+
+	workspaceGitCmd.Flags().Bool("parallel", false, "Execute git command in repos concurrently")
+	workspaceGitCmd.Flags().Bool("continue-on-error", false, "Continue execution even if a repo fails")
 }

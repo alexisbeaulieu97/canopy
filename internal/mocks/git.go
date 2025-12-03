@@ -21,6 +21,7 @@ type MockGitOperations struct {
 	PushFunc            func(path, branch string) error
 	ListFunc            func() ([]string, error)
 	CheckoutFunc        func(path, branchName string, create bool) error
+	RunCommandFunc      func(repoPath string, args ...string) (*ports.CommandResult, error)
 }
 
 // NewMockGitOperations creates a new MockGitOperations with default no-op behavior.
@@ -107,4 +108,13 @@ func (m *MockGitOperations) Checkout(path, branchName string, create bool) error
 	}
 
 	return nil
+}
+
+// RunCommand calls the mock function if set, otherwise returns an empty result.
+func (m *MockGitOperations) RunCommand(repoPath string, args ...string) (*ports.CommandResult, error) {
+	if m.RunCommandFunc != nil {
+		return m.RunCommandFunc(repoPath, args...)
+	}
+
+	return &ports.CommandResult{}, nil
 }
