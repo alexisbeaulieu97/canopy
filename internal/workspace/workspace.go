@@ -33,6 +33,7 @@ func New(workspacesRoot, closedRoot string) *Engine {
 }
 
 // ClosedWorkspace is an alias for domain.ClosedWorkspace for backward compatibility.
+//
 // Deprecated: Use domain.ClosedWorkspace directly.
 type ClosedWorkspace = domain.ClosedWorkspace
 

@@ -2,6 +2,7 @@
 package mocks
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -101,7 +102,7 @@ func (m *MockWorkspaceStorage) Load(dirName string) (*domain.Workspace, error) {
 		return &ws, nil
 	}
 
-	return nil, nil
+	return nil, fmt.Errorf("failed to open workspace metadata: workspace %s not found", dirName)
 }
 
 // Delete calls the mock function if set, otherwise removes from Workspaces.
