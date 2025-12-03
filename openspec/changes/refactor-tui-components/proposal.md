@@ -1,4 +1,3 @@
-```markdown
 # Change: Refactor TUI into Modular Components
 
 ## Why
@@ -26,4 +25,3 @@ The current `internal/tui/tui.go` is 880 lines, handling models, views, updates,
 - Affected code:
   - `internal/tui/tui.go` → split into multiple files
   - No API changes, only file organization
-```

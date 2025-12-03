@@ -1,4 +1,3 @@
-```markdown
 # Change: Add Workspace Pull Command
 
 ## Why
@@ -19,4 +18,3 @@ The TUI provides push functionality (`p` key), but there's no corresponding pull
   - `internal/workspaces/service.go` - Add `PullWorkspace()` method
   - `internal/gitx/git.go` - Already has `Pull()` method
   - `internal/tui/tui.go` - Add `l` key handler
-```

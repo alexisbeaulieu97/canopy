@@ -1,4 +1,3 @@
-```markdown
 # Change: Add Workspace Sync Command
 
 ## Why
@@ -19,4 +18,3 @@ Developers often need to bring all repos in a workspace up-to-date with their re
   - `internal/workspaces/service.go` - Add `SyncWorkspace()` method
   - `internal/gitx/git.go` - Combine Fetch + Pull operations
   - `internal/tui/tui.go` - Add `r` key handler
-```

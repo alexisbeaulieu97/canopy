@@ -1,4 +1,3 @@
-```markdown
 # Change: Add Repo Status Command
 
 ## Why
@@ -18,4 +17,3 @@ Canopy manages canonical repositories (bare clones) in `projects_root`, but ther
   - `cmd/canopy/repo.go` - Add new `status` subcommand
   - `internal/workspaces/service.go` - Add `GetCanonicalRepoStatus()` method
   - `internal/gitx/git.go` - Add methods to get repo metadata
-```

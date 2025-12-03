@@ -1,11 +1,51 @@
 # Core Architecture Spec (Delta)
 
-## Purpose
-Error handling patterns and type system for Canopy.
+## ADDED Requirements
 
-## New Error Types
+### Requirement: Typed Error System
+The application SHALL use typed errors with error codes for all domain errors.
 
-### Domain Errors
+#### Scenario: Create workspace not found error
+- **WHEN** `NewWorkspaceNotFound("my-ws")` is called
+- **THEN** returned CanopyError SHALL have Code `WORKSPACE_NOT_FOUND`
+- **AND** Message SHALL contain the workspace ID "my-ws"
+
+#### Scenario: Create repo not clean error
+- **WHEN** `NewRepoNotClean("/path/to/repo")` is called
+- **THEN** returned CanopyError SHALL have Code `REPO_NOT_CLEAN`
+- **AND** Context SHALL contain the repo path
+
+### Requirement: Error Wrapping
+The application SHALL support wrapping errors to preserve root cause.
+
+#### Scenario: Wrap git error
+- **WHEN** `WrapGitError(err, "clone")` is called with underlying error
+- **THEN** returned CanopyError SHALL have Code `GIT_OPERATION_FAILED`
+- **AND** Cause SHALL contain the original error
+- **AND** `errors.Unwrap()` SHALL return the original error
+
+### Requirement: Error Matching
+Errors SHALL support standard Go error matching with `errors.Is()` and `errors.As()`.
+
+#### Scenario: Match error by code
+- **WHEN** CanopyError is returned and `errors.Is()` is used
+- **THEN** matching SHALL succeed for errors with same ErrorCode
+
+#### Scenario: Extract error details
+- **WHEN** `errors.As()` is used with `*CanopyError`
+- **THEN** full error details SHALL be accessible including Code, Message, and Context
+
+### Requirement: Error Context
+Errors SHALL support contextual key-value pairs for debugging.
+
+#### Scenario: Include context in error
+- **WHEN** error is created with Context map
+- **THEN** Context SHALL contain all provided key-value pairs
+- **AND** Context SHALL be accessible for logging and debugging
+
+## Reference
+
+### Error Types
 ```go
 type ErrorCode string
 
@@ -36,9 +76,3 @@ func NewWorkspaceNotFound(id string) *CanopyError
 func NewRepoNotClean(path string) *CanopyError
 func WrapGitError(err error, operation string) *CanopyError
 ```
-
-## Error Handling Guidelines
-- Use typed errors for recoverable conditions
-- Include context for debugging
-- Chain errors with `Wrap` for root cause
-- Check with `errors.Is()` or `errors.As()`

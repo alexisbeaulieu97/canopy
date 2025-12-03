@@ -1,4 +1,3 @@
-```markdown
 # Implementation Tasks
 
 ## 1. JSON Output Helpers
@@ -29,4 +28,3 @@
 - [ ] 6.1 Test JSON output parses correctly
 - [ ] 6.2 Test consistency across commands
 - [ ] 6.3 Integration test with jq
-```
