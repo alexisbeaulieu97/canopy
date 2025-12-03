@@ -502,6 +502,123 @@ func (s *Service) PushWorkspace(workspaceID string) error {
 	return nil
 }
 
+// GitRunOptions contains options for running git commands across workspace repos.
+type GitRunOptions struct {
+	Parallel        bool
+	ContinueOnError bool
+}
+
+// RepoGitResult holds the result of running a git command in a single repo.
+type RepoGitResult struct {
+	RepoName string
+	Stdout   string
+	Stderr   string
+	ExitCode int
+	Error    error
+}
+
+// RunGitInWorkspace executes an arbitrary git command across all repos in a workspace.
+func (s *Service) RunGitInWorkspace(workspaceID string, args []string, opts GitRunOptions) ([]RepoGitResult, error) {
+	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(targetWorkspace.Repos) == 0 {
+		return nil, nil
+	}
+
+	if opts.Parallel {
+		return s.runGitParallel(targetWorkspace, dirName, args, opts.ContinueOnError)
+	}
+
+	return s.runGitSequential(targetWorkspace, dirName, args, opts.ContinueOnError)
+}
+
+func (s *Service) runGitSequential(workspace *domain.Workspace, dirName string, args []string, continueOnError bool) ([]RepoGitResult, error) {
+	var results []RepoGitResult
+
+	for _, repo := range workspace.Repos {
+		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
+
+		cmdResult, err := s.gitEngine.RunCommand(worktreePath, args...)
+
+		result := RepoGitResult{
+			RepoName: repo.Name,
+		}
+
+		if err != nil {
+			result.Error = err
+			results = append(results, result)
+
+			if !continueOnError {
+				return results, err
+			}
+
+			continue
+		}
+
+		result.Stdout = cmdResult.Stdout
+		result.Stderr = cmdResult.Stderr
+		result.ExitCode = cmdResult.ExitCode
+		results = append(results, result)
+
+		if cmdResult.ExitCode != 0 && !continueOnError {
+			return results, fmt.Errorf("git command failed in repo %s with exit code %d", repo.Name, cmdResult.ExitCode)
+		}
+	}
+
+	return results, nil
+}
+
+func (s *Service) runGitParallel(workspace *domain.Workspace, dirName string, args []string, continueOnError bool) ([]RepoGitResult, error) {
+	results := make([]RepoGitResult, len(workspace.Repos))
+	var wg sync.WaitGroup
+
+	for i, repo := range workspace.Repos {
+		wg.Add(1)
+
+		go func(idx int, r domain.Repo) {
+			defer wg.Done()
+
+			worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, r.Name)
+
+			result := RepoGitResult{
+				RepoName: r.Name,
+			}
+
+			cmdResult, err := s.gitEngine.RunCommand(worktreePath, args...)
+			if err != nil {
+				result.Error = err
+				results[idx] = result
+				return
+			}
+
+			result.Stdout = cmdResult.Stdout
+			result.Stderr = cmdResult.Stderr
+			result.ExitCode = cmdResult.ExitCode
+			results[idx] = result
+		}(i, repo)
+	}
+
+	wg.Wait()
+
+	// Check for errors if not continuing on error
+	if !continueOnError {
+		for _, r := range results {
+			if r.Error != nil {
+				return results, r.Error
+			}
+
+			if r.ExitCode != 0 {
+				return results, fmt.Errorf("git command failed in repo %s with exit code %d", r.RepoName, r.ExitCode)
+			}
+		}
+	}
+
+	return results, nil
+}
+
 // SwitchBranch switches the branch for all repos in a workspace
 func (s *Service) SwitchBranch(workspaceID, branchName string, create bool) error {
 	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)

@@ -5,6 +5,13 @@ import (
 	"github.com/go-git/go-git/v5"
 )
 
+// CommandResult holds the output and exit code from a git command execution.
+type CommandResult struct {
+	Stdout   string
+	Stderr   string
+	ExitCode int
+}
+
 // GitOperations defines the interface for git operations.
 type GitOperations interface {
 	// EnsureCanonical ensures the repo is cloned in ProjectsRoot (bare).
@@ -33,4 +40,7 @@ type GitOperations interface {
 
 	// Checkout checks out a branch in the given path, optionally creating it.
 	Checkout(path, branchName string, create bool) error
+
+	// RunCommand executes an arbitrary git command in the specified repository path.
+	RunCommand(repoPath string, args ...string) (*CommandResult, error)
 }
