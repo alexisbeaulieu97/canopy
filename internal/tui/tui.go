@@ -80,6 +80,7 @@ type Model struct {
 	totalDiskUsage     int64
 	filterStale        bool
 	staleThresholdDays int
+	lastFilterValue    string
 }
 
 type workspaceListMsg struct {
@@ -205,16 +206,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 		m.totalDiskUsage = msg.totalUsage
 		m.allItems = msg.items
 
-		listItems := make([]list.Item, len(msg.items))
-		for i := range msg.items {
-			listItems[i] = msg.items[i]
-		}
-
-		m.list.SetItems(listItems)
-
-		if m.filterStale {
-			m.applyFilters()
-		}
+		m.applyFilters()
 
 		var cmds []tea.Cmd
 		for _, it := range msg.items {
@@ -249,6 +241,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 	case openEditorResultMsg:
 		if msg.err != nil {
 			m.err = msg.err
+			m.infoMessage = ""
 		} else {
 			m.infoMessage = "Opened in editor"
 		}
@@ -261,6 +254,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 
 	if !m.detailView {
 		m.list, cmd = m.list.Update(msg)
+
+		if m.list.FilterValue() != m.lastFilterValue {
+			m.lastFilterValue = m.list.FilterValue()
+			m.applyFilters()
+		}
 	}
 
 	var sCmd tea.Cmd
@@ -500,8 +498,14 @@ func relativeTime(t time.Time) string {
 func (m *Model) applyFilters() {
 	var items []list.Item
 
+	search := strings.ToLower(strings.TrimSpace(m.list.FilterValue()))
+
 	for _, it := range m.allItems {
 		if m.filterStale && !it.workspace.IsStale(m.staleThresholdDays) {
+			continue
+		}
+
+		if search != "" && !strings.Contains(strings.ToLower(it.workspace.ID), search) {
 			continue
 		}
 
@@ -778,11 +782,19 @@ func (m Model) handleConfirmKey(key string) (Model, tea.Cmd, bool) {
 }
 
 func (m Model) handleListKey(key string) (Model, tea.Cmd, bool) {
+	if m.list.FilterState() == list.Filtering {
+		// Allow the list's filter input to consume keys (including our shortcuts).
+		return m, nil, false
+	}
+
 	switch key {
 	case "ctrl+c", "q":
 		return m, tea.Quit, true
 	case "enter":
 		return m.handleEnter()
+	case "/":
+		m.list.SetFilterState(list.Filtering)
+		return m, nil, true
 	case "s":
 		m.filterStale = !m.filterStale
 		m.applyFilters()

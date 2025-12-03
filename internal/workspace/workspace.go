@@ -14,37 +14,37 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 )
 
-// Engine manages workspaces
+// Engine manages workspaces.
 type Engine struct {
 	WorkspacesRoot string
-	ArchivesRoot   string
+	ClosedRoot     string
 }
 
-// New creates a new Workspace Engine
-func New(workspacesRoot, archivesRoot string) *Engine {
+// New creates a new Workspace Engine.
+func New(workspacesRoot, closedRoot string) *Engine {
 	return &Engine{
 		WorkspacesRoot: workspacesRoot,
-		ArchivesRoot:   archivesRoot,
+		ClosedRoot:     closedRoot,
 	}
 }
 
-// ArchivedWorkspace describes a stored archived workspace entry.
-type ArchivedWorkspace struct {
+// ClosedWorkspace describes a stored closed workspace entry.
+type ClosedWorkspace struct {
 	DirName  string
 	Path     string
 	Metadata domain.Workspace
 }
 
-// ArchivedAt returns the time the workspace was archived, if recorded.
-func (a ArchivedWorkspace) ArchivedAt() time.Time {
-	if a.Metadata.ArchivedAt != nil {
-		return *a.Metadata.ArchivedAt
+// ClosedAt returns the time the workspace was closed, if recorded.
+func (a ClosedWorkspace) ClosedAt() time.Time {
+	if a.Metadata.ClosedAt != nil {
+		return *a.Metadata.ClosedAt
 	}
 
 	return time.Time{}
 }
 
-// Create creates a new workspace directory and metadata
+// Create creates a new workspace directory and metadata.
 func (e *Engine) Create(dirName, id, branchName string, repos []domain.Repo) error {
 	safeDir, err := sanitizeDirName(dirName)
 	if err != nil {
@@ -61,7 +61,6 @@ func (e *Engine) Create(dirName, id, branchName string, repos []domain.Repo) err
 		return fmt.Errorf("failed to create workspace directory: %w", err)
 	}
 
-	// Create metadata file
 	workspace := domain.Workspace{
 		ID:         id,
 		BranchName: branchName,
@@ -73,7 +72,7 @@ func (e *Engine) Create(dirName, id, branchName string, repos []domain.Repo) err
 	return e.saveMetadata(metaPath, workspace)
 }
 
-// Save updates the metadata for an existing workspace directory
+// Save updates the metadata for an existing workspace directory.
 func (e *Engine) Save(dirName string, workspace domain.Workspace) error {
 	safeDir, err := sanitizeDirName(dirName)
 	if err != nil {
@@ -86,10 +85,10 @@ func (e *Engine) Save(dirName string, workspace domain.Workspace) error {
 	return e.saveMetadata(metaPath, workspace)
 }
 
-// Archive copies workspace metadata into the archives root and returns the archive entry.
-func (e *Engine) Archive(dirName string, workspace domain.Workspace, archivedAt time.Time) (*ArchivedWorkspace, error) {
-	if e.ArchivesRoot == "" {
-		return nil, fmt.Errorf("archives root is not configured")
+// Close copies workspace metadata into the closed root and returns the closed entry.
+func (e *Engine) Close(dirName string, workspace domain.Workspace, closedAt time.Time) (*ClosedWorkspace, error) {
+	if e.ClosedRoot == "" {
+		return nil, fmt.Errorf("closed root is not configured")
 	}
 
 	safeDir, err := sanitizeDirName(dirName)
@@ -97,23 +96,23 @@ func (e *Engine) Archive(dirName string, workspace domain.Workspace, archivedAt 
 		return nil, fmt.Errorf("invalid workspace directory: %w", err)
 	}
 
-	archiveDir := filepath.Join(e.ArchivesRoot, safeDir, archivedAt.UTC().Format("20060102T150405Z"))
+	closedDir := filepath.Join(e.ClosedRoot, safeDir, closedAt.UTC().Format("20060102T150405Z"))
 
-	if err := os.MkdirAll(archiveDir, 0o750); err != nil {
-		return nil, fmt.Errorf("failed to create archive directory: %w", err)
+	if err := os.MkdirAll(closedDir, 0o750); err != nil {
+		return nil, fmt.Errorf("failed to create closed directory: %w", err)
 	}
 
-	workspace.ArchivedAt = &archivedAt
+	workspace.ClosedAt = &closedAt
 
-	metaPath := filepath.Join(archiveDir, "workspace.yaml")
+	metaPath := filepath.Join(closedDir, "workspace.yaml")
 
 	if err := e.saveMetadata(metaPath, workspace); err != nil {
-		return nil, fmt.Errorf("failed to write archive metadata: %w", err)
+		return nil, fmt.Errorf("failed to write closed metadata: %w", err)
 	}
 
-	return &ArchivedWorkspace{
+	return &ClosedWorkspace{
 		DirName:  safeDir,
-		Path:     archiveDir,
+		Path:     closedDir,
 		Metadata: workspace,
 	}, nil
 }
@@ -138,7 +137,7 @@ func (e *Engine) saveMetadata(path string, workspace domain.Workspace) error {
 	return nil
 }
 
-// List returns all active workspaces
+// List returns all active workspaces.
 func (e *Engine) List() (map[string]domain.Workspace, error) {
 	entries, err := os.ReadDir(e.WorkspacesRoot)
 	if err != nil {
@@ -164,33 +163,33 @@ func (e *Engine) List() (map[string]domain.Workspace, error) {
 	return workspaces, nil
 }
 
-// ListArchived returns archived workspaces stored on disk, sorted by newest first.
-func (e *Engine) ListArchived() ([]ArchivedWorkspace, error) {
-	if e.ArchivesRoot == "" {
+// ListClosed returns closed workspaces stored on disk, sorted by newest first.
+func (e *Engine) ListClosed() ([]ClosedWorkspace, error) {
+	if e.ClosedRoot == "" {
 		return nil, nil
 	}
 
-	entries, err := os.ReadDir(e.ArchivesRoot)
+	entries, err := os.ReadDir(e.ClosedRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 
-		return nil, fmt.Errorf("failed to read archives root: %w", err)
+		return nil, fmt.Errorf("failed to read closed root: %w", err)
 	}
 
-	var archives []ArchivedWorkspace
+	var closed []ClosedWorkspace
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
-		workspaceDir := filepath.Join(e.ArchivesRoot, entry.Name())
+		workspaceDir := filepath.Join(e.ClosedRoot, entry.Name())
 
 		versionDirs, err := os.ReadDir(workspaceDir)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read archive directory %s: %w", workspaceDir, err)
+			return nil, fmt.Errorf("failed to read closed directory %s: %w", workspaceDir, err)
 		}
 
 		for _, version := range versionDirs {
@@ -201,7 +200,7 @@ func (e *Engine) ListArchived() ([]ArchivedWorkspace, error) {
 			dirPath := filepath.Join(workspaceDir, version.Name())
 
 			if w, ok := e.tryLoadMetadata(dirPath); ok {
-				archives = append(archives, ArchivedWorkspace{
+				closed = append(closed, ClosedWorkspace{
 					DirName:  entry.Name(),
 					Path:     dirPath,
 					Metadata: w,
@@ -210,11 +209,11 @@ func (e *Engine) ListArchived() ([]ArchivedWorkspace, error) {
 		}
 	}
 
-	sort.Slice(archives, func(i, j int) bool {
-		return archives[i].ArchivedAt().After(archives[j].ArchivedAt())
+	sort.Slice(closed, func(i, j int) bool {
+		return closed[i].ClosedAt().After(closed[j].ClosedAt())
 	})
 
-	return archives, nil
+	return closed, nil
 }
 
 func (e *Engine) tryLoadMetadata(dirPath string) (domain.Workspace, bool) {
@@ -232,10 +231,29 @@ func (e *Engine) tryLoadMetadata(dirPath string) (domain.Workspace, bool) {
 		return domain.Workspace{}, false
 	}
 
+	// Fallback for older metadata: infer closed time from directory name when ClosedAt is missing.
+	if w.ClosedAt == nil {
+		if ts, ok := inferClosedTimeFromPath(dirPath); ok {
+			w.ClosedAt = &ts
+		}
+	}
+
 	return w, true
 }
 
-// Load reads the metadata for a specific workspace
+func inferClosedTimeFromPath(path string) (time.Time, bool) {
+	// Expect paths like .../<workspace>/<timestamp>/workspace.yaml
+	parent := filepath.Base(filepath.Dir(path))
+
+	ts, err := time.Parse("20060102T150405Z", parent)
+	if err != nil {
+		return time.Time{}, false
+	}
+
+	return ts, true
+}
+
+// Load reads the metadata for a specific workspace.
 func (e *Engine) Load(dirName string) (*domain.Workspace, error) {
 	safeDir, err := sanitizeDirName(dirName)
 	if err != nil {
@@ -260,7 +278,7 @@ func (e *Engine) Load(dirName string) (*domain.Workspace, error) {
 	return &w, nil
 }
 
-// Delete removes a workspace
+// Delete removes a workspace.
 func (e *Engine) Delete(workspaceID string) error {
 	safeDir, err := sanitizeDirName(workspaceID)
 	if err != nil {
@@ -272,10 +290,10 @@ func (e *Engine) Delete(workspaceID string) error {
 	return os.RemoveAll(path)
 }
 
-// LatestArchive returns the newest archived entry for the given workspace ID.
-func (e *Engine) LatestArchive(workspaceID string) (*ArchivedWorkspace, error) { //nolint:gocyclo // handles filesystem traversal and selection
-	if e.ArchivesRoot == "" {
-		return nil, fmt.Errorf("archives root is not configured")
+// LatestClosed returns the newest closed entry for the given workspace ID.
+func (e *Engine) LatestClosed(workspaceID string) (*ClosedWorkspace, error) { //nolint:gocyclo // handles filesystem traversal and selection
+	if e.ClosedRoot == "" {
+		return nil, fmt.Errorf("closed root is not configured")
 	}
 
 	safeDir, err := sanitizeDirName(workspaceID)
@@ -283,18 +301,18 @@ func (e *Engine) LatestArchive(workspaceID string) (*ArchivedWorkspace, error) {
 		return nil, fmt.Errorf("invalid workspace id: %w", err)
 	}
 
-	workspaceDir := filepath.Join(e.ArchivesRoot, safeDir)
+	workspaceDir := filepath.Join(e.ClosedRoot, safeDir)
 
 	entries, err := os.ReadDir(workspaceDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("archived workspace %s not found", workspaceID)
+			return nil, fmt.Errorf("closed workspace %s not found", workspaceID)
 		}
 
-		return nil, fmt.Errorf("failed to read archives: %w", err)
+		return nil, fmt.Errorf("failed to read closed entries: %w", err)
 	}
 
-	var latest *ArchivedWorkspace
+	var latest *ClosedWorkspace
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -304,41 +322,41 @@ func (e *Engine) LatestArchive(workspaceID string) (*ArchivedWorkspace, error) {
 		dirPath := filepath.Join(workspaceDir, entry.Name())
 
 		if w, ok := e.tryLoadMetadata(dirPath); ok {
-			candidate := &ArchivedWorkspace{
+			candidate := &ClosedWorkspace{
 				DirName:  safeDir,
 				Path:     dirPath,
 				Metadata: w,
 			}
 
-			if latest == nil || candidate.ArchivedAt().After(latest.ArchivedAt()) {
+			if latest == nil || candidate.ClosedAt().After(latest.ClosedAt()) {
 				latest = candidate
 			}
 		}
 	}
 
 	if latest == nil {
-		return nil, fmt.Errorf("archived workspace %s not found", workspaceID)
+		return nil, fmt.Errorf("closed workspace %s not found", workspaceID)
 	}
 
 	return latest, nil
 }
 
-// DeleteArchive removes an archived workspace entry.
-func (e *Engine) DeleteArchive(path string) error {
+// DeleteClosed removes a closed workspace entry.
+func (e *Engine) DeleteClosed(path string) error {
 	if path == "" {
-		return fmt.Errorf("archive path is required")
+		return fmt.Errorf("closed path is required")
 	}
 
-	if e.ArchivesRoot != "" {
+	if e.ClosedRoot != "" {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			return fmt.Errorf("failed to resolve archive path: %w", err)
+			return fmt.Errorf("failed to resolve closed path: %w", err)
 		}
 
-		root := filepath.Clean(e.ArchivesRoot)
+		root := filepath.Clean(e.ClosedRoot)
 
 		if !strings.HasPrefix(absPath, root+string(os.PathSeparator)) && absPath != root {
-			return fmt.Errorf("archive path must be within archives root")
+			return fmt.Errorf("closed path must be within closed root")
 		}
 	}
 

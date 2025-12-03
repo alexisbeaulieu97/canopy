@@ -14,7 +14,7 @@ type Workspace struct {
 	ID             string     `yaml:"id"`
 	BranchName     string     `yaml:"branch_name,omitempty"`
 	Repos          []Repo     `yaml:"repos"`
-	ArchivedAt     *time.Time `yaml:"archived_at,omitempty"`
+	ClosedAt       *time.Time `yaml:"closed_at,omitempty"`
 	LastModified   time.Time  `yaml:"-"`
 	DiskUsageBytes int64      `yaml:"-"`
 }

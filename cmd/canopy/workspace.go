@@ -72,27 +72,11 @@ var (
 		},
 	}
 
-	workspaceArchiveCmd = &cobra.Command{
-		Use:   "archive <ID>",
-		Short: "Archive a workspace and remove its worktrees",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			id := args[0]
-			force, _ := cmd.Flags().GetBool("force")
-
-			app, err := getApp(cmd)
-			if err != nil {
-				return err
-			}
-
-			return archiveAndPrint(app.Service, id, force)
-		},
-	}
-
-	workspaceRestoreCmd = &cobra.Command{
-		Use:   "restore <ID>",
-		Short: "Restore an archived workspace",
-		Args:  cobra.ExactArgs(1),
+	workspaceReopenCmd = &cobra.Command{
+		Use:     "reopen <ID>",
+		Aliases: []string{"open"},
+		Short:   "Reopen a closed workspace",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			force, _ := cmd.Flags().GetBool("force")
@@ -123,10 +107,10 @@ var (
 			service := app.Service
 
 			jsonOutput, _ := cmd.Flags().GetBool("json")
-			archivedOnly, _ := cmd.Flags().GetBool("archived")
+			closedOnly, _ := cmd.Flags().GetBool("closed")
 
-			if archivedOnly {
-				archives, err := service.ListArchivedWorkspaces()
+			if closedOnly {
+				archives, err := service.ListClosedWorkspaces()
 				if err != nil {
 					return err
 				}
@@ -144,12 +128,12 @@ var (
 				}
 
 				for _, a := range archives {
-					archiveDate := "unknown"
-					if a.Metadata.ArchivedAt != nil {
-						archiveDate = a.Metadata.ArchivedAt.Format(time.RFC3339)
+					closedDate := "unknown"
+					if a.Metadata.ClosedAt != nil {
+						closedDate = a.Metadata.ClosedAt.Format(time.RFC3339)
 					}
 
-					fmt.Printf("%s (Archived: %s)\n", a.Metadata.ID, archiveDate) //nolint:forbidigo // user-facing CLI output
+					fmt.Printf("%s (Closed: %s)\n", a.Metadata.ID, closedDate) //nolint:forbidigo // user-facing CLI output
 					for _, r := range a.Metadata.Repos {
 						fmt.Printf("  - %s (%s)\n", r.Name, r.URL) //nolint:forbidigo // user-facing CLI output
 					}
@@ -181,16 +165,16 @@ var (
 
 	workspaceCloseCmd = &cobra.Command{
 		Use:   "close <ID>",
-		Short: "Close (delete) a workspace",
+		Short: "Close a workspace (keep metadata or delete)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			force, _ := cmd.Flags().GetBool("force")
-			archiveFlag, _ := cmd.Flags().GetBool("archive")
-			noArchiveFlag, _ := cmd.Flags().GetBool("no-archive")
+			keepFlag, _ := cmd.Flags().GetBool("keep")
+			deleteFlag, _ := cmd.Flags().GetBool("delete")
 
-			if archiveFlag && noArchiveFlag {
-				return fmt.Errorf("cannot use --archive and --no-archive together")
+			if keepFlag && deleteFlag {
+				return fmt.Errorf("cannot use --keep and --delete together")
 			}
 
 			app, err := getApp(cmd)
@@ -202,17 +186,17 @@ var (
 			configDefaultArchive := strings.EqualFold(app.Config.CloseDefault, "archive")
 			interactive := isInteractiveTerminal()
 
-			if archiveFlag {
-				return archiveAndPrint(service, id, force)
+			if keepFlag {
+				return keepAndPrint(service, id, force)
 			}
 
-			if noArchiveFlag {
+			if deleteFlag {
 				return closeAndPrint(service, id, force)
 			}
 
 			if !interactive {
 				if configDefaultArchive {
-					return archiveAndPrint(service, id, force)
+					return keepAndPrint(service, id, force)
 				}
 
 				return closeAndPrint(service, id, force)
@@ -224,12 +208,12 @@ var (
 				promptSuffix = "[Y/n]"
 			}
 
-			fmt.Printf("Archive instead? %s: ", promptSuffix) //nolint:forbidigo // user prompt
+			fmt.Printf("Keep workspace record without files? %s: ", promptSuffix) //nolint:forbidigo // user prompt
 
 			answer, err := reader.ReadString('\n')
 			if err != nil {
 				if configDefaultArchive {
-					return archiveAndPrint(service, id, force)
+					return keepAndPrint(service, id, force)
 				}
 
 				return closeAndPrint(service, id, force)
@@ -239,18 +223,18 @@ var (
 
 			switch answer {
 			case "y", "yes":
-				return archiveAndPrint(service, id, force)
+				return keepAndPrint(service, id, force)
 			case "n", "no":
 				return closeAndPrint(service, id, force)
 			case "":
 				if configDefaultArchive {
-					return archiveAndPrint(service, id, force)
+					return keepAndPrint(service, id, force)
 				}
 
 				return closeAndPrint(service, id, force)
 			default:
 				if configDefaultArchive {
-					return archiveAndPrint(service, id, force)
+					return keepAndPrint(service, id, force)
 				}
 
 				return closeAndPrint(service, id, force)
@@ -362,39 +346,6 @@ var (
 		},
 	}
 
-	workspaceSyncCmd = &cobra.Command{
-		Use:   "sync <ID>",
-		Short: "Sync all repositories in a workspace",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			id := args[0]
-
-			app, err := getApp(cmd)
-			if err != nil {
-				return err
-			}
-
-			service := app.Service
-
-			if err := service.SyncWorkspace(id); err != nil {
-				return err
-			}
-
-			fmt.Printf("Synced workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
-			return nil
-		},
-	}
-
-	workspaceSwitchCmd = &cobra.Command{
-		Use:   "switch <ID>",
-		Short: "Switch to a workspace (prints path for shell integration)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Reuse path command logic
-			return workspacePathCmd.RunE(cmd, args)
-		},
-	}
-
 	workspaceBranchCmd = &cobra.Command{
 		Use:   "branch <ID> <BRANCH-NAME>",
 		Short: "Switch branch for all repositories in a workspace",
@@ -421,18 +372,18 @@ var (
 	}
 )
 
-func archiveAndPrint(service *workspaces.Service, id string, force bool) error {
-	archived, err := service.ArchiveWorkspace(id, force)
+func keepAndPrint(service *workspaces.Service, id string, force bool) error {
+	archived, err := service.CloseWorkspaceKeepMetadata(id, force)
 	if err != nil {
 		return err
 	}
 
 	var archivedAt *time.Time
 	if archived != nil {
-		archivedAt = archived.Metadata.ArchivedAt
+		archivedAt = archived.Metadata.ClosedAt
 	}
 
-	printArchived(id, archivedAt)
+	printClosed(id, archivedAt)
 
 	return nil
 }
@@ -447,13 +398,13 @@ func closeAndPrint(service *workspaces.Service, id string, force bool) error {
 	return nil
 }
 
-func printArchived(id string, archivedAt *time.Time) {
-	if archivedAt != nil {
-		fmt.Printf("Archived workspace %s at %s\n", id, archivedAt.Format(time.RFC3339)) //nolint:forbidigo // user-facing CLI output
+func printClosed(id string, closedAt *time.Time) {
+	if closedAt != nil {
+		fmt.Printf("Closed workspace %s at %s\n", id, closedAt.Format(time.RFC3339)) //nolint:forbidigo // user-facing CLI output
 		return
 	}
 
-	fmt.Printf("Archived workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+	fmt.Printf("Closed workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
 }
 
 func isInteractiveTerminal() bool {
@@ -470,12 +421,9 @@ func init() {
 	workspaceCmd.AddCommand(workspaceNewCmd)
 	workspaceCmd.AddCommand(workspaceListCmd)
 	workspaceCmd.AddCommand(workspaceCloseCmd)
-	workspaceCmd.AddCommand(workspaceArchiveCmd)
-	workspaceCmd.AddCommand(workspaceRestoreCmd)
+	workspaceCmd.AddCommand(workspaceReopenCmd)
 	workspaceCmd.AddCommand(workspaceViewCmd)
 	workspaceCmd.AddCommand(workspacePathCmd)
-	workspaceCmd.AddCommand(workspaceSyncCmd)
-	workspaceCmd.AddCommand(workspaceSwitchCmd)
 	workspaceCmd.AddCommand(workspaceBranchCmd)
 
 	// Repo subcommands
@@ -492,13 +440,12 @@ func init() {
 	workspaceNewCmd.Flags().Bool("print-path", false, "Print the created workspace path to stdout")
 
 	workspaceListCmd.Flags().Bool("json", false, "Output in JSON format")
-	workspaceListCmd.Flags().Bool("archived", false, "List archived workspaces")
+	workspaceListCmd.Flags().Bool("closed", false, "List closed workspaces")
 
 	workspaceCloseCmd.Flags().Bool("force", false, "Force close even if there are uncommitted changes")
-	workspaceCloseCmd.Flags().Bool("archive", false, "Archive instead of deleting")
-	workspaceCloseCmd.Flags().Bool("no-archive", false, "Delete without archiving")
-	workspaceArchiveCmd.Flags().Bool("force", false, "Archive even if there are uncommitted changes")
-	workspaceRestoreCmd.Flags().Bool("force", false, "Overwrite existing workspace if one already exists")
+	workspaceCloseCmd.Flags().Bool("keep", false, "Keep metadata (close without deleting)")
+	workspaceCloseCmd.Flags().Bool("delete", false, "Delete without keeping metadata")
+	workspaceReopenCmd.Flags().Bool("force", false, "Overwrite existing workspace if one already exists")
 
 	workspaceBranchCmd.Flags().Bool("create", false, "Create branch if it doesn't exist")
 }

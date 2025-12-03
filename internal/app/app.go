@@ -29,7 +29,7 @@ func New(debug bool) (*App, error) {
 
 	logger := logging.New(debug)
 	gitEngine := gitx.New(cfg.ProjectsRoot)
-	wsEngine := workspace.New(cfg.WorkspacesRoot, cfg.ArchivesRoot)
+	wsEngine := workspace.New(cfg.WorkspacesRoot, cfg.ClosedRoot)
 
 	return &App{
 		Config:  cfg,

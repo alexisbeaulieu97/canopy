@@ -14,7 +14,7 @@ import (
 type Config struct {
 	ProjectsRoot       string        `mapstructure:"projects_root"`
 	WorkspacesRoot     string        `mapstructure:"workspaces_root"`
-	ArchivesRoot       string        `mapstructure:"archives_root"`
+	ClosedRoot         string        `mapstructure:"closed_root"`
 	CloseDefault       string        `mapstructure:"workspace_close_default"`
 	WorkspaceNaming    string        `mapstructure:"workspace_naming"`
 	StaleThresholdDays int           `mapstructure:"stale_threshold_days"`
@@ -48,7 +48,7 @@ func Load() (*Config, error) {
 
 	viper.SetDefault("projects_root", filepath.Join(home, ".canopy", "projects"))
 	viper.SetDefault("workspaces_root", filepath.Join(home, ".canopy", "workspaces"))
-	viper.SetDefault("archives_root", filepath.Join(home, ".canopy", "archives"))
+	viper.SetDefault("closed_root", filepath.Join(home, ".canopy", "closed"))
 	viper.SetDefault("workspace_close_default", "delete")
 	viper.SetDefault("workspace_naming", "{{.ID}}")
 	viper.SetDefault("stale_threshold_days", 14)
@@ -71,7 +71,7 @@ func Load() (*Config, error) {
 	// Expand tilde
 	cfg.ProjectsRoot = expandPath(cfg.ProjectsRoot, home)
 	cfg.WorkspacesRoot = expandPath(cfg.WorkspacesRoot, home)
-	cfg.ArchivesRoot = expandPath(cfg.ArchivesRoot, home)
+	cfg.ClosedRoot = expandPath(cfg.ClosedRoot, home)
 	cfg.CloseDefault = strings.ToLower(cfg.CloseDefault)
 
 	registry, err := LoadRepoRegistry("")
@@ -118,7 +118,7 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	if err := validateRoot("archives_root", c.ArchivesRoot); err != nil {
+	if err := validateRoot("closed_root", c.ClosedRoot); err != nil {
 		return err
 	}
 

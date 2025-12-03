@@ -1,47 +1,41 @@
 # workspace-management Specification
 
 ## Purpose
-TBD - created by archiving change add-workspace-archiving. Update Purpose after archive.
+Define workspace closing behavior (store metadata, remove worktrees) and reopening for restoration.
 ## Requirements
-### Requirement: Workspace Archiving
-The system SHALL support archiving workspaces to preserve metadata while removing active worktrees, and restoring them later.
+### Requirement: Workspace Closing
+The system SHALL support closing workspaces to preserve metadata while removing active worktrees, and reopening them later.
 
-#### Scenario: Archive active workspace
-- **WHEN** user runs `canopy workspace archive PROJ-123`
-- **THEN** workspace metadata is moved to ~/.canopy/archives/
+#### Scenario: Close active workspace
+- **WHEN** user runs `canopy workspace close PROJ-123 --keep`
+- **THEN** workspace metadata is moved to the configured `closed_root`
 - **AND** all worktrees are removed from workspaces_root
 - **AND** canonical repositories remain untouched
 - **AND** workspace no longer appears in active list
 
-#### Scenario: List archived workspaces
-- **WHEN** user runs `canopy workspace list --archived`
-- **THEN** system displays list of archived workspaces with archive dates
+#### Scenario: List closed workspaces
+- **WHEN** user runs `canopy workspace list --closed`
+- **THEN** system displays list of closed workspaces with close dates
 - **AND** shows original repo list for each
 
-#### Scenario: Restore archived workspace
-- **WHEN** user runs `canopy workspace restore PROJ-123`
+#### Scenario: Reopen closed workspace
+- **WHEN** user runs `canopy workspace reopen PROJ-123`
 - **THEN** workspace directory is recreated in workspaces_root
-- **AND** worktrees are recreated from canonical repos on archived branch
+- **AND** worktrees are recreated from canonical repos on the recorded branch
 - **AND** workspace appears in active list again
-- **AND** archive entry is removed (or marked as restored)
+- **AND** closed entry is removed (or marked as reopened)
 
-#### Scenario: Archive nonexistent workspace
-- **WHEN** user attempts to archive workspace that doesn't exist
+#### Scenario: Close nonexistent workspace
+- **WHEN** user attempts to close workspace that doesn't exist
 - **THEN** system returns error "workspace not found"
 - **AND** no changes are made
 
-#### Scenario: Restore to existing workspace conflict
-- **WHEN** user attempts to restore workspace ID that already exists actively
-- **THEN** system returns error suggesting --force or different ID
-- **AND** no existing workspace is modified
-
-#### Scenario: Close with archive flags
-- **WHEN** user runs `canopy workspace close PROJ-123 --archive`
-- **THEN** the system archives the workspace instead of deleting
-- **AND** `--no-archive` overrides prompts to delete directly
+#### Scenario: Close with keep/delete flags
+- **WHEN** user runs `canopy workspace close PROJ-123 --keep`
+- **THEN** the system stores the workspace metadata instead of deleting
+- **AND** `--delete` overrides prompts to delete directly
 
 #### Scenario: Close default controlled by config
 - **GIVEN** `workspace_close_default: archive`
 - **WHEN** user closes a workspace without flags in non-interactive mode
-- **THEN** the workspace is archived instead of deleted
-
+- **THEN** the workspace is stored instead of deleted

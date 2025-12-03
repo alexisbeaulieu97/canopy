@@ -19,7 +19,7 @@ type testServiceDeps struct {
 	wsEngine       *workspace.Engine
 	projectsRoot   string
 	workspacesRoot string
-	archivesRoot   string
+	closedRoot     string
 }
 
 func newTestService(t *testing.T) testServiceDeps {
@@ -28,7 +28,7 @@ func newTestService(t *testing.T) testServiceDeps {
 	base := t.TempDir()
 	projectsRoot := filepath.Join(base, "projects")
 	workspacesRoot := filepath.Join(base, "workspaces")
-	archivesRoot := filepath.Join(base, "archives")
+	closedRoot := filepath.Join(base, "closed")
 
 	mustMkdir(t, projectsRoot)
 	mustMkdir(t, workspacesRoot)
@@ -36,18 +36,18 @@ func newTestService(t *testing.T) testServiceDeps {
 	cfg := &config.Config{
 		ProjectsRoot:   projectsRoot,
 		WorkspacesRoot: workspacesRoot,
-		ArchivesRoot:   archivesRoot,
+		ClosedRoot:     closedRoot,
 	}
 
 	gitEngine := gitx.New(projectsRoot)
-	wsEngine := workspace.New(workspacesRoot, archivesRoot)
+	wsEngine := workspace.New(workspacesRoot, closedRoot)
 
 	return testServiceDeps{
 		svc:            NewService(cfg, gitEngine, wsEngine, nil),
 		wsEngine:       wsEngine,
 		projectsRoot:   projectsRoot,
 		workspacesRoot: workspacesRoot,
-		archivesRoot:   archivesRoot,
+		closedRoot:     closedRoot,
 	}
 }
 
@@ -127,7 +127,7 @@ func TestCreateWorkspace(t *testing.T) {
 
 	projectsRoot := filepath.Join(tmpDir, "projects")
 	workspacesRoot := filepath.Join(tmpDir, "workspaces")
-	archivesRoot := filepath.Join(tmpDir, "archives")
+	closedRoot := filepath.Join(tmpDir, "closed")
 
 	if err := os.MkdirAll(projectsRoot, 0o750); err != nil {
 		t.Fatalf("failed to create projects root: %v", err)
@@ -140,12 +140,12 @@ func TestCreateWorkspace(t *testing.T) {
 	cfg := &config.Config{
 		ProjectsRoot:    projectsRoot,
 		WorkspacesRoot:  workspacesRoot,
-		ArchivesRoot:    archivesRoot,
+		ClosedRoot:      closedRoot,
 		WorkspaceNaming: "{{.ID}}",
 	}
 
 	gitEngine := gitx.New(projectsRoot)
-	wsEngine := workspace.New(workspacesRoot, archivesRoot)
+	wsEngine := workspace.New(workspacesRoot, closedRoot)
 	svc := NewService(cfg, gitEngine, wsEngine, nil)
 
 	// We can't easily test full CreateWorkspace because it calls git commands.
@@ -206,45 +206,45 @@ func TestRepoNameFromURL(t *testing.T) {
 	}
 }
 
-func TestArchiveWorkspaceStoresMetadata(t *testing.T) {
+func TestCloseWorkspaceStoresMetadata(t *testing.T) {
 	deps := newTestService(t)
 
 	if _, err := deps.svc.CreateWorkspace("TEST-ARCHIVE", "", []domain.Repo{}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
-	archived, err := deps.svc.ArchiveWorkspace("TEST-ARCHIVE", true)
+	archived, err := deps.svc.CloseWorkspaceKeepMetadata("TEST-ARCHIVE", true)
 	if err != nil {
-		t.Fatalf("ArchiveWorkspace failed: %v", err)
+		t.Fatalf("CloseWorkspaceKeepMetadata failed: %v", err)
 	}
 
 	if archived == nil {
-		t.Fatalf("expected archive details")
+		t.Fatalf("expected closed entry details")
 	}
 
 	if _, err := os.Stat(filepath.Join(deps.workspacesRoot, "TEST-ARCHIVE")); !os.IsNotExist(err) {
 		t.Fatalf("expected workspace directory to be removed")
 	}
 
-	archives, err := deps.wsEngine.ListArchived()
+	closedEntries, err := deps.wsEngine.ListClosed()
 	if err != nil {
-		t.Fatalf("ListArchived failed: %v", err)
+		t.Fatalf("ListClosed failed: %v", err)
 	}
 
-	if len(archives) != 1 {
-		t.Fatalf("expected 1 archive, got %d", len(archives))
+	if len(closedEntries) != 1 {
+		t.Fatalf("expected 1 closed entry, got %d", len(closedEntries))
 	}
 
-	if archives[0].Metadata.ArchivedAt == nil {
-		t.Fatalf("expected archived metadata to include timestamp")
+	if closedEntries[0].Metadata.ClosedAt == nil {
+		t.Fatalf("expected closed metadata to include timestamp")
 	}
 }
 
-func TestArchiveWorkspaceNonexistent(t *testing.T) {
+func TestCloseWorkspaceNonexistent(t *testing.T) {
 	deps := newTestService(t)
 
-	if _, err := deps.svc.ArchiveWorkspace("MISSING", false); err == nil {
-		t.Fatalf("expected error when archiving nonexistent workspace")
+	if _, err := deps.svc.CloseWorkspaceKeepMetadata("MISSING", false); err == nil {
+		t.Fatalf("expected error when closing nonexistent workspace")
 	}
 }
 
@@ -255,9 +255,9 @@ func TestRestoreWorkspaceConflict(t *testing.T) {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
-	_, err := deps.wsEngine.Archive("TEST-CONFLICT", domain.Workspace{ID: "TEST-CONFLICT"}, time.Now())
+	_, err := deps.wsEngine.Close("TEST-CONFLICT", domain.Workspace{ID: "TEST-CONFLICT"}, time.Now())
 	if err != nil {
-		t.Fatalf("failed to seed archive: %v", err)
+		t.Fatalf("failed to seed closed entry: %v", err)
 	}
 
 	if err := deps.svc.RestoreWorkspace("TEST-CONFLICT", false); err == nil {
@@ -265,7 +265,7 @@ func TestRestoreWorkspaceConflict(t *testing.T) {
 	}
 }
 
-func TestArchiveRestoreCycle(t *testing.T) {
+func TestCloseRestoreCycle(t *testing.T) {
 	deps := newTestService(t)
 
 	sourceRepo := filepath.Join(deps.projectsRoot, "source")
@@ -286,17 +286,17 @@ func TestArchiveRestoreCycle(t *testing.T) {
 		t.Fatalf("expected worktree at %s: %v", worktreePath, err)
 	}
 
-	archived, err := deps.svc.ArchiveWorkspace("PROJ-1", false)
+	archived, err := deps.svc.CloseWorkspaceKeepMetadata("PROJ-1", false)
 	if err != nil {
-		t.Fatalf("ArchiveWorkspace failed: %v", err)
+		t.Fatalf("CloseWorkspaceKeepMetadata failed: %v", err)
 	}
 
-	if archived.Metadata.ArchivedAt == nil {
-		t.Fatalf("expected archive timestamp to be set")
+	if archived.Metadata.ClosedAt == nil {
+		t.Fatalf("expected closed timestamp to be set")
 	}
 
 	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
-		t.Fatalf("expected worktree to be removed on archive")
+		t.Fatalf("expected worktree to be removed when keeping metadata")
 	}
 
 	if err := deps.svc.RestoreWorkspace("PROJ-1", false); err != nil {
@@ -308,7 +308,7 @@ func TestArchiveRestoreCycle(t *testing.T) {
 	}
 
 	if _, err := os.Stat(archived.Path); !os.IsNotExist(err) {
-		t.Fatalf("expected archive path to be removed after restore")
+		t.Fatalf("expected closed entry path to be removed after restore")
 	}
 
 	branch := runGitOutput(t, worktreePath, "rev-parse", "--abbrev-ref", "HEAD")
@@ -317,7 +317,7 @@ func TestArchiveRestoreCycle(t *testing.T) {
 	}
 }
 
-func TestArchiveWorkspaceDirtyFailsWithoutForce(t *testing.T) {
+func TestCloseWorkspaceDirtyFailsWithoutForce(t *testing.T) {
 	deps := newTestService(t)
 
 	sourceRepo := filepath.Join(deps.projectsRoot, "source-dirty")
@@ -337,12 +337,12 @@ func TestArchiveWorkspaceDirtyFailsWithoutForce(t *testing.T) {
 		t.Fatalf("failed to write dirty file: %v", err)
 	}
 
-	if _, err := deps.svc.ArchiveWorkspace("PROJ-2", false); err == nil {
-		t.Fatalf("expected archive to fail on dirty workspace")
+	if _, err := deps.svc.CloseWorkspaceKeepMetadata("PROJ-2", false); err == nil {
+		t.Fatalf("expected close keep-metadata to fail on dirty workspace")
 	}
 }
 
-func TestRestoreWorkspaceForceDoesNotDeleteWithoutArchive(t *testing.T) {
+func TestRestoreWorkspaceForceDoesNotDeleteWithoutClosedEntry(t *testing.T) {
 	deps := newTestService(t)
 
 	if _, err := deps.svc.CreateWorkspace("PROJ-NO-ARCHIVE", "", []domain.Repo{}); err != nil {
@@ -350,7 +350,7 @@ func TestRestoreWorkspaceForceDoesNotDeleteWithoutArchive(t *testing.T) {
 	}
 
 	if err := deps.svc.RestoreWorkspace("PROJ-NO-ARCHIVE", true); err == nil {
-		t.Fatalf("expected restore to fail without archive present")
+		t.Fatalf("expected restore to fail without closed entry present")
 	}
 
 	if _, err := os.Stat(filepath.Join(deps.workspacesRoot, "PROJ-NO-ARCHIVE")); err != nil {
