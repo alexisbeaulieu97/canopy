@@ -1,4 +1,3 @@
-```markdown
 # Implementation Tasks
 
 ## 1. Define Interfaces
@@ -33,4 +32,3 @@
 ## 6. Documentation
 - [ ] 6.1 Document interface contracts in godoc
 - [ ] 6.2 Update architecture docs to reflect hexagonal pattern
-```

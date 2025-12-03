@@ -1,4 +1,3 @@
-```markdown
 ## ADDED Requirements
 
 ### Requirement: Interface-Based Dependencies
@@ -21,4 +20,3 @@ The codebase SHALL follow hexagonal architecture patterns.
 - **GIVEN** interfaces are defined in `internal/ports/`
 - **WHEN** adapters implement these interfaces
 - **THEN** the domain layer SHALL remain decoupled from infrastructure
-```

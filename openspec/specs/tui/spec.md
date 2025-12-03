@@ -1,8 +1,10 @@
 # tui Specification
 
 ## Purpose
-TBD - created by archiving change initialize-canopy. Update Purpose after archive.
+Interactive terminal UI for workspace management. Provides navigable list views, detail panels, keyboard shortcuts, and status indicators.
+
 ## Requirements
+
 ### Requirement: Interactive List
 The TUI SHALL display a navigable list of workspaces.
 
@@ -93,6 +95,3 @@ The TUI SHALL provide a keyboard shortcut to close the selected workspace.
 - **THEN** confirmation prompt SHALL appear
 - **AND** confirming with `y` SHALL close the workspace
 - **AND** declining with `n` SHALL cancel
-
-```
-

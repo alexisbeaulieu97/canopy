@@ -1,8 +1,10 @@
 # tui-interface Specification
 
 ## Purpose
-TBD - created by archiving change enhance-status-dashboard. Update Purpose after archive.
+Interactive TUI enhancements for workspace visibility and quick actions. Includes stale detection, disk usage display, behind-remote indicators, and keyboard shortcuts.
+
 ## Requirements
+
 ### Requirement: Stale Workspace Detection
 The TUI SHALL identify and visually indicate workspaces that haven't been modified recently based on configurable threshold.
 
@@ -82,4 +84,3 @@ The TUI SHALL use color coding to indicate workspace health status.
 - **WHEN** workspace is behind remote or stale
 - **THEN** workspace is shown in yellow
 - **AND** user can identify workspaces needing sync
-

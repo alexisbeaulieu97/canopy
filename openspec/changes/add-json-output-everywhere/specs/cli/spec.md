@@ -1,23 +1,72 @@
-```markdown
-## MODIFIED Requirements
+# CLI Spec (Delta)
 
-### Requirement: JSON Output
-All CLI commands that produce output SHALL support `--json` flag for machine-readable output.
+## Purpose
+CLI interface conventions and output formatting.
 
-#### Scenario: Workspace status JSON
-- **WHEN** I run `canopy workspace status PROJ-123 --json`
-- **THEN** the output SHALL be valid JSON
-- **AND** include workspace ID, branch, repos, and status
+## JSON Output Support
 
-#### Scenario: Workspace path JSON
-- **WHEN** I run `canopy workspace path PROJ-123 --json`
-- **THEN** the output SHALL be `{"path": "/full/path/to/workspace"}`
+### Global Flag
+- `--json` flag enables JSON output for all commands
+- Errors also output as JSON when flag is set
+- Machine-parseable for scripting and CI
 
-#### Scenario: Repo list JSON
-- **WHEN** I run `canopy repo list --json`
-- **THEN** the output SHALL be a JSON array of repo objects
+### Output Structure
+```json
+{
+  "success": true,
+  "data": { ... },
+  "error": null
+}
+```
 
-#### Scenario: Check JSON
-- **WHEN** I run `canopy check --json`
-- **THEN** the output SHALL be valid JSON with configuration status
+### Error Structure
+```json
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "WORKSPACE_NOT_FOUND",
+    "message": "Workspace 'foo' not found",
+    "context": { "workspace_id": "foo" }
+  }
+}
+```
+
+### Command-Specific Data
+
+#### `canopy workspace list --json`
+```json
+{
+  "success": true,
+  "data": {
+    "workspaces": [
+      {
+        "id": "feature-x",
+        "path": "/path/to/ws",
+        "repos": ["main", "lib"],
+        "branch": "feature/x"
+      }
+    ]
+  }
+}
+```
+
+#### `canopy status --json`
+```json
+{
+  "success": true,
+  "data": {
+    "workspace": "feature-x",
+    "repos": [
+      {
+        "name": "main",
+        "branch": "feature/x",
+        "clean": false,
+        "ahead": 2,
+        "behind": 0,
+        "modified": 3
+      }
+    ]
+  }
+}
 ```

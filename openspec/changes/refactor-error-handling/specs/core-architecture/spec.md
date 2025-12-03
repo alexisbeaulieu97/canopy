@@ -1,23 +1,44 @@
-```markdown
-## ADDED Requirements
+# Core Architecture Spec (Delta)
 
-### Requirement: Typed Errors
-The system SHALL use typed errors for domain-specific error conditions.
+## Purpose
+Error handling patterns and type system for Canopy.
 
-#### Scenario: Workspace not found error
-- **GIVEN** workspace `MISSING-123` does not exist
-- **WHEN** any command references `MISSING-123`
-- **THEN** the error SHALL be of type `ErrWorkspaceNotFound`
-- **AND** the error message SHALL include the workspace ID
+## New Error Types
 
-#### Scenario: Unclean workspace error
-- **GIVEN** workspace `DIRTY-123` has uncommitted changes
-- **WHEN** I run `canopy workspace close DIRTY-123`
-- **THEN** the error SHALL be of type `ErrUncleanWorkspace`
-- **AND** the error message SHALL list dirty repos
+### Domain Errors
+```go
+type ErrorCode string
 
-#### Scenario: Error codes in JSON
-- **WHEN** a command fails with `--json` flag
-- **THEN** the output SHALL include an `"error_code"` field
-- **AND** the code SHALL map to the error type (e.g., `"WORKSPACE_NOT_FOUND"`)
+const (
+    ErrWorkspaceNotFound    ErrorCode = "WORKSPACE_NOT_FOUND"
+    ErrWorkspaceExists      ErrorCode = "WORKSPACE_EXISTS"
+    ErrRepoNotFound         ErrorCode = "REPO_NOT_FOUND"
+    ErrRepoNotClean         ErrorCode = "REPO_NOT_CLEAN"
+    ErrGitOperationFailed   ErrorCode = "GIT_OPERATION_FAILED"
+    ErrConfigInvalid        ErrorCode = "CONFIG_INVALID"
+)
+
+type CanopyError struct {
+    Code      ErrorCode
+    Message   string
+    Cause     error
+    Context   map[string]string
+}
+
+func (e *CanopyError) Error() string
+func (e *CanopyError) Unwrap() error
+func (e *CanopyError) Is(target error) bool
 ```
+
+### Error Constructors
+```go
+func NewWorkspaceNotFound(id string) *CanopyError
+func NewRepoNotClean(path string) *CanopyError
+func WrapGitError(err error, operation string) *CanopyError
+```
+
+## Error Handling Guidelines
+- Use typed errors for recoverable conditions
+- Include context for debugging
+- Chain errors with `Wrap` for root cause
+- Check with `errors.Is()` or `errors.As()`

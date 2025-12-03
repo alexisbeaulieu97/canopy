@@ -1,22 +1,19 @@
-```markdown
-## ADDED Requirements
+# Workspace Management Spec (Delta)
 
-### Requirement: Rename Workspace
-The `workspace rename` command SHALL rename a workspace and update its metadata.
+## Purpose
+Workspace lifecycle: create, delete, list, and rename workspaces.
 
-#### Scenario: Simple rename
-- **GIVEN** workspace `OLD-123` exists
-- **WHEN** I run `canopy workspace rename OLD-123 NEW-456`
-- **THEN** the workspace directory SHALL be renamed to `NEW-456`
-- **AND** workspace.yaml SHALL reflect ID `NEW-456`
+## New Capabilities
 
-#### Scenario: Rename with branch update
-- **GIVEN** workspace `OLD-123` has branch `OLD-123` in all repos
-- **WHEN** I run `canopy workspace rename OLD-123 NEW-456 --rename-branches`
-- **THEN** branches in all repos SHALL be renamed to `NEW-456`
+### Rename Workspace
+- Command: `canopy workspace rename <old-id> <new-id>`
+- Validates new ID format and uniqueness
+- Atomically renames workspace directory
+- Updates workspace.yaml with new ID
+- Optional: rename branches in all repos with `--rename-branches`
 
-#### Scenario: Conflict detection
-- **GIVEN** workspaces `WS-A` and `WS-B` both exist
-- **WHEN** I run `canopy workspace rename WS-A WS-B`
-- **THEN** the command SHALL fail with "workspace WS-B already exists"
-```
+### Behavior
+- Fails if old workspace doesn't exist
+- Fails if new ID conflicts with existing workspace
+- Shows confirmation before renaming (bypass with `--force`)
+- Rolls back on failure

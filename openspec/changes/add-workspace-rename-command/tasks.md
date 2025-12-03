@@ -1,4 +1,3 @@
-```markdown
 # Implementation Tasks
 
 ## 1. Validation
@@ -32,4 +31,3 @@
 - [ ] 6.2 Test conflict detection
 - [ ] 6.3 Test with branch rename
 - [ ] 6.4 Test rollback on failure
-```

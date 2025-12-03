@@ -1,4 +1,3 @@
-```markdown
 # Implementation Tasks
 
 ## 1. Create New Files
@@ -53,4 +52,3 @@
 - [ ] 9.1 Verify `go build` succeeds
 - [ ] 9.2 Verify existing helper tests pass
 - [ ] 9.3 Manual test TUI functionality
-```

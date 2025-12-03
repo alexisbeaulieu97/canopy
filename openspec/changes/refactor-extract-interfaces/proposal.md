@@ -1,18 +1,13 @@
-```markdown
 # Change: Refactor to Extract Interfaces for Testability
 
 ## Why
-Current code uses concrete types (`*gitx.GitEngine`, `*workspace.Engine`) directly, making unit testing difficult. Tests require real filesystem and git operations, which are slow and brittle. Extracting interfaces allows:
-- Mock implementations for fast unit tests
-- Test business logic without I/O
-- Dependency injection for different environments
-- Better adherence to hexagonal architecture principles
+Current code uses concrete types directly, making unit tests slow and brittle due to required filesystem/git I/O. Extracting interfaces enables mock implementations for fast, reliable unit tests and better hexagonal architecture separation.
 
 ## What Changes
 - Define `GitOperations` interface for git operations
 - Define `WorkspaceStorage` interface for workspace persistence
 - Define `ConfigProvider` interface for configuration
-- Update `Service` to depend on interfaces, not concrete types
+- **BREAKING** - Update `Service` to depend on interfaces, not concrete types (constructor signature change)
 - Create mock implementations for testing
 - Update existing tests to use mocks where appropriate
 
@@ -24,4 +19,3 @@ Current code uses concrete types (`*gitx.GitEngine`, `*workspace.Engine`) direct
   - `internal/workspaces/service.go` - Accept interfaces in constructor
   - `internal/workspaces/service_test.go` - Use mocks
   - `internal/mocks/` (new) - Mock implementations
-```

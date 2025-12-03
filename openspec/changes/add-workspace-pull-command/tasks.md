@@ -1,11 +1,11 @@
-```markdown
 # Implementation Tasks
 
 ## 1. Service Layer
-- [ ] 1.1 Add `PullWorkspace(workspaceID string, rebase bool) error` to service
-- [ ] 1.2 Iterate through all repos and call gitEngine.Pull()
-- [ ] 1.3 Add `--rebase` support to gitx.Pull()
-- [ ] 1.4 Return aggregated errors or first error based on continue-on-error
+- [ ] 1.1 Create `PullOpts` struct with `Rebase bool` and `ContinueOnError bool`
+- [ ] 1.2 Add `PullWorkspace(workspaceID string, opts PullOpts) error` to service
+- [ ] 1.3 Iterate through all repos and call gitEngine.Pull()
+- [ ] 1.4 Add `--rebase` support to gitx.Pull()
+- [ ] 1.5 Return aggregated errors or first error based on opts.ContinueOnError
 
 ## 2. CLI Command
 - [ ] 2.1 Create `workspacePullCmd` cobra command
@@ -24,4 +24,3 @@
 - [ ] 4.1 Unit test for PullWorkspace service method
 - [ ] 4.2 Manual test CLI command
 - [ ] 4.3 Manual test TUI shortcut
-```

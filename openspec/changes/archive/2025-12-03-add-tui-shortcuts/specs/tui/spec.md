@@ -56,5 +56,3 @@ The TUI SHALL provide a keyboard shortcut to close the selected workspace.
 - **THEN** confirmation prompt SHALL appear
 - **AND** confirming with `y` SHALL close the workspace
 - **AND** declining with `n` SHALL cancel
-
-```
