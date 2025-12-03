@@ -46,3 +46,13 @@ The TUI SHALL support searching workspaces by ID using built-in list filtering.
 - **AND** list SHALL filter in real-time as user types
 - **AND** pressing Enter SHALL accept filter
 - **AND** pressing Esc SHALL cancel search
+
+### Requirement: Close Shortcut
+The TUI SHALL provide a keyboard shortcut to close the selected workspace.
+
+#### Scenario: Close workspace with confirmation
+- **GIVEN** workspace is selected in list
+- **WHEN** user presses `c` key
+- **THEN** confirmation prompt SHALL appear
+- **AND** confirming with `y` SHALL close the workspace
+- **AND** declining with `n` SHALL cancel
