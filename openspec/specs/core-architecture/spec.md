@@ -143,13 +143,15 @@ The application SHALL use typed errors with error codes for all domain errors.
 - **AND** Context SHALL contain the repo path
 
 ### Requirement: Error Wrapping
-The application SHALL support wrapping errors to preserve root cause.
+The application SHALL support wrapping errors to preserve root cause using a general-purpose `Wrap` function.
 
-#### Scenario: Wrap git error
-- **WHEN** `WrapGitError(err, "clone")` is called with underlying error
-- **THEN** returned CanopyError SHALL have Code `GIT_OPERATION_FAILED`
+#### Scenario: Wrap error with operation context
+- **WHEN** `errors.Wrap(err, errors.ErrGitOperationFailed, "clone failed")` is called
+- **THEN** returned CanopyError SHALL have the specified Code
 - **AND** Cause SHALL contain the original error
 - **AND** `errors.Unwrap()` SHALL return the original error
+
+**Note**: The wrapping pattern uses a single `Wrap(cause error, code ErrorCode, message string)` function rather than domain-specific wrappers. Callers specify the appropriate error code for their domain.
 
 ### Requirement: Error Matching
 Errors SHALL support standard Go error matching with `errors.Is()` and `errors.As()`.

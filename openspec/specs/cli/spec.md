@@ -28,7 +28,9 @@ The `workspace list` command SHALL display all active workspaces.
 - **THEN** the output SHALL include both `PROJ-1` and `PROJ-2`
 
 ### Requirement: Workspace Git Command
-The `workspace git` command SHALL execute arbitrary git commands across all repos in a workspace.
+The `workspace git` command SHALL execute arbitrary git commands across all repos in a workspace. The command SHALL support the following options:
+- `--parallel`: Execute git commands concurrently across all repos (default: sequential)
+- `--continue-on-error`: Continue execution in remaining repos if one fails (default: stop on first error)
 
 #### Scenario: Run git fetch in all repos
 - **GIVEN** workspace `PROJ-1` exists with repos `repo-a` and `repo-b`
