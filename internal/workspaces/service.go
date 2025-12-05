@@ -66,7 +66,7 @@ func (s *Service) ResolveRepos(workspaceID string, requestedRepos []string) ([]d
 	}
 
 	if len(repoNames) == 0 {
-		return nil, fmt.Errorf("%w for %s", ErrNoReposConfigured, workspaceID)
+		return nil, cerrors.NewNoReposConfigured(workspaceID)
 	}
 
 	var repos []domain.Repo
@@ -110,14 +110,14 @@ func (s *Service) CreateWorkspace(id, branchName string, repos []domain.Repo) (s
 		_, err := s.gitEngine.EnsureCanonical(repo.URL, repo.Name)
 		if err != nil {
 			cleanup()
-			return "", fmt.Errorf("failed to ensure canonical for %s: %w", repo.Name, err)
+			return "", cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
 		}
 
 		// Create worktree
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		if err := s.gitEngine.CreateWorktree(repo.Name, worktreePath, branchName); err != nil {
 			cleanup()
-			return "", fmt.Errorf("failed to create worktree for %s: %w", repo.Name, err)
+			return "", cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
 		}
 	}
 
@@ -128,7 +128,7 @@ func (s *Service) CreateWorkspace(id, branchName string, repos []domain.Repo) (s
 func (s *Service) WorkspacePath(workspaceID string) (string, error) {
 	workspaces, err := s.wsEngine.List()
 	if err != nil {
-		return "", fmt.Errorf("failed to list workspaces: %w", err)
+		return "", cerrors.NewIOFailed("list workspaces", err)
 	}
 
 	for dir, w := range workspaces {
@@ -157,7 +157,7 @@ func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
 	// 3. Resolve repo URL
 	repos, err := s.ResolveRepos(workspaceID, []string{repoName})
 	if err != nil {
-		return fmt.Errorf("failed to resolve repo %s: %w", repoName, err)
+		return cerrors.Wrap(cerrors.ErrUnknownRepository, fmt.Sprintf("failed to resolve repo %s", repoName), err)
 	}
 
 	repo := repos[0]
@@ -166,24 +166,24 @@ func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
 	// Ensure canonical exists
 	_, err = s.gitEngine.EnsureCanonical(repo.URL, repo.Name)
 	if err != nil {
-		return fmt.Errorf("failed to ensure canonical for %s: %w", repo.Name, err)
+		return cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
 	}
 
 	// Create worktree
 	branchName := workspace.BranchName
 	if branchName == "" {
-		return fmt.Errorf("workspace %s has no branch set in metadata", workspaceID)
+		return cerrors.NewMissingBranchConfig(workspaceID)
 	}
 
 	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 	if err := s.gitEngine.CreateWorktree(repo.Name, worktreePath, branchName); err != nil {
-		return fmt.Errorf("failed to create worktree for %s: %w", repo.Name, err)
+		return cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
 	}
 
 	// 5. Update metadata
 	workspace.Repos = append(workspace.Repos, repo)
 	if err := s.wsEngine.Save(dirName, *workspace); err != nil {
-		return fmt.Errorf("failed to update workspace metadata: %w", err)
+		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
 
 	return nil
@@ -213,13 +213,13 @@ func (s *Service) RemoveRepoFromWorkspace(workspaceID, repoName string) error {
 	// 3. Remove worktree directory
 	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repoName)
 	if err := os.RemoveAll(worktreePath); err != nil {
-		return fmt.Errorf("failed to remove worktree %s: %w", worktreePath, err)
+		return cerrors.NewIOFailed(fmt.Sprintf("remove worktree %s", worktreePath), err)
 	}
 
 	// 4. Update metadata
 	workspace.Repos = append(workspace.Repos[:repoIndex], workspace.Repos[repoIndex+1:]...)
 	if err := s.wsEngine.Save(dirName, *workspace); err != nil {
-		return fmt.Errorf("failed to update workspace metadata: %w", err)
+		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
 
 	return nil
@@ -262,7 +262,7 @@ func (s *Service) CloseWorkspaceKeepMetadata(workspaceID string, force bool) (*d
 
 	if err := s.wsEngine.Delete(dirName); err != nil {
 		_ = s.wsEngine.DeleteClosed(archived.Path)
-		return nil, fmt.Errorf("failed to remove workspace directory: %w", err)
+		return nil, cerrors.NewIOFailed("remove workspace directory", err)
 	}
 
 	return archived, nil
@@ -430,7 +430,7 @@ func (s *Service) ListCanonicalRepos() ([]string, error) {
 func (s *Service) AddCanonicalRepo(url string) (string, error) {
 	name := repoNameFromURL(url)
 	if name == "" {
-		return "", fmt.Errorf("could not determine repo name from URL: %s", url)
+		return "", cerrors.NewInvalidArgument("url", fmt.Sprintf("could not determine repo name from URL: %s", url))
 	}
 
 	return name, s.gitEngine.Clone(url, name)
@@ -441,7 +441,7 @@ func (s *Service) RemoveCanonicalRepo(name string, force bool) error {
 	// 1. Check if repo is used by any workspace
 	workspaces, err := s.wsEngine.List()
 	if err != nil {
-		return fmt.Errorf("failed to list workspaces: %w", err)
+		return cerrors.NewIOFailed("list workspaces", err)
 	}
 
 	var usedBy []string
@@ -456,17 +456,17 @@ func (s *Service) RemoveCanonicalRepo(name string, force bool) error {
 	}
 
 	if len(usedBy) > 0 && !force {
-		return fmt.Errorf("repository %s is used by workspaces: %s. Use --force to remove", name, strings.Join(usedBy, ", "))
+		return cerrors.NewRepoInUse(name, usedBy)
 	}
 
 	// 2. Remove repo
 	path := fmt.Sprintf("%s/%s", s.config.GetProjectsRoot(), name)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return fmt.Errorf("repository %s does not exist", name)
+		return cerrors.NewRepoNotFound(name)
 	}
 
 	if err := os.RemoveAll(path); err != nil {
-		return fmt.Errorf("failed to remove repo %s: %w", name, err)
+		return cerrors.NewIOFailed(fmt.Sprintf("remove repo %s", name), err)
 	}
 
 	return nil
@@ -495,7 +495,7 @@ func (s *Service) PushWorkspace(workspaceID string) error {
 		}
 
 		if err := s.gitEngine.Push(worktreePath, branchName); err != nil {
-			return fmt.Errorf("failed to push repo %s: %w", repo.Name, err)
+			return cerrors.WrapGitError(err, fmt.Sprintf("push repo %s", repo.Name))
 		}
 	}
 
@@ -564,7 +564,7 @@ func (s *Service) runGitSequential(workspace *domain.Workspace, dirName string, 
 		results = append(results, result)
 
 		if cmdResult.ExitCode != 0 && !continueOnError {
-			return results, fmt.Errorf("git command failed in repo %s with exit code %d", repo.Name, cmdResult.ExitCode)
+			return results, cerrors.NewCommandFailed(fmt.Sprintf("git in repo %s", repo.Name), fmt.Errorf("exit code %d", cmdResult.ExitCode))
 		}
 	}
 
@@ -623,7 +623,7 @@ func (s *Service) runGitParallel(workspace *domain.Workspace, dirName string, ar
 			}
 
 			if r.ExitCode != 0 {
-				return results, fmt.Errorf("git command failed in repo %s with exit code %d", r.RepoName, r.ExitCode)
+				return results, cerrors.NewCommandFailed(fmt.Sprintf("git in repo %s", r.RepoName), fmt.Errorf("exit code %d", r.ExitCode))
 			}
 		}
 	}
@@ -644,14 +644,14 @@ func (s *Service) SwitchBranch(workspaceID, branchName string, create bool) erro
 		s.logger.Info("Switching branch", "repo", repo.Name, "branch", branchName)
 
 		if err := s.gitEngine.Checkout(worktreePath, branchName, create); err != nil {
-			return fmt.Errorf("failed to checkout branch %s in repo %s: %w", branchName, repo.Name, err)
+			return cerrors.WrapGitError(err, fmt.Sprintf("checkout branch %s in repo %s", branchName, repo.Name))
 		}
 	}
 
 	// 3. Update metadata
 	targetWorkspace.BranchName = branchName
 	if err := s.wsEngine.Save(dirName, *targetWorkspace); err != nil {
-		return fmt.Errorf("failed to update workspace metadata: %w", err)
+		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
 
 	return nil
@@ -666,11 +666,11 @@ func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
 
 	if _, _, err := s.findWorkspace(workspaceID); err == nil {
 		if !force {
-			return fmt.Errorf("workspace %s already exists. Use --force to replace or choose a different ID", workspaceID)
+			return cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to replace or choose a different ID")
 		}
 
 		if err := s.CloseWorkspace(workspaceID, true); err != nil {
-			return fmt.Errorf("failed to remove existing workspace: %w", err)
+			return cerrors.NewIOFailed("remove existing workspace", err)
 		}
 	}
 
@@ -678,11 +678,11 @@ func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
 	ws.ClosedAt = nil
 
 	if _, err := s.CreateWorkspace(ws.ID, ws.BranchName, ws.Repos); err != nil {
-		return fmt.Errorf("failed to restore workspace %s: %w", workspaceID, err)
+		return cerrors.Wrap(cerrors.ErrIOFailed, fmt.Sprintf("failed to restore workspace %s", workspaceID), err)
 	}
 
 	if err := s.wsEngine.DeleteClosed(archive.Path); err != nil {
-		return fmt.Errorf("failed to remove closed entry: %w", err)
+		return cerrors.NewIOFailed("remove closed entry", err)
 	}
 
 	return nil
@@ -696,7 +696,7 @@ func (s *Service) StaleThresholdDays() int {
 func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, error) {
 	workspaces, err := s.wsEngine.List()
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to list workspaces: %w", err)
+		return nil, "", cerrors.NewIOFailed("list workspaces", err)
 	}
 
 	for dir, w := range workspaces {

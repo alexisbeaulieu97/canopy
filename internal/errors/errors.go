@@ -11,14 +11,25 @@ type ErrorCode string
 
 // Error codes for domain errors.
 const (
-	ErrWorkspaceNotFound  ErrorCode = "WORKSPACE_NOT_FOUND"
-	ErrWorkspaceExists    ErrorCode = "WORKSPACE_EXISTS"
-	ErrRepoNotFound       ErrorCode = "REPO_NOT_FOUND"
-	ErrRepoNotClean       ErrorCode = "REPO_NOT_CLEAN"
-	ErrRepoAlreadyExists  ErrorCode = "REPO_ALREADY_EXISTS"
-	ErrGitOperationFailed ErrorCode = "GIT_OPERATION_FAILED"
-	ErrConfigInvalid      ErrorCode = "CONFIG_INVALID"
-	ErrUnknownRepository  ErrorCode = "UNKNOWN_REPOSITORY"
+	ErrWorkspaceNotFound   ErrorCode = "WORKSPACE_NOT_FOUND"
+	ErrWorkspaceExists     ErrorCode = "WORKSPACE_EXISTS"
+	ErrRepoNotFound        ErrorCode = "REPO_NOT_FOUND"
+	ErrRepoNotClean        ErrorCode = "REPO_NOT_CLEAN"
+	ErrRepoAlreadyExists   ErrorCode = "REPO_ALREADY_EXISTS"
+	ErrGitOperationFailed  ErrorCode = "GIT_OPERATION_FAILED"
+	ErrConfigInvalid       ErrorCode = "CONFIG_INVALID"
+	ErrUnknownRepository   ErrorCode = "UNKNOWN_REPOSITORY"
+	ErrNotInWorkspace      ErrorCode = "NOT_IN_WORKSPACE"
+	ErrCommandFailed       ErrorCode = "COMMAND_FAILED"
+	ErrInvalidArgument     ErrorCode = "INVALID_ARGUMENT"
+	ErrOperationCancelled  ErrorCode = "OPERATION_CANCELLED"
+	ErrIOFailed            ErrorCode = "IO_FAILED"
+	ErrRegistryError       ErrorCode = "REGISTRY_ERROR"
+	ErrInternalError       ErrorCode = "INTERNAL_ERROR"
+	ErrRepoInUse           ErrorCode = "REPO_IN_USE"
+	ErrWorkspaceMetadata   ErrorCode = "WORKSPACE_METADATA_ERROR"
+	ErrNoReposConfigured   ErrorCode = "NO_REPOS_CONFIGURED"
+	ErrMissingBranchConfig ErrorCode = "MISSING_BRANCH_CONFIG"
 )
 
 // CanopyError is a typed error with code, message, cause, and context.
@@ -160,14 +171,129 @@ func Wrap(code ErrorCode, message string, cause error) *CanopyError {
 	}
 }
 
+// NewNotInWorkspace creates an error for when a command is run outside a workspace.
+func NewNotInWorkspace(path string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrNotInWorkspace,
+		Message: "not inside a workspace",
+		Context: map[string]string{"path": path},
+	}
+}
+
+// NewCommandFailed creates an error for when a command execution fails.
+func NewCommandFailed(command string, cause error) *CanopyError {
+	return &CanopyError{
+		Code:    ErrCommandFailed,
+		Message: fmt.Sprintf("command failed: %s", command),
+		Cause:   cause,
+		Context: map[string]string{"command": command},
+	}
+}
+
+// NewInvalidArgument creates an error for invalid input arguments.
+func NewInvalidArgument(name, detail string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrInvalidArgument,
+		Message: fmt.Sprintf("invalid argument %s: %s", name, detail),
+		Context: map[string]string{"argument": name, "detail": detail},
+	}
+}
+
+// NewOperationCancelled creates an error for user-cancelled operations.
+func NewOperationCancelled(operation string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrOperationCancelled,
+		Message: fmt.Sprintf("operation cancelled: %s", operation),
+		Context: map[string]string{"operation": operation},
+	}
+}
+
+// NewIOFailed creates an error for IO operation failures.
+func NewIOFailed(operation string, cause error) *CanopyError {
+	return &CanopyError{
+		Code:    ErrIOFailed,
+		Message: fmt.Sprintf("IO operation failed: %s", operation),
+		Cause:   cause,
+		Context: map[string]string{"operation": operation},
+	}
+}
+
+// NewRegistryError creates an error for registry operations.
+func NewRegistryError(operation, detail string, cause error) *CanopyError {
+	return &CanopyError{
+		Code:    ErrRegistryError,
+		Message: fmt.Sprintf("registry %s failed: %s", operation, detail),
+		Cause:   cause,
+		Context: map[string]string{"operation": operation, "detail": detail},
+	}
+}
+
+// NewInternalError creates an error for unexpected internal failures.
+func NewInternalError(detail string, cause error) *CanopyError {
+	return &CanopyError{
+		Code:    ErrInternalError,
+		Message: fmt.Sprintf("internal error: %s", detail),
+		Cause:   cause,
+		Context: map[string]string{"detail": detail},
+	}
+}
+
+// NewRepoInUse creates an error for when a repo is used by workspaces.
+func NewRepoInUse(name string, workspaces []string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrRepoInUse,
+		Message: fmt.Sprintf("repository %s is used by workspaces: %s. Use --force to remove", name, fmt.Sprintf("%v", workspaces)),
+		Context: map[string]string{"repo_name": name},
+	}
+}
+
+// NewWorkspaceMetadataError creates an error for workspace metadata operations.
+func NewWorkspaceMetadataError(workspaceID, operation string, cause error) *CanopyError {
+	return &CanopyError{
+		Code:    ErrWorkspaceMetadata,
+		Message: fmt.Sprintf("failed to %s workspace metadata for %s", operation, workspaceID),
+		Cause:   cause,
+		Context: map[string]string{"workspace_id": workspaceID, "operation": operation},
+	}
+}
+
+// NewNoReposConfigured creates an error for workspaces with no repos.
+func NewNoReposConfigured(workspaceID string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrNoReposConfigured,
+		Message: fmt.Sprintf("no repositories configured for workspace %s", workspaceID),
+		Context: map[string]string{"workspace_id": workspaceID},
+	}
+}
+
+// NewMissingBranchConfig creates an error for missing branch configuration.
+func NewMissingBranchConfig(workspaceID string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrMissingBranchConfig,
+		Message: fmt.Sprintf("workspace %s has no branch set in metadata", workspaceID),
+		Context: map[string]string{"workspace_id": workspaceID},
+	}
+}
+
 // Sentinel errors for use with errors.Is().
 var (
-	WorkspaceNotFound  = &CanopyError{Code: ErrWorkspaceNotFound}
-	WorkspaceExists    = &CanopyError{Code: ErrWorkspaceExists}
-	RepoNotFound       = &CanopyError{Code: ErrRepoNotFound}
-	RepoNotClean       = &CanopyError{Code: ErrRepoNotClean}
-	RepoAlreadyExists  = &CanopyError{Code: ErrRepoAlreadyExists}
-	GitOperationFailed = &CanopyError{Code: ErrGitOperationFailed}
-	ConfigInvalid      = &CanopyError{Code: ErrConfigInvalid}
-	UnknownRepository  = &CanopyError{Code: ErrUnknownRepository}
+	WorkspaceNotFound    = &CanopyError{Code: ErrWorkspaceNotFound}
+	WorkspaceExists      = &CanopyError{Code: ErrWorkspaceExists}
+	RepoNotFound         = &CanopyError{Code: ErrRepoNotFound}
+	RepoNotClean         = &CanopyError{Code: ErrRepoNotClean}
+	RepoAlreadyExists    = &CanopyError{Code: ErrRepoAlreadyExists}
+	GitOperationFailed   = &CanopyError{Code: ErrGitOperationFailed}
+	ConfigInvalid        = &CanopyError{Code: ErrConfigInvalid}
+	UnknownRepository    = &CanopyError{Code: ErrUnknownRepository}
+	NotInWorkspace       = &CanopyError{Code: ErrNotInWorkspace}
+	CommandFailed        = &CanopyError{Code: ErrCommandFailed}
+	InvalidArgument      = &CanopyError{Code: ErrInvalidArgument}
+	OperationCancelled   = &CanopyError{Code: ErrOperationCancelled}
+	IOFailed             = &CanopyError{Code: ErrIOFailed}
+	RegistryError        = &CanopyError{Code: ErrRegistryError}
+	InternalError        = &CanopyError{Code: ErrInternalError}
+	RepoInUse            = &CanopyError{Code: ErrRepoInUse}
+	WorkspaceMetadata    = &CanopyError{Code: ErrWorkspaceMetadata}
+	NoReposConfigured    = &CanopyError{Code: ErrNoReposConfigured}
+	MissingBranchConfig  = &CanopyError{Code: ErrMissingBranchConfig}
 )

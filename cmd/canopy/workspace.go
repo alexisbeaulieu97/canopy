@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
@@ -174,7 +175,7 @@ var (
 			deleteFlag, _ := cmd.Flags().GetBool("delete")
 
 			if keepFlag && deleteFlag {
-				return fmt.Errorf("cannot use --keep and --delete together")
+				return cerrors.NewInvalidArgument("flags", "cannot use --keep and --delete together")
 			}
 
 			app, err := getApp(cmd)
@@ -420,7 +421,7 @@ Examples:
 
 			if failures > 0 {
 				fmt.Printf("\n%d/%d repos failed\n", failures, len(results)) //nolint:forbidigo // user-facing CLI output
-				return fmt.Errorf("%d repos failed", failures)
+				return cerrors.NewCommandFailed("git", fmt.Errorf("%d repos failed", failures))
 			}
 
 			fmt.Printf("\nAll %d repos completed successfully\n", len(results)) //nolint:forbidigo // user-facing CLI output

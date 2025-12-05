@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
 
 var repoCmd = &cobra.Command{
@@ -79,10 +80,10 @@ var repoAddCmd = &cobra.Command{
 			realAlias, err := registerWithPrompt(cmd, app.Config.GetRegistry(), alias, entry)
 			if err != nil {
 				if rmErr := svc.RemoveCanonicalRepo(name, true); rmErr != nil {
-					return fmt.Errorf("registration failed: %v (rollback failed: %v)", err, rmErr)
+					return cerrors.NewRegistryError("register", "registration failed with rollback failure", fmt.Errorf("%v (rollback failed: %v)", err, rmErr))
 				}
 
-				return fmt.Errorf("registration failed: %w", err)
+				return cerrors.NewRegistryError("register", "registration failed", err)
 			}
 			fmt.Printf("Registered repository as '%s'\n", realAlias) //nolint:forbidigo // user-facing CLI output
 		}
@@ -169,14 +170,14 @@ var repoRegisterCmd = &cobra.Command{
 		}
 		if err := app.Config.GetRegistry().Save(); err != nil {
 			if rollbackErr := app.Config.GetRegistry().Unregister(alias); rollbackErr != nil {
-				return fmt.Errorf("failed to save registry: %v (rollback failed: %v)", err, rollbackErr)
+				return cerrors.NewRegistryError("save", "rollback failed", fmt.Errorf("%v (rollback failed: %v)", err, rollbackErr))
 			}
 
 			if rollbackSaveErr := app.Config.GetRegistry().Save(); rollbackSaveErr != nil {
-				return fmt.Errorf("failed to save registry: %v (rollback save failed: %v)", err, rollbackSaveErr)
+				return cerrors.NewRegistryError("save", "rollback save failed", fmt.Errorf("%v (rollback save failed: %v)", err, rollbackSaveErr))
 			}
 
-			return fmt.Errorf("failed to save registry: %w", err)
+			return cerrors.NewRegistryError("save", "failed to save registry", err)
 		}
 
 		fmt.Printf("Registered '%s' -> %s\n", alias, url) //nolint:forbidigo // user-facing CLI output
@@ -198,7 +199,7 @@ var repoUnregisterCmd = &cobra.Command{
 
 		entry, exists := app.Config.GetRegistry().Resolve(alias)
 		if !exists {
-			return fmt.Errorf("alias '%s' not found", alias)
+			return cerrors.NewRepoNotFound(alias)
 		}
 
 		if err := app.Config.GetRegistry().Unregister(alias); err != nil {
@@ -206,14 +207,14 @@ var repoUnregisterCmd = &cobra.Command{
 		}
 		if err := app.Config.GetRegistry().Save(); err != nil {
 			if restoreErr := app.Config.GetRegistry().Register(alias, entry, true); restoreErr != nil {
-				return fmt.Errorf("failed to save registry: %v (restore failed: %v)", err, restoreErr)
+				return cerrors.NewRegistryError("save", "restore failed", fmt.Errorf("%v (restore failed: %v)", err, restoreErr))
 			}
 
 			if restoreSaveErr := app.Config.GetRegistry().Save(); restoreSaveErr != nil {
-				return fmt.Errorf("failed to save registry: %v (restore save failed: %v)", err, restoreSaveErr)
+				return cerrors.NewRegistryError("save", "restore save failed", fmt.Errorf("%v (restore save failed: %v)", err, restoreSaveErr))
 			}
 
-			return fmt.Errorf("failed to save registry: %w", err)
+			return cerrors.NewRegistryError("save", "failed to save registry", err)
 		}
 
 		fmt.Printf("Unregistered '%s'\n", alias) //nolint:forbidigo // user-facing CLI output
@@ -261,7 +262,7 @@ var repoShowCmd = &cobra.Command{
 
 		entry, ok := app.Config.GetRegistry().Resolve(alias)
 		if !ok {
-			return fmt.Errorf("alias '%s' not found", alias)
+			return cerrors.NewRepoNotFound(alias)
 		}
 
 		fmt.Printf("Alias:        %s\n", alias)     //nolint:forbidigo // user-facing CLI output
@@ -303,7 +304,7 @@ var repoPathCmd = &cobra.Command{
 		// Check if repo exists
 		path := filepath.Join(app.Config.GetProjectsRoot(), name)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return fmt.Errorf("repository %s not found", name)
+			return cerrors.NewRepoNotFound(name)
 		}
 
 		fmt.Println(path) //nolint:forbidigo // user-facing CLI output
@@ -356,12 +357,12 @@ func repoNameFromURL(url string) string {
 
 func registerWithPrompt(cmd *cobra.Command, registry *config.RepoRegistry, alias string, entry config.RegistryEntry) (string, error) {
 	if registry == nil {
-		return alias, fmt.Errorf("registry not configured")
+		return alias, cerrors.NewConfigInvalid("registry not configured")
 	}
 
 	target := strings.TrimSpace(alias)
 	if target == "" {
-		return "", fmt.Errorf("alias is required")
+		return "", cerrors.NewInvalidArgument("alias", "alias is required")
 	}
 
 	for {
@@ -398,10 +399,10 @@ func registerAlias(registry *config.RepoRegistry, alias string, entry config.Reg
 
 	if err := registry.Save(); err != nil {
 		if unregErr := registry.Unregister(alias); unregErr != nil {
-			return "", fmt.Errorf("failed to persist registry: %v (rollback failed: %v)", err, unregErr)
+			return "", cerrors.NewRegistryError("save", "rollback failed", fmt.Errorf("%v (rollback failed: %v)", err, unregErr))
 		}
 
-		return "", fmt.Errorf("failed to persist registry: %w", err)
+		return "", cerrors.NewRegistryError("save", "failed to persist registry", err)
 	}
 
 	return alias, nil

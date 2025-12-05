@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/alexisbeaulieu97/canopy/internal/app"
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
 
 type contextKey string
@@ -48,12 +49,12 @@ func main() {
 func getApp(cmd *cobra.Command) (*app.App, error) {
 	value := cmd.Context().Value(appContextKey)
 	if value == nil {
-		return nil, fmt.Errorf("app not initialized")
+		return nil, cerrors.NewInternalError("app not initialized", nil)
 	}
 
 	appInstance, ok := value.(*app.App)
 	if !ok {
-		return nil, fmt.Errorf("invalid app in context")
+		return nil, cerrors.NewInternalError("invalid app in context", nil)
 	}
 
 	return appInstance, nil

@@ -13,14 +13,25 @@ type ExitCode int
 
 // Exit codes for different error types.
 const (
-	ExitSuccess         ExitCode = 0
-	ExitGeneralError    ExitCode = 1
-	ExitNotFound        ExitCode = 2
-	ExitAlreadyExists   ExitCode = 3
-	ExitDirtyWorkspace  ExitCode = 4
-	ExitConfigError     ExitCode = 5
-	ExitGitError        ExitCode = 6
-	ExitUnknownResource ExitCode = 7
+	ExitSuccess          ExitCode = 0
+	ExitGeneralError     ExitCode = 1
+	ExitNotFound         ExitCode = 2
+	ExitAlreadyExists    ExitCode = 3
+	ExitDirtyWorkspace   ExitCode = 4
+	ExitConfigError      ExitCode = 5
+	ExitGitError         ExitCode = 6
+	ExitUnknownResource  ExitCode = 7
+	ExitNotInWorkspace   ExitCode = 8
+	ExitInvalidArgument  ExitCode = 9
+	ExitIOError          ExitCode = 10
+	ExitRegistryError    ExitCode = 11
+	ExitCommandFailed    ExitCode = 12
+	ExitInternalError    ExitCode = 13
+	ExitRepoInUse        ExitCode = 14
+	ExitMetadataError    ExitCode = 15
+	ExitNoReposConfig    ExitCode = 16
+	ExitMissingBranch    ExitCode = 17
+	ExitOperationAborted ExitCode = 18
 )
 
 // CLIError represents an error with additional CLI context.
@@ -50,6 +61,28 @@ func exitCodeForError(err error) ExitCode {
 		return ExitGitError
 	case cerrors.ErrUnknownRepository:
 		return ExitUnknownResource
+	case cerrors.ErrNotInWorkspace:
+		return ExitNotInWorkspace
+	case cerrors.ErrInvalidArgument:
+		return ExitInvalidArgument
+	case cerrors.ErrIOFailed:
+		return ExitIOError
+	case cerrors.ErrRegistryError:
+		return ExitRegistryError
+	case cerrors.ErrCommandFailed:
+		return ExitCommandFailed
+	case cerrors.ErrInternalError:
+		return ExitInternalError
+	case cerrors.ErrRepoInUse:
+		return ExitRepoInUse
+	case cerrors.ErrWorkspaceMetadata:
+		return ExitMetadataError
+	case cerrors.ErrNoReposConfigured:
+		return ExitNoReposConfig
+	case cerrors.ErrMissingBranchConfig:
+		return ExitMissingBranch
+	case cerrors.ErrOperationCancelled:
+		return ExitOperationAborted
 	default:
 		return ExitGeneralError
 	}

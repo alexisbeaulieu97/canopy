@@ -1,11 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"fmt"
+
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -28,13 +30,13 @@ var statusCmd = &cobra.Command{
 		// Check if we are inside a workspace
 		relPath, err := filepath.Rel(cfg.GetWorkspacesRoot(), cwd)
 		if err != nil || strings.HasPrefix(relPath, "..") {
-			return fmt.Errorf("not inside a workspace")
+			return cerrors.NewNotInWorkspace(cwd)
 		}
 
 		// Extract workspace ID from path
 		parts := strings.Split(relPath, string(os.PathSeparator))
 		if len(parts) == 0 {
-			return fmt.Errorf("unable to determine workspace from path")
+			return cerrors.NewNotInWorkspace(cwd)
 		}
 		workspaceID := parts[0]
 

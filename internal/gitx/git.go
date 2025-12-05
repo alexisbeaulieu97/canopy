@@ -13,6 +13,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
@@ -44,7 +45,7 @@ func (g *GitEngine) EnsureCanonical(repoURL, repoName string) (*git.Repository, 
 		URL: repoURL,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to clone %s: %w", repoURL, err)
+		return nil, cerrors.WrapGitError(err, fmt.Sprintf("clone %s", repoURL))
 	}
 
 	return r, nil
@@ -58,13 +59,13 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 	// 1. Clone
 	cmd := exec.Command("git", "clone", canonicalPath, worktreePath) //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git clone failed: %s: %w", string(output), err)
+		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "clone")
 	}
 
 	// 2. Checkout new branch
 	cmd = exec.Command("git", "-C", worktreePath, "checkout", "-b", branchName) //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git checkout -b failed: %s: %w", string(output), err)
+		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "checkout -b")
 	}
 
 	return nil
@@ -74,17 +75,17 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 func (g *GitEngine) Status(path string) (bool, int, int, string, error) {
 	r, err := git.PlainOpen(path)
 	if err != nil {
-		return false, 0, 0, "", fmt.Errorf("failed to open repo: %w", err)
+		return false, 0, 0, "", cerrors.WrapGitError(err, "open repo")
 	}
 
 	w, err := r.Worktree()
 	if err != nil {
-		return false, 0, 0, "", fmt.Errorf("failed to get worktree: %w", err)
+		return false, 0, 0, "", cerrors.WrapGitError(err, "get worktree")
 	}
 
 	status, err := w.Status()
 	if err != nil {
-		return false, 0, 0, "", fmt.Errorf("failed to get status: %w", err)
+		return false, 0, 0, "", cerrors.WrapGitError(err, "get status")
 	}
 
 	isDirty := !status.IsClean()
@@ -92,7 +93,7 @@ func (g *GitEngine) Status(path string) (bool, int, int, string, error) {
 	// Get current branch
 	head, err := r.Head()
 	if err != nil {
-		return isDirty, 0, 0, "", fmt.Errorf("failed to get HEAD: %w", err)
+		return isDirty, 0, 0, "", cerrors.WrapGitError(err, "get HEAD")
 	}
 
 	branchName := head.Name().Short()
@@ -137,13 +138,13 @@ func (g *GitEngine) Clone(url, name string) error {
 
 	// Check if exists
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		return fmt.Errorf("repository %s already exists", name)
+		return cerrors.NewRepoAlreadyExists(name, "projects root")
 	}
 
 	// Use git CLI for robustness
 	cmd := exec.Command("git", "clone", "--bare", url, path) //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git clone failed: %s: %w", string(output), err)
+		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "clone")
 	}
 
 	return nil
@@ -155,13 +156,13 @@ func (g *GitEngine) Fetch(name string) error {
 
 	// Check if exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return fmt.Errorf("repository %s does not exist", name)
+		return cerrors.NewRepoNotFound(name)
 	}
 
 	// Use git CLI
 	cmd := exec.Command("git", "-C", path, "fetch", "--all") //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git fetch failed: %s: %w", string(output), err)
+		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "fetch")
 	}
 
 	return nil
@@ -172,7 +173,7 @@ func (g *GitEngine) Pull(path string) error {
 	// Use git CLI
 	cmd := exec.Command("git", "-C", path, "pull") //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git pull failed: %s: %w", string(output), err)
+		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "pull")
 	}
 
 	return nil
@@ -187,7 +188,7 @@ func (g *GitEngine) Push(path, branch string) error {
 
 	cmd := exec.Command("git", args...) //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git push failed: %s: %w", strings.TrimSpace(string(output)), err)
+		return cerrors.WrapGitError(fmt.Errorf("%s: %w", strings.TrimSpace(string(output)), err), "push")
 	}
 
 	return nil
@@ -201,7 +202,7 @@ func (g *GitEngine) List() ([]string, error) {
 			return nil, nil
 		}
 
-		return nil, fmt.Errorf("failed to read projects root: %w", err)
+		return nil, cerrors.NewIOFailed("read projects root", err)
 	}
 
 	var repos []string
@@ -230,7 +231,7 @@ func (g *GitEngine) Checkout(path, branchName string, create bool) error {
 
 	cmd := exec.Command("git", args...) //nolint:gosec // arguments are constructed internally
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git checkout failed: %s: %w", string(output), err)
+		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "checkout")
 	}
 
 	return nil
@@ -238,7 +239,7 @@ func (g *GitEngine) Checkout(path, branchName string, create bool) error {
 
 func (g *GitEngine) aheadBehindCounts(path, branch string) (int, int, error) {
 	if branch == "" {
-		return 0, 0, fmt.Errorf("branch name is required")
+		return 0, 0, cerrors.NewInvalidArgument("branch", "branch name is required")
 	}
 
 	cmd := exec.Command( //nolint:gosec // arguments are constructed internally
@@ -252,22 +253,22 @@ func (g *GitEngine) aheadBehindCounts(path, branch string) (int, int, error) {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return 0, 0, fmt.Errorf("git rev-list failed: %s: %w", strings.TrimSpace(string(output)), err)
+		return 0, 0, cerrors.WrapGitError(fmt.Errorf("%s: %w", strings.TrimSpace(string(output)), err), "rev-list")
 	}
 
 	fields := strings.Fields(strings.TrimSpace(string(output)))
 	if len(fields) != 2 {
-		return 0, 0, fmt.Errorf("unexpected rev-list output: %s", strings.TrimSpace(string(output)))
+		return 0, 0, cerrors.WrapGitError(fmt.Errorf("unexpected output: %s", strings.TrimSpace(string(output))), "rev-list")
 	}
 
 	ahead, err := strconv.Atoi(fields[0])
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to parse ahead count: %w", err)
+		return 0, 0, cerrors.NewInternalError("failed to parse ahead count", err)
 	}
 
 	behind, err := strconv.Atoi(fields[1])
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to parse behind count: %w", err)
+		return 0, 0, cerrors.NewInternalError("failed to parse behind count", err)
 	}
 
 	return ahead, behind, nil
@@ -276,7 +277,7 @@ func (g *GitEngine) aheadBehindCounts(path, branch string) (int, int, error) {
 // RunCommand executes an arbitrary git command in the specified repository path.
 func (g *GitEngine) RunCommand(repoPath string, args ...string) (*ports.CommandResult, error) {
 	if len(args) == 0 {
-		return nil, fmt.Errorf("git command requires at least one argument")
+		return nil, cerrors.NewInvalidArgument("args", "git command requires at least one argument")
 	}
 
 	cmdArgs := append([]string{"-C", repoPath}, args...)
@@ -299,7 +300,7 @@ func (g *GitEngine) RunCommand(repoPath string, args ...string) (*ports.CommandR
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
 		} else {
-			return nil, fmt.Errorf("failed to run git command: %w", err)
+			return nil, cerrors.NewCommandFailed("git", err)
 		}
 	}
 
