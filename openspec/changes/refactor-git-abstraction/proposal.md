@@ -1,28 +1,18 @@
 # Change: Consolidate Git Abstraction
 
 ## Why
-`internal/gitx/git.go` mixes two approaches:
-1. `go-git` library for some operations (EnsureCanonical, Status)
-2. `exec.Command("git", ...)` for others (CreateWorktree, Clone, Fetch, Pull, Push)
-
-The project constraint states "No shelling out to git" for portability and testability, but the code shells out for "robustness". This inconsistency:
-- Makes testing harder (some ops need real git, others don't)
-- Creates confusion about which approach to use for new features
-- May have different error handling patterns
+`internal/gitx/git.go` mixes `go-git` library calls with `exec.Command("git", ...)` invocations, violating the project constraint against shelling out and causing inconsistent testing and error handling patterns.
 
 ## What Changes
-- Document the intentional deviation from the constraint with clear rationale
-- Create separate adapters: `GoGitAdapter` (library) and `GitCLIAdapter` (exec)
-- Define a facade that chooses the appropriate adapter per operation
-- Add configuration option to prefer one adapter over another (for testing)
-- Ensure all operations have consistent error wrapping
+- Migrate all operations to pure `go-git` library implementations
+- Remove `exec.Command("git", ...)` calls from the codebase
+- Consolidate error handling to use consistent `cerrors.WrapGitError()` patterns
+- Add comprehensive go-git implementations for: CreateWorktree, Clone, Fetch, Pull, Push, Checkout
+- Document any go-git limitations discovered during migration
 
 ## Impact
 - **Affected specs**: `specs/core-architecture/spec.md`
 - **Affected code**:
-  - `internal/gitx/git.go` - Refactor into multiple files
-  - `internal/gitx/gogit.go` - Pure go-git operations
-  - `internal/gitx/cli.go` - CLI-based operations
-  - `internal/gitx/facade.go` - Unified interface
+  - `internal/gitx/git.go` - Migrate CLI calls to go-git
   - `internal/ports/git.go` - No changes to interface
-- **Risk**: Medium - Core git operations, needs careful testing
+- **Risk**: Medium - Core git operations, requires thorough testing of go-git equivalents

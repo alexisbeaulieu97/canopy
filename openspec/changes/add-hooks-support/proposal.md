@@ -1,16 +1,7 @@
 # Change: Add Lifecycle Hooks Support
 
 ## Why
-Users often need to run setup commands after creating a workspace:
-- `npm install` in JavaScript projects
-- `go mod download` in Go projects
-- IDE configuration scripts
-- Environment setup
-
-Currently, users must manually run these after `canopy workspace new`. Hooks enable automation:
-- Post-create hooks run after workspace creation
-- Pre-close hooks run before workspace deletion
-- Per-workspace or global hooks
+Users need automated setup/teardown tasks (npm install, go mod download, IDE/env config) after workspace creation and before deletion. Post-create and pre-close hooks enable this automation without manual intervention.
 
 ## What Changes
 - Add `hooks` section to config.yaml:
@@ -34,4 +25,4 @@ Currently, users must manually run these after `canopy workspace new`. Hooks ena
   - `internal/config/config.go` - Add Hook types
   - `internal/workspaces/service.go` - Execute hooks in lifecycle methods
   - `cmd/canopy/workspace.go` - Add `--no-hooks` flag
-- **Risk**: Medium - Executes arbitrary commands, needs security consideration
+- **Risk**: Medium - Executes arbitrary commands; see `design.md` for security mitigations, threat model, and failure handling

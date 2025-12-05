@@ -1,10 +1,7 @@
 # Change: Refactor Dependency Injection
 
 ## Why
-The `App` struct in `internal/app/app.go` directly instantiates concrete types (`gitx.New()`, `workspace.New()`), making unit testing difficult. Tests currently require real filesystems and git repositories. By injecting `ports.*` interfaces instead of concrete implementations, we enable:
-- Fast unit tests with mocks
-- Better separation of concerns
-- Easier extension with alternative implementations
+The `App` struct directly instantiates concrete types, making unit testing difficult since tests require real filesystems and git repositories. Injecting `ports.*` interfaces enables fast unit tests with mocks, better separation of concerns, and easier alternative implementations.
 
 ## What Changes
 - Modify `App` struct to accept interface types via constructor options

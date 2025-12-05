@@ -2,38 +2,38 @@
 
 ## Implementation Checklist
 
-### Phase 1: Audit Current Errors
-- [ ] Search for `fmt.Errorf` in `cmd/canopy/`
-- [ ] Search for `fmt.Errorf` in `internal/`
-- [ ] Document each untyped error and its appropriate type
-- [ ] Identify missing error codes
+### 1. Audit Current Errors
+- [ ] 1.1 Search for `fmt.Errorf` in `cmd/canopy/`
+- [ ] 1.2 Search for `fmt.Errorf` in `internal/`
+- [ ] 1.3 Document each untyped error and its appropriate type
+- [ ] 1.4 Identify missing error codes
 
-### Phase 2: Add Missing Error Types
-- [ ] Add `ErrNotInWorkspace` for context-based commands
-- [ ] Add `ErrCommandFailed` for generic command failures
-- [ ] Add `ErrInvalidArgument` for input validation
-- [ ] Add `ErrOperationCancelled` for user cancellation
-- [ ] Add constructors for each new type
+### 2. Add Missing Error Types
+- [ ] 2.1 Add `ErrNotInWorkspace` for context-based commands
+- [ ] 2.2 Add `ErrCommandFailed` for generic command failures
+- [ ] 2.3 Add `ErrInvalidArgument` for input validation
+- [ ] 2.4 Add `ErrOperationCancelled` for user cancellation
+- [ ] 2.5 Add constructors for each new type
 
-### Phase 3: Update CLI Commands
-- [ ] `cmd/canopy/status.go` - Replace all `fmt.Errorf`
-- [ ] `cmd/canopy/check.go` - Replace all `fmt.Errorf`
-- [ ] `cmd/canopy/workspace.go` - Audit and replace
-- [ ] `cmd/canopy/repo.go` - Audit and replace
-- [ ] `cmd/canopy/init.go` - Audit and replace
+### 3. Update CLI Commands
+- [ ] 3.1 `cmd/canopy/status.go` - Replace all `fmt.Errorf`
+- [ ] 3.2 `cmd/canopy/check.go` - Replace all `fmt.Errorf`
+- [ ] 3.3 `cmd/canopy/workspace.go` - Audit and replace
+- [ ] 3.4 `cmd/canopy/repo.go` - Audit and replace
+- [ ] 3.5 `cmd/canopy/init.go` - Audit and replace
 
-### Phase 4: Update Internal Packages
-- [ ] `internal/workspaces/service.go` - Audit and replace
-- [ ] `internal/gitx/git.go` - Ensure WrapGitError used
-- [ ] `internal/config/config.go` - Use NewConfigInvalid
-- [ ] `internal/workspace/workspace.go` - Audit and replace
+### 4. Update Internal Packages
+- [ ] 4.1 `internal/workspaces/service.go` - Audit and replace
+- [ ] 4.2 `internal/gitx/git.go` - Ensure WrapGitError used
+- [ ] 4.3 `internal/config/config.go` - Use NewConfigInvalid
+- [ ] 4.4 `internal/workspace/workspace.go` - Audit and replace
 
-### Phase 5: CLI Exit Code Mapping
-- [ ] Create error-to-exit-code mapping in `cmd/canopy/errors.go`
-- [ ] Update `main.go` to use mapped exit codes
-- [ ] Document exit codes in help text
+### 5. CLI Exit Code Mapping
+- [ ] 5.1 Create error-to-exit-code mapping in `cmd/canopy/errors.go`
+- [ ] 5.2 Update `main.go` to use mapped exit codes
+- [ ] 5.3 Document exit codes in help text
 
-### Phase 6: Testing
-- [ ] Add tests verifying error types are returned
-- [ ] Add tests verifying exit codes
-- [ ] Run full test suite
+### 6. Testing
+- [ ] 6.1 Add tests verifying error types are returned
+- [ ] 6.2 Add tests verifying exit codes
+- [ ] 6.3 Run full test suite

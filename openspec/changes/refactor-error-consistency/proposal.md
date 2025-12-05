@@ -1,20 +1,7 @@
 # Change: Standardize Error Handling
 
 ## Why
-The codebase has a good `CanopyError` type system in `internal/errors/errors.go` with:
-- Error codes (WORKSPACE_NOT_FOUND, REPO_NOT_CLEAN, etc.)
-- Context maps for debugging
-- Proper `Is()` and `Unwrap()` implementations
-
-However, many places still use raw `fmt.Errorf()`:
-- `cmd/canopy/status.go` returns `fmt.Errorf("not inside a workspace")`
-- `cmd/canopy/check.go` returns `fmt.Errorf("configuration is invalid: %w", err)`
-- Various service methods return untyped errors
-
-This inconsistency hurts:
-- Programmatic error handling (can't switch on error type)
-- User experience (inconsistent error messages)
-- Debugging (no context maps)
+The codebase has a `CanopyError` type system but many paths still use raw `fmt.Errorf()`, preventing programmatic error handling, creating inconsistent user messages, and stripping debugging context.
 
 ## What Changes
 - Audit all error returns in `cmd/` and `internal/`

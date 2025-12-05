@@ -1,13 +1,7 @@
 # Change: Add TUI Keyboard Customization
 
 ## Why
-Power users may want to customize TUI keybindings:
-- Conflict with terminal emulator shortcuts
-- Personal preference (vim-style, emacs-style)
-- Accessibility needs
-- Consistency with other tools
-
-Currently, keybindings are hardcoded in `internal/tui/`.
+Power users need customizable TUI keybindings to resolve terminal shortcut conflicts, support personal preferences (vim/emacs-style), and address accessibility needs.
 
 ## What Changes
 - Add `tui.keybindings` section to config.yaml:

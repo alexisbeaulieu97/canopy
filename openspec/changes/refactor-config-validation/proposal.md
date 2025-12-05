@@ -1,19 +1,7 @@
 # Change: Decouple Config Validation
 
 ## Why
-`internal/config/config.go:Validate()` mixes two concerns:
-1. **Pure validation**: Checking values are correct (non-empty, valid regex, etc.)
-2. **Filesystem checks**: Verifying paths exist and are directories
-
-This coupling makes testing harder:
-- Unit tests need real filesystem setup
-- Can't test validation logic in isolation
-- `validateRoot()` has side effects (checks `os.Stat`)
-
-Separating these concerns enables:
-- Fast unit tests for validation rules
-- Clear distinction between "valid config" and "ready config"
-- Reuse of validation in different contexts
+`config.Validate()` mixes pure validation (checking values) with filesystem checks (verifying paths exist), making unit tests require real filesystem setup. Separating these concerns enables fast validation tests and clear distinction between "valid config" and "ready config".
 
 ## What Changes
 - Split `Validate()` into `ValidateValues()` (pure) and `ValidateEnvironment()` (filesystem)

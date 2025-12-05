@@ -2,47 +2,44 @@
 
 ## Implementation Checklist
 
-### Phase 1: Workspace Close Dry Run
-- [ ] Add `--dry-run` flag to `workspaceCloseCmd`
-- [ ] When dry-run:
-  - [ ] Load workspace metadata
-  - [ ] Calculate what would be deleted (directories, files)
-  - [ ] Show summary without deleting:
-    ```
-    [DRY RUN] Would close workspace: PROJ-123
-      - Remove directory: ~/workspaces/PROJ-123
-      - Repos affected: backend, frontend
-      - Total size: 1.2 GB
-    ```
-- [ ] Support `--json` output for dry run
+### 1. Workspace Close Dry Run
+- [ ] 1.1 Add `--dry-run` flag to `workspaceCloseCmd`
+- [ ] 1.2 When dry-run, load workspace metadata
+- [ ] 1.3 Calculate what would be deleted (directories, files)
+- [ ] 1.4 Show summary without deleting:
+  ```text
+  [DRY RUN] Would close workspace: PROJ-123
+    - Remove directory: ~/workspaces/PROJ-123
+    - Repos affected: backend, frontend
+    - Total size: 1.2 GB
+  ```
+- [ ] 1.5 Support `--json` output for dry run
 
-### Phase 2: Repo Remove Dry Run
-- [ ] Add `--dry-run` flag to `repoRemoveCmd`
-- [ ] When dry-run:
-  - [ ] Check if repo exists
-  - [ ] List workspaces using this repo
-  - [ ] Show summary:
-    ```
-    [DRY RUN] Would remove repository: backend
-      - Remove directory: ~/projects/backend
-      - Used by workspaces: PROJ-123, PROJ-456 (will become orphaned)
-      - Size: 500 MB
-    ```
+### 2. Repo Remove Dry Run
+- [ ] 2.1 Add `--dry-run` flag to `repoRemoveCmd`
+- [ ] 2.2 When dry-run, check if repo exists
+- [ ] 2.3 List workspaces using this repo
+- [ ] 2.4 Show summary:
+  ```text
+  [DRY RUN] Would remove repository: backend
+    - Remove directory: ~/projects/backend
+    - Used by workspaces: PROJ-123, PROJ-456 (will become orphaned)
+    - Size: 500 MB
+  ```
 
-### Phase 3: Service Layer Support
-- [ ] Option 1: Add `DryRun bool` parameter to methods
-- [ ] Option 2: Add separate `Preview*()` methods
-- [ ] Option 3: Return action plan that can be executed or displayed
-- [ ] Choose approach and implement consistently
+### 3. Service Layer Support
+- [ ] 3.1 Choose approach: `DryRun bool` parameter, `Preview*()` methods, or action plan return
+- [ ] 3.2 Implement consistently across affected methods
+- [ ] 3.3 Document chosen approach in code comments
 
-### Phase 4: Output Formatting
-- [ ] Create consistent dry-run output format
-- [ ] Use clear `[DRY RUN]` prefix
-- [ ] Color output yellow/orange for warning
-- [ ] Ensure `--json` works with dry-run
+### 4. Output Formatting
+- [ ] 4.1 Create consistent dry-run output format
+- [ ] 4.2 Use clear `[DRY RUN]` prefix
+- [ ] 4.3 Color output yellow/orange for warning
+- [ ] 4.4 Ensure `--json` works with dry-run
 
-### Phase 5: Testing
-- [ ] Test dry run shows correct preview
-- [ ] Test dry run doesn't modify filesystem
-- [ ] Test dry run with `--json`
-- [ ] Test dry run with `--force` (should still be dry)
+### 5. Testing
+- [ ] 5.1 Test dry run shows correct preview
+- [ ] 5.2 Test dry run doesn't modify filesystem
+- [ ] 5.3 Test dry run with `--json`
+- [ ] 5.4 Test dry run with `--force` (should still be dry)

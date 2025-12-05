@@ -1,13 +1,7 @@
 # Change: Add Shell Completions
 
 ## Why
-Tab completion significantly improves CLI usability:
-- Complete workspace IDs without typing full names
-- Complete repo names from registry
-- Complete subcommands and flags
-- Reduces typos and improves discoverability
-
-Cobra has built-in completion support, making this a quick win.
+Tab completion improves CLI usability by enabling workspace ID and repo name completion, reducing typos, and improving discoverability. Cobra's built-in completion support makes this a quick win.
 
 ## What Changes
 - Add `canopy completion <shell>` command (bash, zsh, fish, powershell)

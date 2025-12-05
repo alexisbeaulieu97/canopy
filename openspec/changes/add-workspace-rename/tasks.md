@@ -2,38 +2,37 @@
 
 ## Implementation Checklist
 
-### Phase 1: Service Layer
-- [ ] Add `RenameWorkspace(oldID, newID string, renameBranch bool) error` to service
-- [ ] Validate oldID exists
-- [ ] Validate newID doesn't exist
-- [ ] Validate newID is a valid workspace name
+### 1. Service Layer
+- [ ] 1.1 Add `RenameWorkspace(oldID, newID string, renameBranch bool) error` to service
+- [ ] 1.2 Validate oldID exists
+- [ ] 1.3 Validate newID doesn't exist
+- [ ] 1.4 Validate newID is a valid workspace name
 
-### Phase 2: Storage Layer
-- [ ] Add `Rename(oldDir, newDir string) error` to `WorkspaceStorage` interface
-- [ ] Implement in `workspace/workspace.go`:
-  - [ ] Rename directory
-  - [ ] Update metadata with new ID
-  - [ ] Handle errors and rollback
+### 2. Storage Layer
+- [ ] 2.1 Add `Rename(oldDir, newDir string) error` to `WorkspaceStorage` interface
+- [ ] 2.2 Implement in `workspace/workspace.go`: rename directory
+- [ ] 2.3 Update metadata with new ID
+- [ ] 2.4 Handle errors and rollback
 
-### Phase 3: Branch Handling
-- [ ] If workspace branch matches old ID, optionally rename branch
-- [ ] Add `--rename-branch` flag (default true if branch == oldID)
-- [ ] Use `git branch -m` via gitEngine
+### 3. Branch Handling
+- [ ] 3.1 If workspace branch matches old ID, optionally rename branch
+- [ ] 3.2 Add `--rename-branch` flag (default true if branch == oldID)
+- [ ] 3.3 Use `git branch -m` via gitEngine
 
-### Phase 4: CLI Command
-- [ ] Add `workspaceRenameCmd` to `cmd/canopy/workspace.go`
-- [ ] Parse arguments: `canopy workspace rename <OLD> <NEW>`
-- [ ] Add `--rename-branch` flag
-- [ ] Add `--force` flag to overwrite if new exists
-- [ ] Print success message
+### 4. CLI Command
+- [ ] 4.1 Add `workspaceRenameCmd` to `cmd/canopy/workspace.go`
+- [ ] 4.2 Parse arguments: `canopy workspace rename <OLD> <NEW>`
+- [ ] 4.3 Add `--rename-branch` flag
+- [ ] 4.4 Add `--force` flag to overwrite if new exists
+- [ ] 4.5 Print success message
 
-### Phase 5: Closed Workspace Handling
-- [ ] Decide: should rename also work on closed workspaces?
-- [ ] If yes, update closed workspace directory and metadata
-- [ ] If no, return error for closed workspaces
+### 5. Closed Workspace Handling
+- [ ] 5.1 Return error when attempting to rename closed workspaces
+- [ ] 5.2 Error message: "cannot rename closed workspace; reopen first with 'workspace open'"
+- [ ] 5.3 Add test for closed workspace rename rejection
 
-### Phase 6: Testing
-- [ ] Add unit test for `RenameWorkspace()`
-- [ ] Test rename with branch rename
-- [ ] Test rename conflict detection
-- [ ] Add integration test
+### 6. Testing
+- [ ] 6.1 Add unit test for `RenameWorkspace()`
+- [ ] 6.2 Test rename with branch rename
+- [ ] 6.3 Test rename conflict detection
+- [ ] 6.4 Add integration test

@@ -1,14 +1,7 @@
 # Change: Split Workspaces Service
 
 ## Why
-`internal/workspaces/service.go` is 801 lines and handles too many responsibilities:
-- Workspace CRUD operations
-- Git operations orchestration
-- Disk usage calculation and caching
-- Repository resolution from aliases/URLs
-- Canonical repo management
-
-This violates single responsibility principle and makes the code hard to navigate, test, and extend. Splitting into focused services improves maintainability.
+`internal/workspaces/service.go` is 801 lines handling too many responsibilities (CRUD, git orchestration, disk usage, repo resolution, canonical management), violating single responsibility and making the code hard to navigate, test, and extend.
 
 ## What Changes
 - Extract `RepoResolver` for alias/URL resolution logic (currently ~100 lines)

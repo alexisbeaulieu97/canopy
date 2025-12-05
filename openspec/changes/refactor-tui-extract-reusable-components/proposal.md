@@ -1,12 +1,7 @@
 # Change: Refactor TUI Components
 
 ## Why
-The TUI code in `internal/tui/` is split across files but components are tightly coupled:
-- `model.go`, `update.go`, `view.go`, `commands.go` share state implicitly
-- UI elements like status badges, confirm dialogs, and list items are embedded inline
-- Adding new features (e.g., new keyboard shortcuts, new views) requires touching multiple files
-
-Extracting reusable components improves extensibility and makes the TUI easier to test.
+TUI code is tightly coupled across files (`model.go`, `update.go`, `view.go`, `commands.go`) with implicit shared state, making feature additions and testing cumbersome. Extracting reusable components improves extensibility and testability.
 
 ## What Changes
 - Extract `StatusBadge` component for dirty/clean/stale indicators

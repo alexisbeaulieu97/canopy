@@ -1,18 +1,7 @@
 # Change: Add Workspace Rename Command
 
 ## Why
-Users sometimes need to rename workspaces:
-- Typo in original name
-- Ticket ID changed
-- Better naming convention adopted
-- Reusing workspace for different work
-
-Currently, renaming requires:
-1. Create new workspace with desired name
-2. Manually copy/move repos
-3. Delete old workspace
-
-This is error-prone and tedious. A rename command simplifies the operation.
+Users need to rename workspaces (due to typos, changed requirements, or naming conventions) but the current workflow—create new workspace, move repos, delete old—is tedious and error-prone.
 
 ## What Changes
 - Add `canopy workspace rename <OLD> <NEW>` command

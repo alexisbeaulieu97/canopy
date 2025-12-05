@@ -1,13 +1,7 @@
 # Change: Add Workspace Export/Import
 
 ## Why
-For multi-machine workflows, users need to:
-- Work on the same set of repos from different computers
-- Share workspace configurations with teammates
-- Backup workspace definitions before system changes
-- Quickly recreate workspaces after OS reinstall
-
-Current `closed` metadata provides partial support, but there's no standard export format or explicit import flow.
+Users need a standard, portable workspace export/import to sync, share, and restore workspace definitions across machines. Current closed metadata provides only partial support with no standard export format or explicit import flow.
 
 ## What Changes
 - Add `canopy workspace export <ID>` - outputs workspace definition as YAML/JSON

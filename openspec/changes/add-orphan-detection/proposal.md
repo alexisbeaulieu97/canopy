@@ -1,12 +1,7 @@
 # Change: Add Orphan Detection
 
 ## Why
-When a canonical repository is removed with `canopy repo remove`, existing worktrees in workspaces become orphaned:
-- The worktree directory still exists
-- The workspace metadata still references the repo
-- Git operations may fail with confusing errors
-
-Similarly, manual filesystem operations can leave orphaned state. Detecting and warning about orphans improves reliability.
+Removing a canonical repository (or manual filesystem changes) can leave worktrees orphaned—stale directories and metadata causing confusing Git failures. Detecting and warning about orphans improves reliability and user experience.
 
 ## What Changes
 - Add `canopy check --orphans` to detect orphaned worktrees

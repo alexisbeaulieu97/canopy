@@ -2,35 +2,33 @@
 
 ## Implementation Checklist
 
-### Phase 1: Define New Methods
-- [ ] Create `ValidateValues()` method on `Config`
-- [ ] Move pure validation logic:
-  - [ ] Check `CloseDefault` is "delete" or "archive"
-  - [ ] Check regex patterns compile
-  - [ ] Check `StaleThresholdDays >= 0`
-  - [ ] Check required fields are non-empty
-- [ ] Create `ValidateEnvironment()` method on `Config`
-- [ ] Move filesystem validation logic:
-  - [ ] Check paths exist
-  - [ ] Check paths are directories
-  - [ ] Optionally check paths are writable
+### 1. Define New Methods
+- [ ] 1.1 Create `ValidateValues()` method on `Config`
+- [ ] 1.2 Check `CloseDefault` is "delete" or "archive"
+- [ ] 1.3 Check regex patterns compile
+- [ ] 1.4 Check `StaleThresholdDays >= 0`
+- [ ] 1.5 Check required fields are non-empty
+- [ ] 1.6 Create `ValidateEnvironment()` method on `Config`
+- [ ] 1.7 Check paths exist
+- [ ] 1.8 Check paths are directories
+- [ ] 1.9 Optionally check paths are writable
 
-### Phase 2: Refactor Existing Validate
-- [ ] Update `Validate()` to call `ValidateValues()` then `ValidateEnvironment()`
-- [ ] Ensure backward compatibility
-- [ ] Document the two-phase validation in comments
+### 2. Refactor Existing Validate
+- [ ] 2.1 Update `Validate()` to call `ValidateValues()` then `ValidateEnvironment()`
+- [ ] 2.2 Ensure backward compatibility
+- [ ] 2.3 Document the two-phase validation in comments
 
-### Phase 3: Update validateRoot Helper
-- [ ] Rename to `validateRootPath()` for clarity
-- [ ] Move to `ValidateEnvironment()` only
-- [ ] Add `validateRequiredField()` helper for value checks
+### 3. Update validateRoot Helper
+- [ ] 3.1 Rename to `validateRootPath()` for clarity
+- [ ] 3.2 Move to `ValidateEnvironment()` only
+- [ ] 3.3 Add `validateRequiredField()` helper for value checks
 
-### Phase 4: Add Tests
-- [ ] Add `TestValidateValues` with various invalid configs
-- [ ] Add `TestValidateEnvironment` with temp directories
-- [ ] Ensure existing `TestValidate` still passes
-- [ ] Test that invalid values fail before environment checks
+### 4. Add Tests
+- [ ] 4.1 Add `TestValidateValues` with various invalid configs
+- [ ] 4.2 Add `TestValidateEnvironment` with temp directories
+- [ ] 4.3 Ensure existing `TestValidate` still passes
+- [ ] 4.4 Test that invalid values fail before environment checks
 
-### Phase 5: Documentation
-- [ ] Add godoc comments explaining validation phases
-- [ ] Update any docs that reference Validate()
+### 5. Documentation
+- [ ] 5.1 Add godoc comments explaining validation phases
+- [ ] 5.2 Update any docs that reference Validate()
