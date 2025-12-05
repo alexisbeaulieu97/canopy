@@ -26,7 +26,7 @@ var statusCmd = &cobra.Command{
 		}
 
 		// Check if we are inside a workspace
-		relPath, err := filepath.Rel(cfg.WorkspacesRoot, cwd)
+		relPath, err := filepath.Rel(cfg.GetWorkspacesRoot(), cwd)
 		if err != nil || strings.HasPrefix(relPath, "..") {
 			return fmt.Errorf("not inside a workspace")
 		}

@@ -18,11 +18,11 @@ var checkCmd = &cobra.Command{
 		cfg := app.Config
 
 		app.Logger.Info("Configuration loaded successfully.")
-		app.Logger.Infof("Projects Root: %s", cfg.ProjectsRoot)
-		app.Logger.Infof("Workspaces Root: %s", cfg.WorkspacesRoot)
-		app.Logger.Infof("Naming Pattern: %s", cfg.WorkspaceNaming)
-		if cfg.Registry != nil {
-			app.Logger.Infof("Registry File: %s", cfg.Registry.Path())
+		app.Logger.Infof("Projects Root: %s", cfg.GetProjectsRoot())
+		app.Logger.Infof("Workspaces Root: %s", cfg.GetWorkspacesRoot())
+		app.Logger.Infof("Naming Pattern: %s", cfg.GetWorkspaceNaming())
+		if cfg.GetRegistry() != nil {
+			app.Logger.Infof("Registry File: %s", cfg.GetRegistry().Path())
 		}
 
 		if err := cfg.Validate(); err != nil {

@@ -17,6 +17,7 @@ type MockConfigProvider struct {
 	GetWorkspacesRootFunc     func() string
 	GetClosedRootFunc         func() string
 	GetCloseDefaultFunc       func() string
+	GetWorkspaceNamingFunc    func() string
 	GetStaleThresholdDaysFunc func() int
 	GetRegistryFunc           func() *config.RepoRegistry
 
@@ -25,6 +26,7 @@ type MockConfigProvider struct {
 	WorkspacesRoot     string
 	ClosedRoot         string
 	CloseDefault       string
+	WorkspaceNaming    string
 	StaleThresholdDays int
 	Registry           *config.RepoRegistry
 	RepoNames          []string
@@ -37,6 +39,7 @@ func NewMockConfigProvider() *MockConfigProvider {
 		WorkspacesRoot:     "/workspaces",
 		ClosedRoot:         "/closed",
 		CloseDefault:       "archive",
+		WorkspaceNaming:    "{{.ID}}",
 		StaleThresholdDays: 14,
 		Registry:           &config.RepoRegistry{},
 		RepoNames:          []string{},
@@ -95,6 +98,15 @@ func (m *MockConfigProvider) GetCloseDefault() string {
 	}
 
 	return m.CloseDefault
+}
+
+// GetWorkspaceNaming calls the mock function if set, otherwise returns WorkspaceNaming.
+func (m *MockConfigProvider) GetWorkspaceNaming() string {
+	if m.GetWorkspaceNamingFunc != nil {
+		return m.GetWorkspaceNamingFunc()
+	}
+
+	return m.WorkspaceNaming
 }
 
 // GetStaleThresholdDays calls the mock function if set, otherwise returns StaleThresholdDays.

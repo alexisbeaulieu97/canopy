@@ -64,9 +64,9 @@ var (
 			}
 
 			if printPath {
-				fmt.Printf("%s/%s", cfg.WorkspacesRoot, dirName) //nolint:forbidigo // user-facing CLI output
+				fmt.Printf("%s/%s", cfg.GetWorkspacesRoot(), dirName) //nolint:forbidigo // user-facing CLI output
 			} else {
-				fmt.Printf("Created workspace %s in %s/%s\n", id, cfg.WorkspacesRoot, dirName) //nolint:forbidigo // user-facing CLI output
+				fmt.Printf("Created workspace %s in %s/%s\n", id, cfg.GetWorkspacesRoot(), dirName) //nolint:forbidigo // user-facing CLI output
 			}
 			return nil
 		},
@@ -183,7 +183,7 @@ var (
 			}
 
 			service := app.Service
-			configDefaultArchive := strings.EqualFold(app.Config.CloseDefault, "archive")
+			configDefaultArchive := strings.EqualFold(app.Config.GetCloseDefault(), "archive")
 			interactive := isInteractiveTerminal()
 
 			if keepFlag {
