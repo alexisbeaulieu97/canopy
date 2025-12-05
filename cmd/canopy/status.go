@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
 var statusCmd = &cobra.Command{
@@ -21,6 +22,7 @@ var statusCmd = &cobra.Command{
 		}
 
 		cfg := app.Config
+		jsonOutput, _ := cmd.Flags().GetBool("json")
 
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -45,6 +47,14 @@ var statusCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			return output.PrintJSON(map[string]interface{}{
+				"workspace": status.ID,
+				"branch":    status.BranchName,
+				"repos":     status.Repos,
+			})
+		}
+
 		fmt.Printf("Workspace: %s\n", status.ID) //nolint:forbidigo // user-facing CLI output
 		for _, r := range status.Repos {
 			statusStr := "Clean"
@@ -60,4 +70,5 @@ var statusCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(statusCmd)
+	statusCmd.Flags().Bool("json", false, "Output in JSON format")
 }

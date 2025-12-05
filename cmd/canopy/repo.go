@@ -13,6 +13,7 @@ import (
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
 var repoCmd = &cobra.Command{
@@ -31,10 +32,28 @@ var repoListCmd = &cobra.Command{
 
 		cfg := app.Config
 		svc := app.Service
+		jsonOutput, _ := cmd.Flags().GetBool("json")
 
 		repos, err := svc.ListCanonicalRepos()
 		if err != nil {
 			return err
+		}
+
+		if jsonOutput {
+			type repoInfo struct {
+				Name string `json:"name"`
+				Path string `json:"path"`
+			}
+			var repoList []repoInfo
+			for _, repo := range repos {
+				repoList = append(repoList, repoInfo{
+					Name: repo,
+					Path: filepath.Join(cfg.GetProjectsRoot(), repo),
+				})
+			}
+			return output.PrintJSON(map[string]interface{}{
+				"repos": repoList,
+			})
 		}
 
 		for _, repo := range repos {
@@ -291,6 +310,7 @@ var repoPathCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
+		jsonOutput, _ := cmd.Flags().GetBool("json")
 
 		app, err := getApp(cmd)
 		if err != nil {
@@ -301,6 +321,12 @@ var repoPathCmd = &cobra.Command{
 		path := filepath.Join(app.Config.GetProjectsRoot(), name)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			return cerrors.NewRepoNotFound(name)
+		}
+
+		if jsonOutput {
+			return output.PrintJSON(map[string]string{
+				"path": path,
+			})
 		}
 
 		fmt.Println(path) //nolint:forbidigo // user-facing CLI output
@@ -433,6 +459,8 @@ func init() {
 	repoCmd.AddCommand(repoShowCmd)
 	repoCmd.AddCommand(repoPathCmd)
 
+	repoListCmd.Flags().Bool("json", false, "Output in JSON format")
+	repoPathCmd.Flags().Bool("json", false, "Output in JSON format")
 	repoRemoveCmd.Flags().BoolP("force", "f", false, "Force removal even if used by active workspaces")
 	repoAddCmd.Flags().String("alias", "", "Override derived alias when auto-registering")
 	repoAddCmd.Flags().Bool("no-register", false, "Skip auto-registration in the registry")
