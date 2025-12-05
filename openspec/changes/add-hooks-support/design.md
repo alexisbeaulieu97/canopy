@@ -3,6 +3,56 @@
 ## Overview
 This document covers the execution model, failure handling, and security constraints for workspace lifecycle hooks.
 
+## Goals and Non-Goals
+
+**Goals:**
+- Enable automated setup tasks (npm install, go mod download) after workspace creation
+- Enable cleanup tasks (git stash, cache clearing) before workspace close
+- Provide clear failure semantics and user control
+
+**Non-Goals:**
+- Sandboxing or isolation of hook commands
+- Parallel hook execution
+- Hook composition or chaining beyond sequential execution
+- Remote hook execution or distribution
+
+## Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Sequential execution | Simpler mental model; hooks may depend on each other's side effects |
+| 30s default timeout | Balance between allowing real work and preventing hangs |
+| No automatic rollback | Partial state is acceptable; user can retry or use `--force` |
+| No sandboxing | Hooks are user-controlled config; trust boundary is the user's machine |
+| Shell execution via `$SHELL -c` | Consistent with user's environment; supports aliases and shell features |
+| Environment variables for context | Avoids shell injection; clean interface for hooks |
+
+## Alternatives Considered
+
+| Alternative | Rejected Because |
+|-------------|------------------|
+| Parallel hook execution | Order-dependent hooks would break; complexity not worth it for typical 2-3 hooks |
+| Sandboxing (Docker, nsjail) | Massive complexity; hooks need filesystem access; trust boundary is user config |
+| Automatic rollback on failure | What does "rollback npm install" mean? No sensible generic rollback |
+| Inline shell interpolation of workspace vars | Shell injection risk; env vars are safer |
+| Per-hook shell override | Added to schema but defaults to `$SHELL`; keeps consistency while allowing override |
+
+## Risks and Trade-offs
+
+| Risk | Trade-off | Mitigation |
+|------|-----------|------------|
+| Malicious hooks | User controls config; we trust user's config file | Config ownership validation; `--no-hooks` escape hatch |
+| Slow hooks blocking operations | Hooks add latency to create/close | Configurable timeout; clear progress output |
+| Hook failures blocking workflow | Strict by default may frustrate users | `--continue-on-hook-error` flag; clear error messages |
+| Resource exhaustion | Hooks can spawn processes, use disk | Timeout kills runaway processes; no other limits |
+
+## Open Questions
+
+- **Output capture**: Should hook stdout be captured and stored, or only streamed? (Currently: streamed only)
+- **Aggregated failure reporting**: If multiple hooks fail, how to present? (Currently: fail on first)
+- **Conditional hooks**: Should hooks support `if:` conditions? (Currently: no, use shell conditionals)
+- **Hook discovery**: Should `canopy hooks list` show configured hooks? (Currently: not planned)
+
 ## Execution Model
 
 ### Hook Types

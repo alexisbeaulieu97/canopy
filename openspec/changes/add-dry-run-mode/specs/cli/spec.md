@@ -1,5 +1,11 @@
 # cli Specification Delta
 
+## Dependencies
+
+> **Note**: This change has runtime dependencies on other changes:
+> - **add-orphan-detection**: The `--dry-run` output for `repo remove` references orphan detection. If orphan detection is not available, the "workspaces that would become orphaned" output should gracefully degrade to "workspaces using this repo" without orphan terminology.
+> - **add-json-output-everywhere**: The `--json` output for dry-run commands SHALL follow the JSON output schema defined in that change. Specifically, dry-run JSON output SHALL include the standard envelope (`success`, `data`, `error` fields) with dry-run-specific data nested under `data.preview`.
+
 ## ADDED Requirements
 
 ### Requirement: Dry Run Mode for Destructive Commands
@@ -19,7 +25,8 @@ Destructive commands SHALL support `--dry-run` flag to preview changes without e
 
 #### Scenario: Dry run with JSON output
 - **WHEN** user runs `canopy workspace close PROJ-123 --dry-run --json`
-- **THEN** the preview is output as JSON
+- **THEN** the preview is output as JSON following the standard envelope schema
+- **AND** preview data is nested under `data.preview`
 - **AND** includes all affected paths and sizes
 
 #### Scenario: Dry run with force flag

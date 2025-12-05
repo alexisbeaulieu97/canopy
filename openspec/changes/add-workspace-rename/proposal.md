@@ -8,7 +8,10 @@ Users need to rename workspaces (due to typos, changed requirements, or naming c
 - Rename workspace directory
 - Update metadata file with new ID
 - Handle branch name updates if branch matches old workspace ID
-- Validate new name doesn't conflict with existing workspace
+- Add `--no-rename-branch` flag to skip updating branch names that match the old workspace ID
+- Add `--force` flag to overwrite when target workspace name already exists
+- Validate new name doesn't conflict with existing workspace (unless `--force`)
+- Return error for closed workspaces (must reopen first)
 
 ## Impact
 - **Affected specs**: `specs/workspace-management/spec.md`
