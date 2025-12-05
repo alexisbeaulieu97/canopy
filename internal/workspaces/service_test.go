@@ -492,6 +492,62 @@ func TestDetectOrphans_MissingWorktreeDirectory(t *testing.T) {
 	}
 }
 
+func TestDetectOrphans_InvalidGitDir(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create a bare canonical repo
+	sourceRepo := filepath.Join(deps.projectsRoot, "source-invalid-git")
+	createRepoWithCommit(t, sourceRepo)
+
+	canonicalPath := filepath.Join(deps.projectsRoot, "invalid-git-repo")
+	runGit(t, "", "clone", "--bare", sourceRepo, canonicalPath)
+
+	// Create workspace metadata
+	ws := domain.Workspace{
+		ID:         "ORPHAN-TEST-3",
+		BranchName: "main",
+		Repos: []domain.Repo{
+			{Name: "invalid-git-repo", URL: "file://" + sourceRepo},
+		},
+	}
+
+	if err := deps.wsEngine.Create("ORPHAN-TEST-3", ws.ID, ws.BranchName, ws.Repos); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Create the worktree directory but WITHOUT a .git directory
+	worktreePath := filepath.Join(deps.workspacesRoot, "ORPHAN-TEST-3", "invalid-git-repo")
+	if err := os.MkdirAll(worktreePath, 0o750); err != nil {
+		t.Fatalf("failed to create worktree directory: %v", err)
+	}
+
+	// Add a dummy file to prove it's a real directory
+	if err := os.WriteFile(filepath.Join(worktreePath, "README.md"), []byte("test"), 0o644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	orphans, err := deps.svc.DetectOrphans()
+	if err != nil {
+		t.Fatalf("DetectOrphans failed: %v", err)
+	}
+
+	if len(orphans) != 1 {
+		t.Fatalf("expected 1 orphan, got %d: %+v", len(orphans), orphans)
+	}
+
+	if orphans[0].WorkspaceID != "ORPHAN-TEST-3" {
+		t.Errorf("expected workspace ID ORPHAN-TEST-3, got %s", orphans[0].WorkspaceID)
+	}
+
+	if orphans[0].RepoName != "invalid-git-repo" {
+		t.Errorf("expected repo name invalid-git-repo, got %s", orphans[0].RepoName)
+	}
+
+	if orphans[0].Reason != domain.OrphanReasonInvalidGitDir {
+		t.Errorf("expected reason invalid_git_dir, got %s", orphans[0].Reason)
+	}
+}
+
 func TestDetectOrphans_NoOrphans(t *testing.T) {
 	deps := newTestService(t)
 

@@ -193,6 +193,7 @@ func (m Model) handleDetailKey(key string) (Model, tea.Cmd, bool) {
 	m.loadingDetail = false
 	m.selectedWS = nil
 	m.wsStatus = nil
+	m.wsOrphans = nil
 
 	return m, nil, true
 }

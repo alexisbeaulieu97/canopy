@@ -18,6 +18,7 @@ func (m Model) loadWorkspaces() tea.Msg {
 
 	// Detect orphans for all workspaces
 	allOrphans, orphanErr := m.svc.DetectOrphans()
+	orphanCheckFailed := orphanErr != nil
 
 	// Count orphans per workspace
 	orphanCounts := make(map[string]int)
@@ -38,7 +39,8 @@ func (m Model) loadWorkspaces() tea.Msg {
 			summary: workspaceSummary{
 				repoCount: len(w.Repos),
 			},
-			orphanCount: orphanCounts[w.ID],
+			orphanCount:       orphanCounts[w.ID],
+			orphanCheckFailed: orphanCheckFailed,
 		})
 		totalUsage += w.DiskUsageBytes
 	}

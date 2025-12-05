@@ -1,4 +1,3 @@
-````markdown
 # Tasks: Add Orphan Detection
 
 ## Implementation Checklist
@@ -45,6 +44,5 @@
 ### 6. Testing
 - [x] 6.1 Add test for detecting missing canonical repo
 - [x] 6.2 Add test for detecting missing worktree directory
-- [x] 6.3 Add integration test for `canopy check --orphans`
+- [x] 6.3 Add unit tests for orphan detection
 
-````

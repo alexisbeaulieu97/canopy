@@ -14,11 +14,12 @@ import (
 
 // workspaceItem represents a workspace in the list.
 type workspaceItem struct {
-	workspace   domain.Workspace
-	summary     workspaceSummary
-	orphanCount int
-	err         error
-	loaded      bool
+	workspace         domain.Workspace
+	summary           workspaceSummary
+	orphanCount       int
+	orphanCheckFailed bool // true if orphan detection failed for this workspace
+	err               error
+	loaded            bool
 }
 
 // workspaceSummary holds aggregated status info for a workspace.
@@ -147,6 +148,24 @@ func healthForWorkspace(item workspaceItem, staleThreshold int) (string, string,
 	}
 }
 
+// buildOrphanBadge creates an orphan status badge if applicable.
+func buildOrphanBadge(item workspaceItem) string {
+	if item.orphanCheckFailed {
+		return badgeWarnStyle.Render("⚠ orphan check failed")
+	}
+
+	if item.orphanCount > 0 {
+		text := fmt.Sprintf("%d orphan", item.orphanCount)
+		if item.orphanCount > 1 {
+			text = fmt.Sprintf("%d orphans", item.orphanCount)
+		}
+
+		return badgeWarnStyle.Render(text)
+	}
+
+	return ""
+}
+
 // renderBadges creates status badges for the workspace item.
 func renderBadges(item workspaceItem, staleThreshold int) string {
 	if !item.loaded && item.err == nil {
@@ -159,13 +178,8 @@ func renderBadges(item workspaceItem, staleThreshold int) string {
 		badges = append(badges, badgeDirtyStyle.Render("ERROR"))
 	}
 
-	if item.orphanCount > 0 {
-		text := fmt.Sprintf("%d orphan", item.orphanCount)
-		if item.orphanCount > 1 {
-			text = fmt.Sprintf("%d orphans", item.orphanCount)
-		}
-
-		badges = append(badges, badgeWarnStyle.Render(text))
+	if orphanBadge := buildOrphanBadge(item); orphanBadge != "" {
+		badges = append(badges, orphanBadge)
 	}
 
 	if item.summary.dirtyRepos > 0 {
