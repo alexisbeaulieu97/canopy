@@ -4,7 +4,6 @@ package output
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 
@@ -51,6 +50,7 @@ func (p *JSONPrinter) PrintSuccess(data interface{}) error {
 		Success: true,
 		Data:    data,
 	}
+
 	return p.encode(response)
 }
 
@@ -61,12 +61,14 @@ func (p *JSONPrinter) PrintError(err error) error {
 		Success: false,
 		Error:   errInfo,
 	}
+
 	return p.encode(response)
 }
 
 func (p *JSONPrinter) encode(v interface{}) error {
 	encoder := json.NewEncoder(p.writer)
 	encoder.SetIndent("", p.indent)
+
 	return encoder.Encode(v)
 }
 
@@ -95,13 +97,6 @@ func errorToInfo(err error) *ErrorInfo {
 // PrintJSON writes the value as indented JSON to stdout.
 func PrintJSON(v interface{}) error {
 	return NewJSONPrinter().PrintSuccess(v)
-}
-
-// MustPrintJSON writes the value as indented JSON to stdout, panicking on error.
-func MustPrintJSON(v interface{}) {
-	if err := PrintJSON(v); err != nil {
-		panic(fmt.Sprintf("failed to print JSON: %v", err))
-	}
 }
 
 // PrintErrorJSON writes an error as structured JSON to stdout.

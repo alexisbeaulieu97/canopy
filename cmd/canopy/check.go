@@ -22,19 +22,21 @@ var checkCmd = &cobra.Command{
 		validationErr := cfg.Validate()
 
 		if jsonOutput {
+			if validationErr != nil {
+				// Print error JSON but still return the error for non-zero exit code
+				_ = output.PrintErrorJSON(validationErr)
+				return cerrors.Wrap(cerrors.ErrConfigInvalid, "configuration is invalid", validationErr)
+			}
+
 			configInfo := map[string]interface{}{
 				"projects_root":    cfg.GetProjectsRoot(),
 				"workspaces_root":  cfg.GetWorkspacesRoot(),
 				"workspace_naming": cfg.GetWorkspaceNaming(),
-				"valid":            validationErr == nil,
+				"valid":            true,
 			}
 
 			if registry := cfg.GetRegistry(); registry != nil {
 				configInfo["registry_path"] = registry.Path()
-			}
-
-			if validationErr != nil {
-				configInfo["validation_error"] = validationErr.Error()
 			}
 
 			return output.PrintJSON(configInfo)

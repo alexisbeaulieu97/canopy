@@ -3,6 +3,8 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
@@ -50,6 +52,7 @@ func TestJSONPrinter_PrintSuccess(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
+
 			printer := NewJSONPrinter().WithWriter(&buf)
 
 			err := printer.PrintSuccess(tt.data)
@@ -70,6 +73,14 @@ func TestJSONPrinter_PrintSuccess(t *testing.T) {
 			// Check that error is not present or nil
 			if got["error"] != nil {
 				t.Errorf("error = %v, want nil", got["error"])
+			}
+
+			// Check that data matches expected payload
+			wantData := tt.wantJSON["data"]
+
+			gotData := got["data"]
+			if !reflect.DeepEqual(gotData, wantData) {
+				t.Errorf("data = %v, want %v", gotData, wantData)
 			}
 		})
 	}
@@ -105,6 +116,7 @@ func TestJSONPrinter_PrintError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
+
 			printer := NewJSONPrinter().WithWriter(&buf)
 
 			err := printer.PrintError(tt.err)
@@ -128,6 +140,14 @@ func TestJSONPrinter_PrintError(t *testing.T) {
 			if got.Error.Code != tt.wantCode {
 				t.Errorf("error.code = %v, want %v", got.Error.Code, tt.wantCode)
 			}
+
+			if got.Error.Message == "" {
+				t.Error("error.message is empty, want non-empty")
+			}
+
+			if !strings.Contains(got.Error.Message, tt.wantContains) {
+				t.Errorf("error.message = %q, want to contain %q", got.Error.Message, tt.wantContains)
+			}
 		})
 	}
 }
@@ -135,8 +155,9 @@ func TestJSONPrinter_PrintError(t *testing.T) {
 func TestPrintJSON(t *testing.T) {
 	// Verify that PrintJSON returns valid JSON envelope format
 	var buf bytes.Buffer
+
 	printer := NewJSONPrinter().WithWriter(&buf)
-	
+
 	data := map[string]string{"key": "value"}
 	if err := printer.PrintSuccess(data); err != nil {
 		t.Fatalf("PrintSuccess() error = %v", err)
@@ -154,15 +175,29 @@ func TestPrintJSON(t *testing.T) {
 
 func TestJSONIndentation(t *testing.T) {
 	var buf bytes.Buffer
+
 	printer := NewJSONPrinter().WithWriter(&buf)
 
-	if err := printer.PrintSuccess(map[string]string{"a": "b"}); err != nil {
+	data := map[string]string{"a": "b"}
+	if err := printer.PrintSuccess(data); err != nil {
 		t.Fatalf("PrintSuccess() error = %v", err)
 	}
 
-	output := buf.String()
-	// Check that output uses 2-space indentation
-	if !bytes.Contains(buf.Bytes(), []byte("  ")) {
-		t.Errorf("output should use 2-space indentation, got: %s", output)
+	// Generate expected output with 2-space indentation
+	var expected bytes.Buffer
+
+	enc := json.NewEncoder(&expected)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(Response{Success: true, Data: data})
+
+	if buf.String() != expected.String() {
+		t.Errorf("indentation mismatch:\ngot:\n%s\nwant:\n%s", buf.String(), expected.String())
+	}
+}
+
+func TestErrorToInfo_NilError(t *testing.T) {
+	result := errorToInfo(nil)
+	if result != nil {
+		t.Errorf("errorToInfo(nil) = %v, want nil", result)
 	}
 }
