@@ -76,7 +76,10 @@ func TestServiceWithMocks(t *testing.T) {
 			return nil
 		}
 
-		svc := NewService(mockConfig, nil, nil, nil)
+		mockGit := mocks.NewMockGitOperations()
+		mockStorage := mocks.NewMockWorkspaceStorage()
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil)
 
 		repos, err := svc.ResolveRepos("TEST-123", nil)
 		if err != nil {

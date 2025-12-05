@@ -68,10 +68,13 @@ func TestResolveRepos(t *testing.T) {
 				{Pattern: "^TEST-", Repos: []string{"myorg/repo-a"}},
 			},
 		},
+		ProjectsRoot: t.TempDir(),
 	}
 
-	// We don't need real engines for ResolveRepos
-	svc := NewService(cfg, nil, nil, nil)
+	// We need to provide mock engines since Service constructor validates dependencies
+	mockGit := gitx.New(cfg.ProjectsRoot)
+	mockWs := workspace.New(t.TempDir(), t.TempDir())
+	svc := NewService(cfg, mockGit, mockWs, nil)
 
 	// Test case 1: Pattern match
 	repos, err := svc.ResolveRepos("TEST-123", nil)

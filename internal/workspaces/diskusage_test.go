@@ -214,7 +214,9 @@ func TestDiskUsageCalculator_ClearCache(t *testing.T) {
 	calc := NewDiskUsageCalculator(time.Hour)
 
 	// Populate cache
-	_, _, _ = calc.CachedUsage(dir)
+	if _, _, err := calc.CachedUsage(dir); err != nil {
+		t.Fatalf("failed to populate cache: %v", err)
+	}
 
 	// Clear cache
 	calc.ClearCache()

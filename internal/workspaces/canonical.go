@@ -22,6 +22,7 @@ type CanonicalRepoService struct {
 }
 
 // NewCanonicalRepoService creates a new CanonicalRepoService.
+// Panics if gitEngine or wsStorage are nil, as these are required dependencies.
 func NewCanonicalRepoService(
 	gitEngine ports.GitOperations,
 	wsStorage ports.WorkspaceStorage,
@@ -29,6 +30,14 @@ func NewCanonicalRepoService(
 	logger *logging.Logger,
 	diskUsage *DiskUsageCalculator,
 ) *CanonicalRepoService {
+	if gitEngine == nil {
+		panic("CanonicalRepoService: gitEngine is required but was nil")
+	}
+
+	if wsStorage == nil {
+		panic("CanonicalRepoService: wsStorage is required but was nil")
+	}
+
 	return &CanonicalRepoService{
 		gitEngine:    gitEngine,
 		wsStorage:    wsStorage,
@@ -50,7 +59,11 @@ func (c *CanonicalRepoService) Add(url string) (string, error) {
 		return "", cerrors.NewInvalidArgument("url", fmt.Sprintf("could not determine repo name from URL: %s", url))
 	}
 
-	return name, c.gitEngine.Clone(url, name)
+	if err := c.gitEngine.Clone(url, name); err != nil {
+		return "", err
+	}
+
+	return name, nil
 }
 
 // Remove removes a repository from the canonical store.
@@ -105,7 +118,13 @@ func (c *CanonicalRepoService) PreviewRemove(name string) (*domain.RepoRemovePre
 	var usage int64
 
 	if c.diskUsage != nil {
-		usage, _, _ = c.diskUsage.Calculate(path)
+		var sizeErr error
+
+		usage, _, sizeErr = c.diskUsage.Calculate(path)
+
+		if sizeErr != nil && c.logger != nil {
+			c.logger.Debug("Failed to calculate disk usage for preview", "repo", name, "path", path, "error", sizeErr)
+		}
 	}
 
 	return &domain.RepoRemovePreview{

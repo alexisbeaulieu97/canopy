@@ -102,6 +102,28 @@ func TestRepoResolver_Resolve(t *testing.T) {
 		}
 	})
 
+	t.Run("GitHub shorthand with empty owner returns error", func(t *testing.T) {
+		t.Parallel()
+
+		resolver := NewRepoResolver(nil)
+
+		_, _, err := resolver.Resolve("/myrepo", true)
+		if err == nil {
+			t.Fatal("expected error for shorthand with empty owner")
+		}
+	})
+
+	t.Run("GitHub shorthand with empty repo returns error", func(t *testing.T) {
+		t.Parallel()
+
+		resolver := NewRepoResolver(nil)
+
+		_, _, err := resolver.Resolve("myorg/", true)
+		if err == nil {
+			t.Fatal("expected error for shorthand with empty repo")
+		}
+	})
+
 	t.Run("unknown identifier returns error when user requested", func(t *testing.T) {
 		t.Parallel()
 
@@ -129,9 +151,9 @@ func TestIsLikelyURL(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		input  string
-		isURL  bool
+		name  string
+		input string
+		isURL bool
 	}{
 		{name: "https", input: "https://github.com/org/repo", isURL: true},
 		{name: "http", input: "http://github.com/org/repo", isURL: true},

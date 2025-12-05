@@ -36,34 +36,70 @@ func (r *RepoResolver) Resolve(raw string, userRequested bool) (domain.Repo, boo
 		return domain.Repo{}, false, nil
 	}
 
-	if isLikelyURL(val) {
-		if r.registry != nil {
-			if entry, ok := r.registry.ResolveByURL(val); ok {
-				return domain.Repo{Name: entry.Alias, URL: entry.URL}, true, nil
-			}
-		}
+	// Try URL resolution
+	if repo, ok := r.resolveURL(val); ok {
+		return repo, true, nil
+	}
 
-		return domain.Repo{Name: repoNameFromURL(val), URL: val}, true, nil
+	// Try registry alias
+	if repo, ok := r.resolveRegistry(val); ok {
+		return repo, true, nil
+	}
+
+	// Try GitHub shorthand
+	if repo, ok := r.resolveGitHubShorthand(val); ok {
+		return repo, true, nil
+	}
+
+	return domain.Repo{}, false, cerrors.NewUnknownRepository(val, userRequested)
+}
+
+// resolveURL attempts to resolve a URL to a repo.
+func (r *RepoResolver) resolveURL(val string) (domain.Repo, bool) {
+	if !isLikelyURL(val) {
+		return domain.Repo{}, false
 	}
 
 	if r.registry != nil {
-		if entry, ok := r.registry.Resolve(val); ok {
-			return domain.Repo{Name: entry.Alias, URL: entry.URL}, true, nil
+		if entry, ok := r.registry.ResolveByURL(val); ok {
+			return domain.Repo{Name: entry.Alias, URL: entry.URL}, true
 		}
 	}
 
-	if strings.Count(val, "/") == 1 {
-		parts := strings.Split(val, "/")
-		url := "https://github.com/" + val
+	return domain.Repo{Name: repoNameFromURL(val), URL: val}, true
+}
 
-		return domain.Repo{Name: parts[1], URL: url}, true, nil
+// resolveRegistry attempts to resolve via registry alias.
+func (r *RepoResolver) resolveRegistry(val string) (domain.Repo, bool) {
+	if r.registry == nil {
+		return domain.Repo{}, false
 	}
 
-	if userRequested {
-		return domain.Repo{}, false, cerrors.NewUnknownRepository(val, true)
+	if entry, ok := r.registry.Resolve(val); ok {
+		return domain.Repo{Name: entry.Alias, URL: entry.URL}, true
 	}
 
-	return domain.Repo{}, false, cerrors.NewUnknownRepository(val, false)
+	return domain.Repo{}, false
+}
+
+// resolveGitHubShorthand attempts to resolve GitHub shorthand (owner/repo).
+func (r *RepoResolver) resolveGitHubShorthand(val string) (domain.Repo, bool) {
+	if strings.Count(val, "/") != 1 {
+		return domain.Repo{}, false
+	}
+
+	parts := strings.Split(val, "/")
+	owner := strings.TrimSpace(parts[0])
+	repo := strings.TrimSpace(parts[1])
+
+	// Both owner and repo must be non-empty for valid GitHub shorthand
+	if owner == "" || repo == "" {
+		return domain.Repo{}, false
+	}
+
+	url := "https://github.com/" + owner + "/" + repo
+
+	return domain.Repo{Name: repo, URL: url}, true
 }
 
 // isLikelyURL checks if the given string appears to be a URL.
