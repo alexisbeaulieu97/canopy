@@ -175,37 +175,6 @@ func TestCreateWorkspace(t *testing.T) {
 	}
 }
 
-func TestRepoNameFromURL(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		url  string
-		want string
-	}{
-		{name: "standard https", url: "https://github.com/org/repo.git", want: "repo"},
-		{name: "scp style", url: "git@github.com:org/repo.git", want: "repo"},
-		{name: "trailing slash", url: "https://github.com/org/repo/", want: "repo"},
-		{name: "multiple trailing slashes", url: "https://github.com/org/repo///", want: "repo"},
-		{name: "empty input", url: "", want: ""},
-		{name: "slash only", url: "///", want: ""},
-		{name: "file scheme", url: "file:///tmp/repo.git", want: "repo"},
-		{name: "ssh scheme", url: "ssh://git@example.com/org/repo.git", want: "repo"},
-		{name: "https with user info", url: "https://user:token@github.com/org/repo.git", want: "repo"},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := repoNameFromURL(tt.url); got != tt.want {
-				t.Fatalf("repoNameFromURL(%q) = %q, want %q", tt.url, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestCloseWorkspaceStoresMetadata(t *testing.T) {
 	deps := newTestService(t)
 

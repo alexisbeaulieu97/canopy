@@ -4,14 +4,11 @@ package workspaces
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
@@ -20,20 +17,15 @@ import (
 
 // Service manages workspace operations
 type Service struct {
-	config     ports.ConfigProvider
-	gitEngine  ports.GitOperations
-	wsEngine   ports.WorkspaceStorage
-	logger     *logging.Logger
-	registry   *config.RepoRegistry
-	usageCache map[string]usageEntry
-	usageMu    sync.Mutex
-}
+	config    ports.ConfigProvider
+	gitEngine ports.GitOperations
+	wsEngine  ports.WorkspaceStorage
+	logger    *logging.Logger
 
-type usageEntry struct {
-	usage     int64
-	lastMod   time.Time
-	scannedAt time.Time
-	err       error
+	// Sub-services for specific responsibilities
+	resolver  *RepoResolver
+	diskUsage *DiskUsageCalculator
+	canonical *CanonicalRepoService
 }
 
 // ErrNoReposConfigured indicates no repos were specified and none matched configuration.
@@ -41,13 +33,16 @@ var ErrNoReposConfigured = errors.New("no repositories specified and no patterns
 
 // NewService creates a new workspace service
 func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngine ports.WorkspaceStorage, logger *logging.Logger) *Service {
+	diskUsage := DefaultDiskUsageCalculator()
+
 	return &Service{
-		config:     cfg,
-		gitEngine:  gitEngine,
-		wsEngine:   wsEngine,
-		logger:     logger,
-		registry:   cfg.GetRegistry(),
-		usageCache: make(map[string]usageEntry),
+		config:    cfg,
+		gitEngine: gitEngine,
+		wsEngine:  wsEngine,
+		logger:    logger,
+		resolver:  NewRepoResolver(cfg.GetRegistry()),
+		diskUsage: diskUsage,
+		canonical: NewCanonicalRepoService(gitEngine, wsEngine, cfg.GetProjectsRoot(), logger, diskUsage),
 	}
 }
 
@@ -72,7 +67,7 @@ func (s *Service) ResolveRepos(workspaceID string, requestedRepos []string) ([]d
 	var repos []domain.Repo
 
 	for _, raw := range repoNames {
-		repo, ok, err := s.resolveRepoIdentifier(raw, userRequested)
+		repo, ok, err := s.resolver.Resolve(raw, userRequested)
 		if err != nil {
 			return nil, err
 		}
@@ -288,7 +283,7 @@ func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (
 		repoNames = append(repoNames, r.Name)
 	}
 
-	usage, _, sizeErr := s.cachedWorkspaceUsage(wsPath)
+	usage, _, sizeErr := s.diskUsage.CachedUsage(wsPath)
 	if sizeErr != nil && s.logger != nil {
 		s.logger.Debug("Failed to calculate workspace usage for preview", "workspace", workspaceID, "error", sizeErr)
 	}
@@ -315,7 +310,7 @@ func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
 	for dir, w := range workspaceMap {
 		wsPath := filepath.Join(s.config.GetWorkspacesRoot(), dir)
 
-		usage, latest, sizeErr := s.cachedWorkspaceUsage(wsPath)
+		usage, latest, sizeErr := s.diskUsage.CachedUsage(wsPath)
 		if sizeErr != nil {
 			if s.logger != nil {
 				s.logger.Debug("Failed to calculate workspace stats", "workspace", w.ID, "error", sizeErr)
@@ -338,78 +333,11 @@ func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
 	return workspaces, nil
 }
 
-// cachedWorkspaceUsage returns cached workspace usage/mtime with a short TTL to avoid repeated scans.
-func (s *Service) cachedWorkspaceUsage(root string) (int64, time.Time, error) {
-	const ttl = time.Minute
-
-	s.usageMu.Lock()
-
-	entry, ok := s.usageCache[root]
-	if ok && time.Since(entry.scannedAt) < ttl {
-		s.usageMu.Unlock()
-		return entry.usage, entry.lastMod, entry.err
-	}
-
-	s.usageMu.Unlock()
-
-	usage, latest, err := s.CalculateDiskUsage(root)
-
-	s.usageMu.Lock()
-	s.usageCache[root] = usageEntry{
-		usage:     usage,
-		lastMod:   latest,
-		scannedAt: time.Now(),
-		err:       err,
-	}
-	s.usageMu.Unlock()
-
-	return usage, latest, err
-}
-
 // CalculateDiskUsage sums file sizes under the provided root and returns latest mtime.
 // Note: .git directories are skipped so LastModified reflects working tree activity.
+// Deprecated: Use DiskUsageCalculator.Calculate directly. This method delegates to DiskUsageCalculator.
 func (s *Service) CalculateDiskUsage(root string) (int64, time.Time, error) {
-	var (
-		total   int64
-		latest  time.Time
-		skipDir = map[string]struct{}{".git": {}}
-	)
-
-	err := filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if d.IsDir() {
-			if _, ok := skipDir[d.Name()]; ok {
-				return fs.SkipDir
-			}
-
-			return nil
-		}
-
-		if d.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-
-		info, infoErr := d.Info()
-		if infoErr != nil {
-			return infoErr
-		}
-
-		total += info.Size()
-
-		if mod := info.ModTime(); mod.After(latest) {
-			latest = mod
-		}
-
-		return nil
-	})
-	if err != nil {
-		return 0, time.Time{}, err
-	}
-
-	return total, latest, nil
+	return s.diskUsage.Calculate(root)
 }
 
 // ListClosedWorkspaces returns closed workspace metadata.
@@ -458,106 +386,27 @@ func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error)
 
 // ListCanonicalRepos returns a list of all cached repositories
 func (s *Service) ListCanonicalRepos() ([]string, error) {
-	return s.gitEngine.List()
+	return s.canonical.List()
 }
 
 // AddCanonicalRepo adds a new repository to the cache and returns the canonical name.
 func (s *Service) AddCanonicalRepo(url string) (string, error) {
-	name := repoNameFromURL(url)
-	if name == "" {
-		return "", cerrors.NewInvalidArgument("url", fmt.Sprintf("could not determine repo name from URL: %s", url))
-	}
-
-	return name, s.gitEngine.Clone(url, name)
+	return s.canonical.Add(url)
 }
 
 // RemoveCanonicalRepo removes a repository from the cache
 func (s *Service) RemoveCanonicalRepo(name string, force bool) error {
-	// 1. Check if repo is used by any workspace
-	workspaces, err := s.wsEngine.List()
-	if err != nil {
-		return cerrors.NewIOFailed("list workspaces", err)
-	}
-
-	var usedBy []string
-
-	for _, ws := range workspaces {
-		for _, r := range ws.Repos {
-			if r.Name == name {
-				usedBy = append(usedBy, ws.ID)
-				break
-			}
-		}
-	}
-
-	if len(usedBy) > 0 {
-		if !force {
-			return cerrors.NewRepoInUse(name, usedBy)
-		}
-
-		// Log warning when force removing an in-use repo
-		if s.logger != nil {
-			s.logger.Warn("Force removing repository that is in use",
-				"repo", name,
-				"workspaces", usedBy,
-				"warning", "These workspaces will have orphaned worktrees")
-		}
-	}
-
-	// 2. Remove repo
-	path := fmt.Sprintf("%s/%s", s.config.GetProjectsRoot(), name)
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return cerrors.NewRepoNotFound(name)
-	}
-
-	if err := os.RemoveAll(path); err != nil {
-		return cerrors.NewIOFailed(fmt.Sprintf("remove repo %s", name), err)
-	}
-
-	return nil
+	return s.canonical.Remove(name, force)
 }
 
 // PreviewRemoveCanonicalRepo returns a preview of what would happen when removing a repo.
 func (s *Service) PreviewRemoveCanonicalRepo(name string) (*domain.RepoRemovePreview, error) {
-	path := filepath.Join(s.config.GetProjectsRoot(), name)
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, cerrors.NewRepoNotFound(name)
-	}
-
-	// Find workspaces using this repo
-	workspaces, err := s.wsEngine.List()
-	if err != nil {
-		return nil, cerrors.NewIOFailed("list workspaces", err)
-	}
-
-	usedBy := []string{}
-
-	for _, ws := range workspaces {
-		for _, r := range ws.Repos {
-			if r.Name == name {
-				usedBy = append(usedBy, ws.ID)
-				break
-			}
-		}
-	}
-
-	// Calculate disk usage
-	usage, _, sizeErr := s.CalculateDiskUsage(path)
-	if sizeErr != nil && s.logger != nil {
-		s.logger.Debug("Failed to calculate repo usage for preview", "repo", name, "error", sizeErr)
-	}
-
-	return &domain.RepoRemovePreview{
-		RepoName:           name,
-		RepoPath:           path,
-		DiskUsageBytes:     usage,
-		WorkspacesAffected: usedBy,
-	}, nil
+	return s.canonical.PreviewRemove(name)
 }
 
 // SyncCanonicalRepo fetches updates for a cached repository
 func (s *Service) SyncCanonicalRepo(name string) error {
-	return s.gitEngine.Fetch(name)
+	return s.canonical.Sync(name)
 }
 
 // PushWorkspace pushes all repos for a workspace.
@@ -895,23 +744,7 @@ func (s *Service) logStatError(itemType, workspaceID, repoName, path string, err
 
 // GetWorkspacesUsingRepo returns the IDs of workspaces that use the given canonical repo.
 func (s *Service) GetWorkspacesUsingRepo(repoName string) ([]string, error) {
-	workspaceMap, err := s.wsEngine.List()
-	if err != nil {
-		return nil, cerrors.NewIOFailed("list workspaces", err)
-	}
-
-	var usingRepo []string
-
-	for _, ws := range workspaceMap {
-		for _, repo := range ws.Repos {
-			if repo.Name == repoName {
-				usingRepo = append(usingRepo, ws.ID)
-				break
-			}
-		}
-	}
-
-	return usingRepo, nil
+	return s.canonical.GetWorkspacesUsingRepo(repoName)
 }
 
 // DetectOrphansForWorkspace returns orphans for a specific workspace.
@@ -964,74 +797,4 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, act
 	}
 
 	return nil
-}
-
-func isLikelyURL(val string) bool {
-	return strings.HasPrefix(val, "http://") ||
-		strings.HasPrefix(val, "https://") ||
-		strings.HasPrefix(val, "ssh://") ||
-		strings.HasPrefix(val, "git://") ||
-		strings.HasPrefix(val, "git@") ||
-		strings.HasPrefix(val, "file://")
-}
-
-func (s *Service) resolveRepoIdentifier(raw string, userRequested bool) (domain.Repo, bool, error) {
-	val := strings.TrimSpace(raw)
-	if val == "" {
-		return domain.Repo{}, false, nil
-	}
-
-	if isLikelyURL(val) {
-		if s.registry != nil {
-			if entry, ok := s.registry.ResolveByURL(val); ok {
-				return domain.Repo{Name: entry.Alias, URL: entry.URL}, true, nil
-			}
-		}
-
-		return domain.Repo{Name: repoNameFromURL(val), URL: val}, true, nil
-	}
-
-	if s.registry != nil {
-		if entry, ok := s.registry.Resolve(val); ok {
-			return domain.Repo{Name: entry.Alias, URL: entry.URL}, true, nil
-		}
-	}
-
-	if strings.Count(val, "/") == 1 {
-		parts := strings.Split(val, "/")
-		url := "https://github.com/" + val
-
-		return domain.Repo{Name: parts[1], URL: url}, true, nil
-	}
-
-	if userRequested {
-		return domain.Repo{}, false, cerrors.NewUnknownRepository(val, true)
-	}
-
-	return domain.Repo{}, false, cerrors.NewUnknownRepository(val, false)
-}
-
-func repoNameFromURL(url string) string {
-	// Strip scp-like prefix if present
-	if strings.Contains(url, ":") && !strings.HasPrefix(url, "http") {
-		parts := strings.Split(url, ":")
-		url = parts[len(parts)-1]
-	}
-
-	parts := strings.Split(url, "/")
-
-	var name string
-
-	for i := len(parts) - 1; i >= 0; i-- {
-		if trimmed := strings.TrimSpace(parts[i]); trimmed != "" {
-			name = trimmed
-			break
-		}
-	}
-
-	if name == "" {
-		return ""
-	}
-
-	return strings.TrimSuffix(name, ".git")
 }
