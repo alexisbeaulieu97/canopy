@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
+	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
@@ -119,6 +120,8 @@ var repoRemoveCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		force, _ := cmd.Flags().GetBool("force")
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		jsonOutput, _ := cmd.Flags().GetBool("json")
 
 		app, err := getApp(cmd)
 		if err != nil {
@@ -126,6 +129,24 @@ var repoRemoveCmd = &cobra.Command{
 		}
 
 		svc := app.Service
+
+		// Handle dry-run mode
+		if dryRun {
+			preview, err := svc.PreviewRemoveCanonicalRepo(name)
+			if err != nil {
+				return err
+			}
+
+			if jsonOutput {
+				return output.PrintJSON(map[string]interface{}{
+					"dry_run": true,
+					"preview": preview,
+				})
+			}
+
+			printRepoRemovePreview(preview)
+			return nil
+		}
 
 		if err := svc.RemoveCanonicalRepo(name, force); err != nil {
 			return err
@@ -238,8 +259,9 @@ var repoUnregisterCmd = &cobra.Command{
 }
 
 const (
-	colorGreen = "\033[32m"
-	colorReset = "\033[0m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorReset  = "\033[0m"
 )
 
 var repoListRegistryCmd = &cobra.Command{
@@ -447,6 +469,23 @@ func promptAlias(cmd *cobra.Command, alias, suggested string) (string, error) {
 	return input, nil
 }
 
+func printRepoRemovePreview(preview *domain.RepoRemovePreview) {
+	if preview == nil {
+		return
+	}
+
+	fmt.Printf("%s[DRY RUN]%s Would remove repository: %s\n", colorYellow, colorReset, preview.RepoName) //nolint:forbidigo // user-facing CLI output
+	fmt.Printf("  Remove directory: %s\n", preview.RepoPath)                                             //nolint:forbidigo // user-facing CLI output
+
+	if len(preview.WorkspacesAffected) > 0 {
+		fmt.Printf("  Used by workspaces: %s (will become orphaned)\n", strings.Join(preview.WorkspacesAffected, ", ")) //nolint:forbidigo // user-facing CLI output
+	}
+
+	if preview.DiskUsageBytes > 0 {
+		fmt.Printf("  Size: %s\n", output.FormatBytes(preview.DiskUsageBytes)) //nolint:forbidigo // user-facing CLI output
+	}
+}
+
 func init() {
 	rootCmd.AddCommand(repoCmd)
 	repoCmd.AddCommand(repoListCmd)
@@ -462,6 +501,8 @@ func init() {
 	repoListCmd.Flags().Bool("json", false, "Output in JSON format")
 	repoPathCmd.Flags().Bool("json", false, "Output in JSON format")
 	repoRemoveCmd.Flags().BoolP("force", "f", false, "Force removal even if used by active workspaces")
+	repoRemoveCmd.Flags().Bool("dry-run", false, "Preview what would be removed without actually removing")
+	repoRemoveCmd.Flags().Bool("json", false, "Output in JSON format (use with --dry-run)")
 	repoAddCmd.Flags().String("alias", "", "Override derived alias when auto-registering")
 	repoAddCmd.Flags().Bool("no-register", false, "Skip auto-registration in the registry")
 	repoRegisterCmd.Flags().Bool("force", false, "Overwrite existing alias if present")

@@ -274,6 +274,35 @@ func (s *Service) CloseWorkspaceKeepMetadata(workspaceID string, force bool) (*d
 	return archived, nil
 }
 
+// PreviewCloseWorkspace returns a preview of what would happen when closing a workspace.
+func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (*domain.WorkspaceClosePreview, error) {
+	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	wsPath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
+
+	repoNames := []string{}
+	for _, r := range targetWorkspace.Repos {
+		repoNames = append(repoNames, r.Name)
+	}
+
+	usage, _, sizeErr := s.cachedWorkspaceUsage(wsPath)
+	if sizeErr != nil && s.logger != nil {
+		s.logger.Debug("Failed to calculate workspace usage for preview", "workspace", workspaceID, "error", sizeErr)
+	}
+
+	return &domain.WorkspaceClosePreview{
+		WorkspaceID:    workspaceID,
+		WorkspacePath:  wsPath,
+		BranchName:     targetWorkspace.BranchName,
+		ReposAffected:  repoNames,
+		DiskUsageBytes: usage,
+		KeepMetadata:   keepMetadata,
+	}, nil
+}
+
 // ListWorkspaces returns all active workspaces
 func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
 	workspaceMap, err := s.wsEngine.List()
@@ -486,6 +515,44 @@ func (s *Service) RemoveCanonicalRepo(name string, force bool) error {
 	}
 
 	return nil
+}
+
+// PreviewRemoveCanonicalRepo returns a preview of what would happen when removing a repo.
+func (s *Service) PreviewRemoveCanonicalRepo(name string) (*domain.RepoRemovePreview, error) {
+	path := filepath.Join(s.config.GetProjectsRoot(), name)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil, cerrors.NewRepoNotFound(name)
+	}
+
+	// Find workspaces using this repo
+	workspaces, err := s.wsEngine.List()
+	if err != nil {
+		return nil, cerrors.NewIOFailed("list workspaces", err)
+	}
+
+	usedBy := []string{}
+
+	for _, ws := range workspaces {
+		for _, r := range ws.Repos {
+			if r.Name == name {
+				usedBy = append(usedBy, ws.ID)
+				break
+			}
+		}
+	}
+
+	// Calculate disk usage
+	usage, _, sizeErr := s.CalculateDiskUsage(path)
+	if sizeErr != nil && s.logger != nil {
+		s.logger.Debug("Failed to calculate repo usage for preview", "repo", name, "error", sizeErr)
+	}
+
+	return &domain.RepoRemovePreview{
+		RepoName:           name,
+		RepoPath:           path,
+		DiskUsageBytes:     usage,
+		WorkspacesAffected: usedBy,
+	}, nil
 }
 
 // SyncCanonicalRepo fetches updates for a cached repository

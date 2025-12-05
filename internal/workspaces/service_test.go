@@ -626,3 +626,107 @@ func TestGetWorkspacesUsingRepo(t *testing.T) {
 		t.Errorf("expected both WS-1 and WS-2 in usedBy, got %v", usedBy)
 	}
 }
+
+func TestPreviewCloseWorkspace(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create a workspace
+	if _, err := deps.svc.CreateWorkspace("TEST-PREVIEW", "", []domain.Repo{}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Create a test file to have some disk usage
+	testFile := filepath.Join(deps.workspacesRoot, "TEST-PREVIEW", "testfile.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0o644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	// Test preview
+	preview, err := deps.svc.PreviewCloseWorkspace("TEST-PREVIEW", true)
+	if err != nil {
+		t.Fatalf("PreviewCloseWorkspace failed: %v", err)
+	}
+
+	if preview.WorkspaceID != "TEST-PREVIEW" {
+		t.Errorf("expected workspace ID TEST-PREVIEW, got %s", preview.WorkspaceID)
+	}
+
+	if preview.KeepMetadata != true {
+		t.Errorf("expected KeepMetadata true, got false")
+	}
+
+	expectedPath := filepath.Join(deps.workspacesRoot, "TEST-PREVIEW")
+	if preview.WorkspacePath != expectedPath {
+		t.Errorf("expected path %s, got %s", expectedPath, preview.WorkspacePath)
+	}
+
+	if preview.DiskUsageBytes <= 0 {
+		t.Errorf("expected positive disk usage, got %d", preview.DiskUsageBytes)
+	}
+
+	// Verify workspace still exists (dry run doesn't delete)
+	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
+		t.Errorf("workspace should still exist after preview")
+	}
+}
+
+func TestPreviewCloseWorkspaceNonexistent(t *testing.T) {
+	deps := newTestService(t)
+
+	_, err := deps.svc.PreviewCloseWorkspace("NONEXISTENT", false)
+	if err == nil {
+		t.Fatalf("expected error when previewing nonexistent workspace")
+	}
+}
+
+func TestPreviewRemoveCanonicalRepo(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create a bare repository
+	sourceRepo := filepath.Join(deps.projectsRoot, "source")
+	createRepoWithCommit(t, sourceRepo)
+
+	repoPath := filepath.Join(deps.projectsRoot, "test-repo")
+	runGit(t, "", "clone", "--bare", sourceRepo, repoPath)
+
+	// Create a workspace that uses this repo (using file:// URL for local repo)
+	if _, err := deps.svc.CreateWorkspace("WS-USING-REPO", "", []domain.Repo{{Name: "test-repo", URL: "file://" + sourceRepo}}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Test preview
+	preview, err := deps.svc.PreviewRemoveCanonicalRepo("test-repo")
+	if err != nil {
+		t.Fatalf("PreviewRemoveCanonicalRepo failed: %v", err)
+	}
+
+	if preview.RepoName != "test-repo" {
+		t.Errorf("expected repo name test-repo, got %s", preview.RepoName)
+	}
+
+	if preview.RepoPath != repoPath {
+		t.Errorf("expected path %s, got %s", repoPath, preview.RepoPath)
+	}
+
+	if len(preview.WorkspacesAffected) != 1 || preview.WorkspacesAffected[0] != "WS-USING-REPO" {
+		t.Errorf("expected workspaces affected [WS-USING-REPO], got %v", preview.WorkspacesAffected)
+	}
+
+	if preview.DiskUsageBytes <= 0 {
+		t.Errorf("expected positive disk usage, got %d", preview.DiskUsageBytes)
+	}
+
+	// Verify repo still exists (dry run doesn't delete)
+	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+		t.Errorf("repo should still exist after preview")
+	}
+}
+
+func TestPreviewRemoveCanonicalRepoNonexistent(t *testing.T) {
+	deps := newTestService(t)
+
+	_, err := deps.svc.PreviewRemoveCanonicalRepo("nonexistent-repo")
+	if err == nil {
+		t.Fatalf("expected error when previewing nonexistent repo")
+	}
+}
