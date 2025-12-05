@@ -157,6 +157,12 @@ func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
 	// 3. Resolve repo URL
 	repos, err := s.ResolveRepos(workspaceID, []string{repoName})
 	if err != nil {
+		// Preserve original error type if it's already typed
+		var canopyErr *cerrors.CanopyError
+		if errors.As(err, &canopyErr) {
+			return canopyErr.WithContext("operation", fmt.Sprintf("resolve repo %s", repoName))
+		}
+
 		return cerrors.Wrap(cerrors.ErrUnknownRepository, fmt.Sprintf("failed to resolve repo %s", repoName), err)
 	}
 
@@ -678,6 +684,12 @@ func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
 	ws.ClosedAt = nil
 
 	if _, err := s.CreateWorkspace(ws.ID, ws.BranchName, ws.Repos); err != nil {
+		// Preserve original error type if it's already typed
+		var canopyErr *cerrors.CanopyError
+		if errors.As(err, &canopyErr) {
+			return canopyErr.WithContext("operation", fmt.Sprintf("restore workspace %s", workspaceID))
+		}
+
 		return cerrors.Wrap(cerrors.ErrIOFailed, fmt.Sprintf("failed to restore workspace %s", workspaceID), err)
 	}
 

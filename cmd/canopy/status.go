@@ -1,14 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"fmt"
+	"github.com/spf13/cobra"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
-	"github.com/spf13/cobra"
 )
 
 var statusCmd = &cobra.Command{

@@ -80,7 +80,7 @@ var repoAddCmd = &cobra.Command{
 			realAlias, err := registerWithPrompt(cmd, app.Config.GetRegistry(), alias, entry)
 			if err != nil {
 				if rmErr := svc.RemoveCanonicalRepo(name, true); rmErr != nil {
-					return cerrors.NewRegistryError("register", "registration failed with rollback failure", fmt.Errorf("%v (rollback failed: %v)", err, rmErr))
+					app.Logger.Errorf("Failed to rollback repo removal: %v", rmErr)
 				}
 
 				return cerrors.NewRegistryError("register", "registration failed", err)
@@ -170,11 +170,9 @@ var repoRegisterCmd = &cobra.Command{
 		}
 		if err := app.Config.GetRegistry().Save(); err != nil {
 			if rollbackErr := app.Config.GetRegistry().Unregister(alias); rollbackErr != nil {
-				return cerrors.NewRegistryError("save", "rollback failed", fmt.Errorf("%v (rollback failed: %v)", err, rollbackErr))
-			}
-
-			if rollbackSaveErr := app.Config.GetRegistry().Save(); rollbackSaveErr != nil {
-				return cerrors.NewRegistryError("save", "rollback save failed", fmt.Errorf("%v (rollback save failed: %v)", err, rollbackSaveErr))
+				app.Logger.Errorf("Failed to rollback registration: %v", rollbackErr)
+			} else if rollbackSaveErr := app.Config.GetRegistry().Save(); rollbackSaveErr != nil {
+				app.Logger.Errorf("Failed to save rollback: %v", rollbackSaveErr)
 			}
 
 			return cerrors.NewRegistryError("save", "failed to save registry", err)
@@ -207,11 +205,9 @@ var repoUnregisterCmd = &cobra.Command{
 		}
 		if err := app.Config.GetRegistry().Save(); err != nil {
 			if restoreErr := app.Config.GetRegistry().Register(alias, entry, true); restoreErr != nil {
-				return cerrors.NewRegistryError("save", "restore failed", fmt.Errorf("%v (restore failed: %v)", err, restoreErr))
-			}
-
-			if restoreSaveErr := app.Config.GetRegistry().Save(); restoreSaveErr != nil {
-				return cerrors.NewRegistryError("save", "restore save failed", fmt.Errorf("%v (restore save failed: %v)", err, restoreSaveErr))
+				app.Logger.Errorf("Failed to restore registration: %v", restoreErr)
+			} else if restoreSaveErr := app.Config.GetRegistry().Save(); restoreSaveErr != nil {
+				app.Logger.Errorf("Failed to save restored registration: %v", restoreSaveErr)
 			}
 
 			return cerrors.NewRegistryError("save", "failed to save registry", err)
@@ -398,10 +394,8 @@ func registerAlias(registry *config.RepoRegistry, alias string, entry config.Reg
 	}
 
 	if err := registry.Save(); err != nil {
-		if unregErr := registry.Unregister(alias); unregErr != nil {
-			return "", cerrors.NewRegistryError("save", "rollback failed", fmt.Errorf("%v (rollback failed: %v)", err, unregErr))
-		}
-
+		// Best-effort rollback - if it fails, we still return the original error
+		_ = registry.Unregister(alias)
 		return "", cerrors.NewRegistryError("save", "failed to persist registry", err)
 	}
 

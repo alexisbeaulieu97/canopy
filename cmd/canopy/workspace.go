@@ -51,7 +51,7 @@ var (
 			} else {
 				resolvedRepos, err = service.ResolveRepos(id, nil)
 				if err != nil {
-					if errors.Is(err, workspaces.ErrNoReposConfigured) {
+					if errors.Is(err, cerrors.NoReposConfigured) {
 						resolvedRepos = []domain.Repo{}
 					} else {
 						return err

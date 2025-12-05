@@ -41,6 +41,29 @@ type CLIError struct {
 	Details string `json:"details,omitempty"`
 }
 
+// errorCodeToExitCode maps error codes to CLI exit codes.
+var errorCodeToExitCode = map[cerrors.ErrorCode]ExitCode{
+	cerrors.ErrWorkspaceNotFound:   ExitNotFound,
+	cerrors.ErrRepoNotFound:        ExitNotFound,
+	cerrors.ErrWorkspaceExists:     ExitAlreadyExists,
+	cerrors.ErrRepoAlreadyExists:   ExitAlreadyExists,
+	cerrors.ErrRepoNotClean:        ExitDirtyWorkspace,
+	cerrors.ErrConfigInvalid:       ExitConfigError,
+	cerrors.ErrGitOperationFailed:  ExitGitError,
+	cerrors.ErrUnknownRepository:   ExitUnknownResource,
+	cerrors.ErrNotInWorkspace:      ExitNotInWorkspace,
+	cerrors.ErrInvalidArgument:     ExitInvalidArgument,
+	cerrors.ErrIOFailed:            ExitIOError,
+	cerrors.ErrRegistryError:       ExitRegistryError,
+	cerrors.ErrCommandFailed:       ExitCommandFailed,
+	cerrors.ErrInternalError:       ExitInternalError,
+	cerrors.ErrRepoInUse:           ExitRepoInUse,
+	cerrors.ErrWorkspaceMetadata:   ExitMetadataError,
+	cerrors.ErrNoReposConfigured:   ExitNoReposConfig,
+	cerrors.ErrMissingBranchConfig: ExitMissingBranch,
+	cerrors.ErrOperationCancelled:  ExitOperationAborted,
+}
+
 // exitCodeForError returns the appropriate exit code for an error.
 func exitCodeForError(err error) ExitCode {
 	var canopyErr *cerrors.CanopyError
@@ -48,44 +71,11 @@ func exitCodeForError(err error) ExitCode {
 		return ExitGeneralError
 	}
 
-	switch canopyErr.Code {
-	case cerrors.ErrWorkspaceNotFound, cerrors.ErrRepoNotFound:
-		return ExitNotFound
-	case cerrors.ErrWorkspaceExists, cerrors.ErrRepoAlreadyExists:
-		return ExitAlreadyExists
-	case cerrors.ErrRepoNotClean:
-		return ExitDirtyWorkspace
-	case cerrors.ErrConfigInvalid:
-		return ExitConfigError
-	case cerrors.ErrGitOperationFailed:
-		return ExitGitError
-	case cerrors.ErrUnknownRepository:
-		return ExitUnknownResource
-	case cerrors.ErrNotInWorkspace:
-		return ExitNotInWorkspace
-	case cerrors.ErrInvalidArgument:
-		return ExitInvalidArgument
-	case cerrors.ErrIOFailed:
-		return ExitIOError
-	case cerrors.ErrRegistryError:
-		return ExitRegistryError
-	case cerrors.ErrCommandFailed:
-		return ExitCommandFailed
-	case cerrors.ErrInternalError:
-		return ExitInternalError
-	case cerrors.ErrRepoInUse:
-		return ExitRepoInUse
-	case cerrors.ErrWorkspaceMetadata:
-		return ExitMetadataError
-	case cerrors.ErrNoReposConfigured:
-		return ExitNoReposConfig
-	case cerrors.ErrMissingBranchConfig:
-		return ExitMissingBranch
-	case cerrors.ErrOperationCancelled:
-		return ExitOperationAborted
-	default:
-		return ExitGeneralError
+	if code, ok := errorCodeToExitCode[canopyErr.Code]; ok {
+		return code
 	}
+
+	return ExitGeneralError
 }
 
 // userFriendlyMessage returns a user-friendly message for an error.

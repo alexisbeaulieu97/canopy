@@ -1,8 +1,9 @@
 package main
 
 import (
-	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/spf13/cobra"
+
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
 
 var checkCmd = &cobra.Command{
