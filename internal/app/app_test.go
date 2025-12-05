@@ -94,7 +94,6 @@ func TestNewWithMockedDependencies(t *testing.T) {
 		WithWorkspaceStorage(mockStorage),
 		WithLogger(mockLogger),
 	)
-
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -135,7 +134,6 @@ func TestNewWithPartialMockedDependencies(t *testing.T) {
 		false,
 		WithConfigProvider(mockConfig),
 	)
-
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -164,7 +162,6 @@ func TestNewWithCustomLogger(t *testing.T) {
 		WithConfigProvider(mockConfig),
 		WithLogger(customLogger),
 	)
-
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

@@ -74,9 +74,11 @@ func New(debug bool, opts ...AppOption) (*App, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		if err := loadedCfg.Validate(); err != nil {
 			return nil, err
 		}
+
 		cfg = loadedCfg
 	}
 
