@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/output"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
@@ -123,9 +123,9 @@ var (
 						payload = append(payload, a.Metadata)
 					}
 
-					encoder := json.NewEncoder(os.Stdout)
-					encoder.SetIndent("", "  ")
-					return encoder.Encode(payload)
+					return output.PrintJSON(map[string]interface{}{
+						"workspaces": payload,
+					})
 				}
 
 				for _, a := range archives {
@@ -149,9 +149,9 @@ var (
 			}
 
 			if jsonOutput {
-				encoder := json.NewEncoder(os.Stdout)
-				encoder.SetIndent("", "  ")
-				return encoder.Encode(list)
+				return output.PrintJSON(map[string]interface{}{
+					"workspaces": list,
+				})
 			}
 
 			for _, w := range list {
@@ -297,6 +297,7 @@ var (
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
+			jsonOutput, _ := cmd.Flags().GetBool("json")
 
 			app, err := getApp(cmd)
 			if err != nil {
@@ -308,6 +309,14 @@ var (
 			status, err := service.GetStatus(id)
 			if err != nil {
 				return err
+			}
+
+			if jsonOutput {
+				return output.PrintJSON(map[string]interface{}{
+					"workspace": status.ID,
+					"branch":    status.BranchName,
+					"repos":     status.Repos,
+				})
 			}
 
 			fmt.Printf("Workspace: %s\n", status.ID)      //nolint:forbidigo // user-facing CLI output
@@ -331,6 +340,7 @@ var (
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
+			jsonOutput, _ := cmd.Flags().GetBool("json")
 
 			app, err := getApp(cmd)
 			if err != nil {
@@ -340,6 +350,12 @@ var (
 			path, err := app.Service.WorkspacePath(id)
 			if err != nil {
 				return err
+			}
+
+			if jsonOutput {
+				return output.PrintJSON(map[string]string{
+					"path": path,
+				})
 			}
 
 			fmt.Println(path) //nolint:forbidigo // user-facing CLI output
@@ -528,6 +544,9 @@ func init() {
 
 	workspaceListCmd.Flags().Bool("json", false, "Output in JSON format")
 	workspaceListCmd.Flags().Bool("closed", false, "List closed workspaces")
+
+	workspaceViewCmd.Flags().Bool("json", false, "Output in JSON format")
+	workspacePathCmd.Flags().Bool("json", false, "Output in JSON format")
 
 	workspaceCloseCmd.Flags().Bool("force", false, "Force close even if there are uncommitted changes")
 	workspaceCloseCmd.Flags().Bool("keep", false, "Keep metadata (close without deleting)")

@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
 var checkCmd = &cobra.Command{
@@ -16,6 +17,30 @@ var checkCmd = &cobra.Command{
 		}
 
 		cfg := app.Config
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+
+		validationErr := cfg.Validate()
+
+		if jsonOutput {
+			if validationErr != nil {
+				// Print error JSON but still return the error for non-zero exit code
+				_ = output.PrintErrorJSON(validationErr)
+				return cerrors.Wrap(cerrors.ErrConfigInvalid, "configuration is invalid", validationErr)
+			}
+
+			configInfo := map[string]interface{}{
+				"projects_root":    cfg.GetProjectsRoot(),
+				"workspaces_root":  cfg.GetWorkspacesRoot(),
+				"workspace_naming": cfg.GetWorkspaceNaming(),
+				"valid":            true,
+			}
+
+			if registry := cfg.GetRegistry(); registry != nil {
+				configInfo["registry_path"] = registry.Path()
+			}
+
+			return output.PrintJSON(configInfo)
+		}
 
 		app.Logger.Info("Configuration loaded successfully.")
 		app.Logger.Infof("Projects Root: %s", cfg.GetProjectsRoot())
@@ -25,9 +50,9 @@ var checkCmd = &cobra.Command{
 			app.Logger.Infof("Registry File: %s", registry.Path())
 		}
 
-		if err := cfg.Validate(); err != nil {
-			app.Logger.Errorf("Configuration is invalid: %v", err)
-			return cerrors.Wrap(cerrors.ErrConfigInvalid, "configuration is invalid", err)
+		if validationErr != nil {
+			app.Logger.Errorf("Configuration is invalid: %v", validationErr)
+			return cerrors.Wrap(cerrors.ErrConfigInvalid, "configuration is invalid", validationErr)
 		}
 
 		app.Logger.Info("Configuration is valid.")
@@ -37,4 +62,5 @@ var checkCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(checkCmd)
+	checkCmd.Flags().Bool("json", false, "Output in JSON format")
 }
