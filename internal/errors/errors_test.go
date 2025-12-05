@@ -285,3 +285,217 @@ func TestSentinelErrors(t *testing.T) {
 		t.Error("RepoNotFound sentinel should not match WorkspaceNotFound")
 	}
 }
+
+func TestNewNotInWorkspace(t *testing.T) {
+	err := cerrors.NewNotInWorkspace("/some/path")
+
+	if err.Code != cerrors.ErrNotInWorkspace {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrNotInWorkspace)
+	}
+
+	if err.Context["path"] != "/some/path" {
+		t.Errorf("Context[path] = %q, want %q", err.Context["path"], "/some/path")
+	}
+
+	if !errors.Is(err, cerrors.NotInWorkspace) {
+		t.Error("NotInWorkspace sentinel should match")
+	}
+}
+
+func TestNewCommandFailed(t *testing.T) {
+	cause := fmt.Errorf("exit code 1")
+	err := cerrors.NewCommandFailed("git push", cause)
+
+	if err.Code != cerrors.ErrCommandFailed {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrCommandFailed)
+	}
+
+	if err.Context["command"] != "git push" {
+		t.Errorf("Context[command] = %q, want %q", err.Context["command"], "git push")
+	}
+
+	if err.Cause != cause {
+		t.Errorf("Cause = %v, want %v", err.Cause, cause)
+	}
+
+	if !errors.Is(err, cerrors.CommandFailed) {
+		t.Error("CommandFailed sentinel should match")
+	}
+}
+
+func TestNewInvalidArgument(t *testing.T) {
+	err := cerrors.NewInvalidArgument("branch", "branch name is required")
+
+	if err.Code != cerrors.ErrInvalidArgument {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrInvalidArgument)
+	}
+
+	if err.Context["argument"] != "branch" {
+		t.Errorf("Context[argument] = %q, want %q", err.Context["argument"], "branch")
+	}
+
+	if err.Context["detail"] != "branch name is required" {
+		t.Errorf("Context[detail] = %q, want %q", err.Context["detail"], "branch name is required")
+	}
+
+	if !errors.Is(err, cerrors.InvalidArgument) {
+		t.Error("InvalidArgument sentinel should match")
+	}
+}
+
+func TestNewOperationCancelled(t *testing.T) {
+	err := cerrors.NewOperationCancelled("workspace creation")
+
+	if err.Code != cerrors.ErrOperationCancelled {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrOperationCancelled)
+	}
+
+	if err.Context["operation"] != "workspace creation" {
+		t.Errorf("Context[operation] = %q, want %q", err.Context["operation"], "workspace creation")
+	}
+
+	if !errors.Is(err, cerrors.OperationCancelled) {
+		t.Error("OperationCancelled sentinel should match")
+	}
+}
+
+func TestNewIOFailed(t *testing.T) {
+	cause := fmt.Errorf("permission denied")
+	err := cerrors.NewIOFailed("create directory", cause)
+
+	if err.Code != cerrors.ErrIOFailed {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrIOFailed)
+	}
+
+	if err.Context["operation"] != "create directory" {
+		t.Errorf("Context[operation] = %q, want %q", err.Context["operation"], "create directory")
+	}
+
+	if err.Cause != cause {
+		t.Errorf("Cause = %v, want %v", err.Cause, cause)
+	}
+
+	if !errors.Is(err, cerrors.IOFailed) {
+		t.Error("IOFailed sentinel should match")
+	}
+}
+
+func TestNewRegistryError(t *testing.T) {
+	cause := fmt.Errorf("file not found")
+	err := cerrors.NewRegistryError("save", "could not write file", cause)
+
+	if err.Code != cerrors.ErrRegistryError {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrRegistryError)
+	}
+
+	if err.Context["operation"] != "save" {
+		t.Errorf("Context[operation] = %q, want %q", err.Context["operation"], "save")
+	}
+
+	if err.Context["detail"] != "could not write file" {
+		t.Errorf("Context[detail] = %q, want %q", err.Context["detail"], "could not write file")
+	}
+
+	if err.Cause != cause {
+		t.Errorf("Cause = %v, want %v", err.Cause, cause)
+	}
+
+	if !errors.Is(err, cerrors.RegistryError) {
+		t.Error("RegistryError sentinel should match")
+	}
+}
+
+func TestNewInternalError(t *testing.T) {
+	cause := fmt.Errorf("unexpected nil pointer")
+	err := cerrors.NewInternalError("app not initialized", cause)
+
+	if err.Code != cerrors.ErrInternalError {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrInternalError)
+	}
+
+	if err.Context["detail"] != "app not initialized" {
+		t.Errorf("Context[detail] = %q, want %q", err.Context["detail"], "app not initialized")
+	}
+
+	if err.Cause != cause {
+		t.Errorf("Cause = %v, want %v", err.Cause, cause)
+	}
+
+	if !errors.Is(err, cerrors.InternalError) {
+		t.Error("InternalError sentinel should match")
+	}
+}
+
+func TestNewRepoInUse(t *testing.T) {
+	workspaces := []string{"ws1", "ws2"}
+	err := cerrors.NewRepoInUse("my-repo", workspaces)
+
+	if err.Code != cerrors.ErrRepoInUse {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrRepoInUse)
+	}
+
+	if err.Context["repo_name"] != "my-repo" {
+		t.Errorf("Context[repo_name] = %q, want %q", err.Context["repo_name"], "my-repo")
+	}
+
+	if !errors.Is(err, cerrors.RepoInUse) {
+		t.Error("RepoInUse sentinel should match")
+	}
+}
+
+func TestNewWorkspaceMetadataError(t *testing.T) {
+	cause := fmt.Errorf("invalid json")
+	err := cerrors.NewWorkspaceMetadataError("my-ws", "read", cause)
+
+	if err.Code != cerrors.ErrWorkspaceMetadata {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrWorkspaceMetadata)
+	}
+
+	if err.Context["workspace_id"] != "my-ws" {
+		t.Errorf("Context[workspace_id] = %q, want %q", err.Context["workspace_id"], "my-ws")
+	}
+
+	if err.Context["operation"] != "read" {
+		t.Errorf("Context[operation] = %q, want %q", err.Context["operation"], "read")
+	}
+
+	if err.Cause != cause {
+		t.Errorf("Cause = %v, want %v", err.Cause, cause)
+	}
+
+	if !errors.Is(err, cerrors.WorkspaceMetadata) {
+		t.Error("WorkspaceMetadata sentinel should match")
+	}
+}
+
+func TestNewNoReposConfigured(t *testing.T) {
+	err := cerrors.NewNoReposConfigured("empty-ws")
+
+	if err.Code != cerrors.ErrNoReposConfigured {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrNoReposConfigured)
+	}
+
+	if err.Context["workspace_id"] != "empty-ws" {
+		t.Errorf("Context[workspace_id] = %q, want %q", err.Context["workspace_id"], "empty-ws")
+	}
+
+	if !errors.Is(err, cerrors.NoReposConfigured) {
+		t.Error("NoReposConfigured sentinel should match")
+	}
+}
+
+func TestNewMissingBranchConfig(t *testing.T) {
+	err := cerrors.NewMissingBranchConfig("my-ws")
+
+	if err.Code != cerrors.ErrMissingBranchConfig {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrMissingBranchConfig)
+	}
+
+	if err.Context["workspace_id"] != "my-ws" {
+		t.Errorf("Context[workspace_id] = %q, want %q", err.Context["workspace_id"], "my-ws")
+	}
+
+	if !errors.Is(err, cerrors.MissingBranchConfig) {
+		t.Error("MissingBranchConfig sentinel should match")
+	}
+}

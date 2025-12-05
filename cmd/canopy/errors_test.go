@@ -64,6 +64,61 @@ func TestExitCodeForError(t *testing.T) {
 			err:      fmt.Errorf("outer: %w", cerrors.NewWorkspaceNotFound("test-ws")),
 			expected: ExitNotFound,
 		},
+		{
+			name:     "not in workspace",
+			err:      cerrors.NewNotInWorkspace("/some/path"),
+			expected: ExitNotInWorkspace,
+		},
+		{
+			name:     "invalid argument",
+			err:      cerrors.NewInvalidArgument("branch", "required"),
+			expected: ExitInvalidArgument,
+		},
+		{
+			name:     "io failed",
+			err:      cerrors.NewIOFailed("read", nil),
+			expected: ExitIOError,
+		},
+		{
+			name:     "registry error",
+			err:      cerrors.NewRegistryError("save", "failed", nil),
+			expected: ExitRegistryError,
+		},
+		{
+			name:     "command failed",
+			err:      cerrors.NewCommandFailed("git push", nil),
+			expected: ExitCommandFailed,
+		},
+		{
+			name:     "internal error",
+			err:      cerrors.NewInternalError("unexpected", nil),
+			expected: ExitInternalError,
+		},
+		{
+			name:     "repo in use",
+			err:      cerrors.NewRepoInUse("repo", []string{"ws1"}),
+			expected: ExitRepoInUse,
+		},
+		{
+			name:     "workspace metadata error",
+			err:      cerrors.NewWorkspaceMetadataError("ws", "read", nil),
+			expected: ExitMetadataError,
+		},
+		{
+			name:     "no repos configured",
+			err:      cerrors.NewNoReposConfigured("ws"),
+			expected: ExitNoReposConfig,
+		},
+		{
+			name:     "missing branch config",
+			err:      cerrors.NewMissingBranchConfig("ws"),
+			expected: ExitMissingBranch,
+		},
+		{
+			name:     "operation cancelled",
+			err:      cerrors.NewOperationCancelled("create"),
+			expected: ExitOperationAborted,
+		},
 	}
 
 	for _, tt := range tests {

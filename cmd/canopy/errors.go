@@ -13,14 +13,25 @@ type ExitCode int
 
 // Exit codes for different error types.
 const (
-	ExitSuccess         ExitCode = 0
-	ExitGeneralError    ExitCode = 1
-	ExitNotFound        ExitCode = 2
-	ExitAlreadyExists   ExitCode = 3
-	ExitDirtyWorkspace  ExitCode = 4
-	ExitConfigError     ExitCode = 5
-	ExitGitError        ExitCode = 6
-	ExitUnknownResource ExitCode = 7
+	ExitSuccess          ExitCode = 0
+	ExitGeneralError     ExitCode = 1
+	ExitNotFound         ExitCode = 2
+	ExitAlreadyExists    ExitCode = 3
+	ExitDirtyWorkspace   ExitCode = 4
+	ExitConfigError      ExitCode = 5
+	ExitGitError         ExitCode = 6
+	ExitUnknownResource  ExitCode = 7
+	ExitNotInWorkspace   ExitCode = 8
+	ExitInvalidArgument  ExitCode = 9
+	ExitIOError          ExitCode = 10
+	ExitRegistryError    ExitCode = 11
+	ExitCommandFailed    ExitCode = 12
+	ExitInternalError    ExitCode = 13
+	ExitRepoInUse        ExitCode = 14
+	ExitMetadataError    ExitCode = 15
+	ExitNoReposConfig    ExitCode = 16
+	ExitMissingBranch    ExitCode = 17
+	ExitOperationAborted ExitCode = 18
 )
 
 // CLIError represents an error with additional CLI context.
@@ -30,6 +41,29 @@ type CLIError struct {
 	Details string `json:"details,omitempty"`
 }
 
+// errorCodeToExitCode maps error codes to CLI exit codes.
+var errorCodeToExitCode = map[cerrors.ErrorCode]ExitCode{
+	cerrors.ErrWorkspaceNotFound:   ExitNotFound,
+	cerrors.ErrRepoNotFound:        ExitNotFound,
+	cerrors.ErrWorkspaceExists:     ExitAlreadyExists,
+	cerrors.ErrRepoAlreadyExists:   ExitAlreadyExists,
+	cerrors.ErrRepoNotClean:        ExitDirtyWorkspace,
+	cerrors.ErrConfigInvalid:       ExitConfigError,
+	cerrors.ErrGitOperationFailed:  ExitGitError,
+	cerrors.ErrUnknownRepository:   ExitUnknownResource,
+	cerrors.ErrNotInWorkspace:      ExitNotInWorkspace,
+	cerrors.ErrInvalidArgument:     ExitInvalidArgument,
+	cerrors.ErrIOFailed:            ExitIOError,
+	cerrors.ErrRegistryError:       ExitRegistryError,
+	cerrors.ErrCommandFailed:       ExitCommandFailed,
+	cerrors.ErrInternalError:       ExitInternalError,
+	cerrors.ErrRepoInUse:           ExitRepoInUse,
+	cerrors.ErrWorkspaceMetadata:   ExitMetadataError,
+	cerrors.ErrNoReposConfigured:   ExitNoReposConfig,
+	cerrors.ErrMissingBranchConfig: ExitMissingBranch,
+	cerrors.ErrOperationCancelled:  ExitOperationAborted,
+}
+
 // exitCodeForError returns the appropriate exit code for an error.
 func exitCodeForError(err error) ExitCode {
 	var canopyErr *cerrors.CanopyError
@@ -37,22 +71,11 @@ func exitCodeForError(err error) ExitCode {
 		return ExitGeneralError
 	}
 
-	switch canopyErr.Code {
-	case cerrors.ErrWorkspaceNotFound, cerrors.ErrRepoNotFound:
-		return ExitNotFound
-	case cerrors.ErrWorkspaceExists, cerrors.ErrRepoAlreadyExists:
-		return ExitAlreadyExists
-	case cerrors.ErrRepoNotClean:
-		return ExitDirtyWorkspace
-	case cerrors.ErrConfigInvalid:
-		return ExitConfigError
-	case cerrors.ErrGitOperationFailed:
-		return ExitGitError
-	case cerrors.ErrUnknownRepository:
-		return ExitUnknownResource
-	default:
-		return ExitGeneralError
+	if code, ok := errorCodeToExitCode[canopyErr.Code]; ok {
+		return code
 	}
+
+	return ExitGeneralError
 }
 
 // userFriendlyMessage returns a user-friendly message for an error.

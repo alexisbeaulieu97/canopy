@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
+
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
 
 var checkCmd = &cobra.Command{
@@ -27,7 +27,7 @@ var checkCmd = &cobra.Command{
 
 		if err := cfg.Validate(); err != nil {
 			app.Logger.Errorf("Configuration is invalid: %v", err)
-			return fmt.Errorf("configuration is invalid: %w", err)
+			return cerrors.Wrap(cerrors.ErrConfigInvalid, "configuration is invalid", err)
 		}
 
 		app.Logger.Info("Configuration is valid.")
