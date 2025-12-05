@@ -37,7 +37,7 @@ var repoListCmd = &cobra.Command{
 		}
 
 		for _, repo := range repos {
-			path := filepath.Join(cfg.ProjectsRoot, repo)
+			path := filepath.Join(cfg.GetProjectsRoot(), repo)
 			fmt.Printf("%s (%s)\n", repo, path) //nolint:forbidigo // user-facing CLI output
 		}
 		return nil
@@ -76,7 +76,7 @@ var repoAddCmd = &cobra.Command{
 			}
 
 			entry := config.RegistryEntry{URL: url}
-			realAlias, err := registerWithPrompt(cmd, app.Config.Registry, alias, entry)
+			realAlias, err := registerWithPrompt(cmd, app.Config.GetRegistry(), alias, entry)
 			if err != nil {
 				if rmErr := svc.RemoveCanonicalRepo(name, true); rmErr != nil {
 					return fmt.Errorf("registration failed: %v (rollback failed: %v)", err, rmErr)
@@ -164,15 +164,15 @@ var repoRegisterCmd = &cobra.Command{
 			Tags:          parseTags(tagsRaw),
 		}
 
-		if err := app.Config.Registry.Register(alias, entry, force); err != nil {
+		if err := app.Config.GetRegistry().Register(alias, entry, force); err != nil {
 			return err
 		}
-		if err := app.Config.Registry.Save(); err != nil {
-			if rollbackErr := app.Config.Registry.Unregister(alias); rollbackErr != nil {
+		if err := app.Config.GetRegistry().Save(); err != nil {
+			if rollbackErr := app.Config.GetRegistry().Unregister(alias); rollbackErr != nil {
 				return fmt.Errorf("failed to save registry: %v (rollback failed: %v)", err, rollbackErr)
 			}
 
-			if rollbackSaveErr := app.Config.Registry.Save(); rollbackSaveErr != nil {
+			if rollbackSaveErr := app.Config.GetRegistry().Save(); rollbackSaveErr != nil {
 				return fmt.Errorf("failed to save registry: %v (rollback save failed: %v)", err, rollbackSaveErr)
 			}
 
@@ -196,20 +196,20 @@ var repoUnregisterCmd = &cobra.Command{
 			return err
 		}
 
-		entry, exists := app.Config.Registry.Resolve(alias)
+		entry, exists := app.Config.GetRegistry().Resolve(alias)
 		if !exists {
 			return fmt.Errorf("alias '%s' not found", alias)
 		}
 
-		if err := app.Config.Registry.Unregister(alias); err != nil {
+		if err := app.Config.GetRegistry().Unregister(alias); err != nil {
 			return err
 		}
-		if err := app.Config.Registry.Save(); err != nil {
-			if restoreErr := app.Config.Registry.Register(alias, entry, true); restoreErr != nil {
+		if err := app.Config.GetRegistry().Save(); err != nil {
+			if restoreErr := app.Config.GetRegistry().Register(alias, entry, true); restoreErr != nil {
 				return fmt.Errorf("failed to save registry: %v (restore failed: %v)", err, restoreErr)
 			}
 
-			if restoreSaveErr := app.Config.Registry.Save(); restoreSaveErr != nil {
+			if restoreSaveErr := app.Config.GetRegistry().Save(); restoreSaveErr != nil {
 				return fmt.Errorf("failed to save registry: %v (restore save failed: %v)", err, restoreSaveErr)
 			}
 
@@ -236,7 +236,7 @@ var repoListRegistryCmd = &cobra.Command{
 		}
 
 		tagsRaw, _ := cmd.Flags().GetString("tags")
-		entries := app.Config.Registry.List(parseTags(tagsRaw))
+		entries := app.Config.GetRegistry().List(parseTags(tagsRaw))
 
 		fmt.Printf("%s%-16s%s %-45s %-20s\n", colorGreen, "ALIAS", colorReset, "URL", "TAGS") //nolint:forbidigo // user-facing CLI output
 		for _, entry := range entries {
@@ -259,7 +259,7 @@ var repoShowCmd = &cobra.Command{
 			return err
 		}
 
-		entry, ok := app.Config.Registry.Resolve(alias)
+		entry, ok := app.Config.GetRegistry().Resolve(alias)
 		if !ok {
 			return fmt.Errorf("alias '%s' not found", alias)
 		}
@@ -277,7 +277,7 @@ var repoShowCmd = &cobra.Command{
 		}
 
 		repoName := repoNameFromURL(entry.URL)
-		canonicalPath := filepath.Join(app.Config.ProjectsRoot, repoName)
+		canonicalPath := filepath.Join(app.Config.GetProjectsRoot(), repoName)
 		if _, err := os.Stat(canonicalPath); err == nil {
 			fmt.Printf("Canonical:    %s (present)\n", canonicalPath) //nolint:forbidigo // user-facing CLI output
 		} else {
@@ -301,7 +301,7 @@ var repoPathCmd = &cobra.Command{
 		}
 
 		// Check if repo exists
-		path := filepath.Join(app.Config.ProjectsRoot, name)
+		path := filepath.Join(app.Config.GetProjectsRoot(), name)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			return fmt.Errorf("repository %s not found", name)
 		}

@@ -23,6 +23,9 @@ type ConfigProvider interface {
 	// GetCloseDefault returns the default close behavior.
 	GetCloseDefault() string
 
+	// GetWorkspaceNaming returns the workspace naming pattern.
+	GetWorkspaceNaming() string
+
 	// GetStaleThresholdDays returns the stale threshold in days.
 	GetStaleThresholdDays() int
 

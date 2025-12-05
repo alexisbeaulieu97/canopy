@@ -189,6 +189,11 @@ func (c *Config) GetCloseDefault() string {
 	return c.CloseDefault
 }
 
+// GetWorkspaceNaming returns the workspace naming pattern.
+func (c *Config) GetWorkspaceNaming() string {
+	return c.WorkspaceNaming
+}
+
 // GetStaleThresholdDays returns the stale threshold in days.
 func (c *Config) GetStaleThresholdDays() int {
 	return c.StaleThresholdDays
