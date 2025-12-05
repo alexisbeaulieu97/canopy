@@ -93,3 +93,21 @@ func (o OrphanedWorktree) ReasonDescription() string {
 		return string(o.Reason)
 	}
 }
+
+// WorkspaceClosePreview describes what would happen when closing a workspace.
+type WorkspaceClosePreview struct {
+	WorkspaceID    string   `json:"workspace_id"`
+	WorkspacePath  string   `json:"workspace_path"`
+	BranchName     string   `json:"branch_name"`
+	ReposAffected  []string `json:"repos_affected"`
+	DiskUsageBytes int64    `json:"disk_usage_bytes"`
+	KeepMetadata   bool     `json:"keep_metadata"`
+}
+
+// RepoRemovePreview describes what would happen when removing a canonical repo.
+type RepoRemovePreview struct {
+	RepoName           string   `json:"repo_name"`
+	RepoPath           string   `json:"repo_path"`
+	DiskUsageBytes     int64    `json:"disk_usage_bytes"`
+	WorkspacesAffected []string `json:"workspaces_affected"`
+}

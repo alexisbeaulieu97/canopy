@@ -173,6 +173,8 @@ var (
 			force, _ := cmd.Flags().GetBool("force")
 			keepFlag, _ := cmd.Flags().GetBool("keep")
 			deleteFlag, _ := cmd.Flags().GetBool("delete")
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			jsonOutput, _ := cmd.Flags().GetBool("json")
 
 			if keepFlag && deleteFlag {
 				return cerrors.NewInvalidArgument("flags", "cannot use --keep and --delete together")
@@ -186,6 +188,32 @@ var (
 			service := app.Service
 			configDefaultArchive := strings.EqualFold(app.Config.GetCloseDefault(), "archive")
 			interactive := isInteractiveTerminal()
+
+			// Determine keepMetadata based on flags and config
+			keepMetadata := configDefaultArchive
+			if keepFlag {
+				keepMetadata = true
+			} else if deleteFlag {
+				keepMetadata = false
+			}
+
+			// Handle dry-run mode
+			if dryRun {
+				preview, err := service.PreviewCloseWorkspace(id, keepMetadata)
+				if err != nil {
+					return err
+				}
+
+				if jsonOutput {
+					return output.PrintJSON(map[string]interface{}{
+						"dry_run": true,
+						"preview": preview,
+					})
+				}
+
+				printWorkspaceClosePreview(preview)
+				return nil
+			}
 
 			if keepFlag {
 				return keepAndPrint(service, id, force)
@@ -474,6 +502,44 @@ func printGitResults(results []workspaces.RepoGitResult) {
 	}
 }
 
+func printWorkspaceClosePreview(preview *domain.WorkspaceClosePreview) {
+	fmt.Printf("\033[33m[DRY RUN]\033[0m Would close workspace: %s\n", preview.WorkspaceID) //nolint:forbidigo // user-facing CLI output
+
+	action := "Delete"
+	if preview.KeepMetadata {
+		action = "Archive (keep metadata)"
+	}
+	fmt.Printf("  Action: %s\n", action) //nolint:forbidigo // user-facing CLI output
+	fmt.Printf("  Remove directory: %s\n", preview.WorkspacePath) //nolint:forbidigo // user-facing CLI output
+
+	if len(preview.ReposAffected) > 0 {
+		fmt.Printf("  Repos affected: %s\n", strings.Join(preview.ReposAffected, ", ")) //nolint:forbidigo // user-facing CLI output
+	}
+
+	if preview.DiskUsageBytes > 0 {
+		fmt.Printf("  Total size: %s\n", formatBytes(preview.DiskUsageBytes)) //nolint:forbidigo // user-facing CLI output
+	}
+}
+
+func formatBytes(bytes int64) string {
+	const (
+		kb = 1024
+		mb = kb * 1024
+		gb = mb * 1024
+	)
+
+	switch {
+	case bytes >= gb:
+		return fmt.Sprintf("%.2f GB", float64(bytes)/float64(gb))
+	case bytes >= mb:
+		return fmt.Sprintf("%.2f MB", float64(bytes)/float64(mb))
+	case bytes >= kb:
+		return fmt.Sprintf("%.2f KB", float64(bytes)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
 func keepAndPrint(service *workspaces.Service, id string, force bool) error {
 	archived, err := service.CloseWorkspaceKeepMetadata(id, force)
 	if err != nil {
@@ -551,6 +617,8 @@ func init() {
 	workspaceCloseCmd.Flags().Bool("force", false, "Force close even if there are uncommitted changes")
 	workspaceCloseCmd.Flags().Bool("keep", false, "Keep metadata (close without deleting)")
 	workspaceCloseCmd.Flags().Bool("delete", false, "Delete without keeping metadata")
+	workspaceCloseCmd.Flags().Bool("dry-run", false, "Preview what would be deleted without actually deleting")
+	workspaceCloseCmd.Flags().Bool("json", false, "Output in JSON format (use with --dry-run)")
 	workspaceReopenCmd.Flags().Bool("force", false, "Overwrite existing workspace if one already exists")
 
 	workspaceBranchCmd.Flags().Bool("create", false, "Create branch if it doesn't exist")
