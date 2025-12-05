@@ -26,6 +26,7 @@ type Model struct {
 	detailView         bool
 	selectedWS         *domain.Workspace
 	wsStatus           *domain.WorkspaceStatus
+	wsOrphans          []domain.OrphanedWorktree
 	confirming         bool
 	actionToConfirm    string // "close" | "push"
 	confirmingID       string

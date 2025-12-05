@@ -16,6 +16,19 @@ func (m Model) loadWorkspaces() tea.Msg {
 		return loadWorkspacesErrMsg{err: err}
 	}
 
+	// Detect orphans for all workspaces
+	allOrphans, orphanErr := m.svc.DetectOrphans()
+	orphanCheckFailed := orphanErr != nil
+
+	// Count orphans per workspace
+	orphanCounts := make(map[string]int)
+
+	if orphanErr == nil {
+		for _, orphan := range allOrphans {
+			orphanCounts[orphan.WorkspaceID]++
+		}
+	}
+
 	items := make([]workspaceItem, 0, len(workspaces))
 
 	var totalUsage int64
@@ -26,6 +39,8 @@ func (m Model) loadWorkspaces() tea.Msg {
 			summary: workspaceSummary{
 				repoCount: len(w.Repos),
 			},
+			orphanCount:       orphanCounts[w.ID],
+			orphanCheckFailed: orphanCheckFailed,
 		})
 		totalUsage += w.DiskUsageBytes
 	}
@@ -61,9 +76,12 @@ func (m Model) loadWorkspaceDetails(id string) tea.Cmd {
 			return workspaceDetailsErrMsg{id: id, err: err}
 		}
 
+		// Get orphans for this workspace
+		orphans, _ := m.svc.DetectOrphansForWorkspace(id)
+
 		wsCopy := wsItem.workspace
 
-		return workspaceDetailsMsg{workspace: &wsCopy, status: status}
+		return workspaceDetailsMsg{workspace: &wsCopy, status: status, orphans: orphans}
 	}
 }
 
