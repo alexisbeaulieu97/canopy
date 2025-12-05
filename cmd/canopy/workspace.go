@@ -503,13 +503,18 @@ func printGitResults(results []workspaces.RepoGitResult) {
 }
 
 func printWorkspaceClosePreview(preview *domain.WorkspaceClosePreview) {
+	if preview == nil {
+		return
+	}
+
 	fmt.Printf("\033[33m[DRY RUN]\033[0m Would close workspace: %s\n", preview.WorkspaceID) //nolint:forbidigo // user-facing CLI output
 
 	action := "Delete"
 	if preview.KeepMetadata {
 		action = "Archive (keep metadata)"
 	}
-	fmt.Printf("  Action: %s\n", action) //nolint:forbidigo // user-facing CLI output
+
+	fmt.Printf("  Action: %s\n", action)                          //nolint:forbidigo // user-facing CLI output
 	fmt.Printf("  Remove directory: %s\n", preview.WorkspacePath) //nolint:forbidigo // user-facing CLI output
 
 	if len(preview.ReposAffected) > 0 {
@@ -517,26 +522,7 @@ func printWorkspaceClosePreview(preview *domain.WorkspaceClosePreview) {
 	}
 
 	if preview.DiskUsageBytes > 0 {
-		fmt.Printf("  Total size: %s\n", formatBytes(preview.DiskUsageBytes)) //nolint:forbidigo // user-facing CLI output
-	}
-}
-
-func formatBytes(bytes int64) string {
-	const (
-		kb = 1024
-		mb = kb * 1024
-		gb = mb * 1024
-	)
-
-	switch {
-	case bytes >= gb:
-		return fmt.Sprintf("%.2f GB", float64(bytes)/float64(gb))
-	case bytes >= mb:
-		return fmt.Sprintf("%.2f MB", float64(bytes)/float64(mb))
-	case bytes >= kb:
-		return fmt.Sprintf("%.2f KB", float64(bytes)/float64(kb))
-	default:
-		return fmt.Sprintf("%d B", bytes)
+		fmt.Printf("  Total size: %s\n", output.FormatBytes(preview.DiskUsageBytes)) //nolint:forbidigo // user-facing CLI output
 	}
 }
 

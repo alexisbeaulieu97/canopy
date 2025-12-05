@@ -283,7 +283,7 @@ func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (
 
 	wsPath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
 
-	var repoNames []string
+	repoNames := []string{}
 	for _, r := range targetWorkspace.Repos {
 		repoNames = append(repoNames, r.Name)
 	}
@@ -530,7 +530,8 @@ func (s *Service) PreviewRemoveCanonicalRepo(name string) (*domain.RepoRemovePre
 		return nil, cerrors.NewIOFailed("list workspaces", err)
 	}
 
-	var usedBy []string
+	usedBy := []string{}
+
 	for _, ws := range workspaces {
 		for _, r := range ws.Repos {
 			if r.Name == name {

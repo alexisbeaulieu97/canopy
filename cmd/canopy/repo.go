@@ -259,8 +259,9 @@ var repoUnregisterCmd = &cobra.Command{
 }
 
 const (
-	colorGreen = "\033[32m"
-	colorReset = "\033[0m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorReset  = "\033[0m"
 )
 
 var repoListRegistryCmd = &cobra.Command{
@@ -469,34 +470,19 @@ func promptAlias(cmd *cobra.Command, alias, suggested string) (string, error) {
 }
 
 func printRepoRemovePreview(preview *domain.RepoRemovePreview) {
-	fmt.Printf("\033[33m[DRY RUN]\033[0m Would remove repository: %s\n", preview.RepoName) //nolint:forbidigo // user-facing CLI output
-	fmt.Printf("  Remove directory: %s\n", preview.RepoPath)                               //nolint:forbidigo // user-facing CLI output
+	if preview == nil {
+		return
+	}
+
+	fmt.Printf("%s[DRY RUN]%s Would remove repository: %s\n", colorYellow, colorReset, preview.RepoName) //nolint:forbidigo // user-facing CLI output
+	fmt.Printf("  Remove directory: %s\n", preview.RepoPath)                                             //nolint:forbidigo // user-facing CLI output
 
 	if len(preview.WorkspacesAffected) > 0 {
 		fmt.Printf("  Used by workspaces: %s (will become orphaned)\n", strings.Join(preview.WorkspacesAffected, ", ")) //nolint:forbidigo // user-facing CLI output
 	}
 
 	if preview.DiskUsageBytes > 0 {
-		fmt.Printf("  Size: %s\n", formatRepoBytes(preview.DiskUsageBytes)) //nolint:forbidigo // user-facing CLI output
-	}
-}
-
-func formatRepoBytes(bytes int64) string {
-	const (
-		kb = 1024
-		mb = kb * 1024
-		gb = mb * 1024
-	)
-
-	switch {
-	case bytes >= gb:
-		return fmt.Sprintf("%.2f GB", float64(bytes)/float64(gb))
-	case bytes >= mb:
-		return fmt.Sprintf("%.2f MB", float64(bytes)/float64(mb))
-	case bytes >= kb:
-		return fmt.Sprintf("%.2f KB", float64(bytes)/float64(kb))
-	default:
-		return fmt.Sprintf("%d B", bytes)
+		fmt.Printf("  Size: %s\n", output.FormatBytes(preview.DiskUsageBytes)) //nolint:forbidigo // user-facing CLI output
 	}
 }
 

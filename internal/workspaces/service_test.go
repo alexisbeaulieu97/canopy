@@ -689,8 +689,8 @@ func TestPreviewRemoveCanonicalRepo(t *testing.T) {
 	repoPath := filepath.Join(deps.projectsRoot, "test-repo")
 	runGit(t, "", "clone", "--bare", sourceRepo, repoPath)
 
-	// Create a workspace that uses this repo
-	if _, err := deps.svc.CreateWorkspace("WS-USING-REPO", "", []domain.Repo{{Name: "test-repo", URL: "https://example.com/test-repo.git"}}); err != nil {
+	// Create a workspace that uses this repo (using file:// URL for local repo)
+	if _, err := deps.svc.CreateWorkspace("WS-USING-REPO", "", []domain.Repo{{Name: "test-repo", URL: "file://" + sourceRepo}}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
