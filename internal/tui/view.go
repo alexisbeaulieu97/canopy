@@ -176,6 +176,12 @@ func (m Model) renderDetailView() string {
 	b.WriteString(m.renderDetailMetadata())
 	b.WriteString("\n\n")
 
+	// Orphans section (if any)
+	if len(m.wsOrphans) > 0 {
+		b.WriteString(m.renderDetailOrphans())
+		b.WriteString("\n\n")
+	}
+
 	// Repos section
 	b.WriteString(m.renderDetailRepos())
 	b.WriteString("\n\n")
@@ -267,4 +273,24 @@ func (m Model) renderRepoLine(repo domain.RepoStatus) string {
 		repo.Name,
 		subtleTextStyle.Render(fmt.Sprintf("[%s]", repo.Branch)),
 		statusStr)
+}
+
+// renderDetailOrphans renders the orphaned worktrees section in the detail view.
+func (m Model) renderDetailOrphans() string {
+	var b strings.Builder
+
+	b.WriteString(statusWarnStyle.Render("⚠ Orphaned Worktrees"))
+	b.WriteString("\n")
+	b.WriteString(strings.Repeat("─", 50))
+	b.WriteString("\n")
+
+	for _, orphan := range m.wsOrphans {
+		line := fmt.Sprintf("  ⚠ %-20s %s",
+			orphan.RepoName,
+			statusWarnStyle.Render(orphan.ReasonDescription()))
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+
+	return b.String()
 }

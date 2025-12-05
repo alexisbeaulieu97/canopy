@@ -36,6 +36,7 @@ type openEditorResultMsg struct {
 type workspaceDetailsMsg struct {
 	workspace *domain.Workspace
 	status    *domain.WorkspaceStatus
+	orphans   []domain.OrphanedWorktree
 }
 
 // loadWorkspacesErrMsg is sent when loading workspaces fails.

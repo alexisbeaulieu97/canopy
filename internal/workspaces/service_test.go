@@ -412,3 +412,161 @@ func runGitOutput(t *testing.T, dir string, args ...string) string {
 
 	return strings.TrimSpace(string(output))
 }
+
+func TestDetectOrphans_MissingCanonicalRepo(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create a workspace manually with a repo reference but no canonical repo
+	ws := domain.Workspace{
+		ID:         "ORPHAN-TEST-1",
+		BranchName: "feature-branch",
+		Repos: []domain.Repo{
+			{Name: "missing-repo", URL: "https://github.com/org/missing-repo.git"},
+		},
+	}
+
+	// Save workspace metadata (without actually creating the canonical repo)
+	if err := deps.wsEngine.Create("ORPHAN-TEST-1", ws.ID, ws.BranchName, ws.Repos); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	orphans, err := deps.svc.DetectOrphans()
+	if err != nil {
+		t.Fatalf("DetectOrphans failed: %v", err)
+	}
+
+	if len(orphans) != 1 {
+		t.Fatalf("expected 1 orphan, got %d", len(orphans))
+	}
+
+	if orphans[0].WorkspaceID != "ORPHAN-TEST-1" {
+		t.Errorf("expected workspace ID ORPHAN-TEST-1, got %s", orphans[0].WorkspaceID)
+	}
+
+	if orphans[0].RepoName != "missing-repo" {
+		t.Errorf("expected repo name missing-repo, got %s", orphans[0].RepoName)
+	}
+
+	if orphans[0].Reason != domain.OrphanReasonCanonicalMissing {
+		t.Errorf("expected reason canonical_missing, got %s", orphans[0].Reason)
+	}
+}
+
+func TestDetectOrphans_MissingWorktreeDirectory(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create a bare canonical repo
+	sourceRepo := filepath.Join(deps.projectsRoot, "source-orphan")
+	createRepoWithCommit(t, sourceRepo)
+
+	canonicalPath := filepath.Join(deps.projectsRoot, "existing-repo")
+	runGit(t, "", "clone", "--bare", sourceRepo, canonicalPath)
+
+	// Create workspace metadata referencing the canonical repo
+	// but don't create the actual worktree directory
+	ws := domain.Workspace{
+		ID:         "ORPHAN-TEST-2",
+		BranchName: "main",
+		Repos: []domain.Repo{
+			{Name: "existing-repo", URL: "file://" + sourceRepo},
+		},
+	}
+
+	if err := deps.wsEngine.Create("ORPHAN-TEST-2", ws.ID, ws.BranchName, ws.Repos); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Don't create the worktree directory - it should be detected as orphaned
+
+	orphans, err := deps.svc.DetectOrphans()
+	if err != nil {
+		t.Fatalf("DetectOrphans failed: %v", err)
+	}
+
+	if len(orphans) != 1 {
+		t.Fatalf("expected 1 orphan, got %d", len(orphans))
+	}
+
+	if orphans[0].Reason != domain.OrphanReasonDirectoryMissing {
+		t.Errorf("expected reason directory_missing, got %s", orphans[0].Reason)
+	}
+}
+
+func TestDetectOrphans_NoOrphans(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create a proper workspace with canonical repo and worktree
+	sourceRepo := filepath.Join(deps.projectsRoot, "source-clean")
+	createRepoWithCommit(t, sourceRepo)
+
+	canonicalPath := filepath.Join(deps.projectsRoot, "clean-repo")
+	runGit(t, "", "clone", "--bare", sourceRepo, canonicalPath)
+
+	repoURL := "file://" + sourceRepo
+
+	if _, err := deps.svc.CreateWorkspace("CLEAN-WS", "", []domain.Repo{{Name: "clean-repo", URL: repoURL}}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	orphans, err := deps.svc.DetectOrphans()
+	if err != nil {
+		t.Fatalf("DetectOrphans failed: %v", err)
+	}
+
+	if len(orphans) != 0 {
+		t.Fatalf("expected 0 orphans, got %d: %+v", len(orphans), orphans)
+	}
+}
+
+func TestGetWorkspacesUsingRepo(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create a bare canonical repo
+	sourceRepo := filepath.Join(deps.projectsRoot, "source-shared")
+	createRepoWithCommit(t, sourceRepo)
+
+	canonicalPath := filepath.Join(deps.projectsRoot, "shared-repo")
+	runGit(t, "", "clone", "--bare", sourceRepo, canonicalPath)
+
+	repoURL := "file://" + sourceRepo
+
+	// Create two workspaces using the same repo
+	if _, err := deps.svc.CreateWorkspace("WS-1", "", []domain.Repo{{Name: "shared-repo", URL: repoURL}}); err != nil {
+		t.Fatalf("failed to create workspace WS-1: %v", err)
+	}
+
+	if _, err := deps.svc.CreateWorkspace("WS-2", "", []domain.Repo{{Name: "shared-repo", URL: repoURL}}); err != nil {
+		t.Fatalf("failed to create workspace WS-2: %v", err)
+	}
+
+	// Create a workspace that doesn't use the repo
+	if _, err := deps.svc.CreateWorkspace("WS-3", "", []domain.Repo{}); err != nil {
+		t.Fatalf("failed to create workspace WS-3: %v", err)
+	}
+
+	usedBy, err := deps.svc.GetWorkspacesUsingRepo("shared-repo")
+	if err != nil {
+		t.Fatalf("GetWorkspacesUsingRepo failed: %v", err)
+	}
+
+	if len(usedBy) != 2 {
+		t.Fatalf("expected 2 workspaces using repo, got %d", len(usedBy))
+	}
+
+	// Check that both WS-1 and WS-2 are in the list
+	foundWS1, foundWS2 := false, false
+
+	for _, wsID := range usedBy {
+		if wsID == "WS-1" {
+			foundWS1 = true
+		}
+
+		if wsID == "WS-2" {
+			foundWS2 = true
+		}
+	}
+
+	if !foundWS1 || !foundWS2 {
+		t.Errorf("expected both WS-1 and WS-2 in usedBy, got %v", usedBy)
+	}
+}

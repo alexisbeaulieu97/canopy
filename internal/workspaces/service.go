@@ -461,8 +461,18 @@ func (s *Service) RemoveCanonicalRepo(name string, force bool) error {
 		}
 	}
 
-	if len(usedBy) > 0 && !force {
-		return cerrors.NewRepoInUse(name, usedBy)
+	if len(usedBy) > 0 {
+		if !force {
+			return cerrors.NewRepoInUse(name, usedBy)
+		}
+
+		// Log warning when force removing an in-use repo
+		if s.logger != nil {
+			s.logger.Warn("Force removing repository that is in use",
+				"repo", name,
+				"workspaces", usedBy,
+				"warning", "These workspaces will have orphaned worktrees")
+		}
 	}
 
 	// 2. Remove repo
@@ -703,6 +713,115 @@ func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
 // StaleThresholdDays returns the configured stale threshold in days.
 func (s *Service) StaleThresholdDays() int {
 	return s.config.GetStaleThresholdDays()
+}
+
+// DetectOrphans finds orphaned worktrees across all workspaces.
+// An orphan is a worktree reference in workspace metadata that:
+// - References a canonical repo that no longer exists
+// - Has a worktree directory that doesn't exist
+// - Has an invalid git directory
+func (s *Service) DetectOrphans() ([]domain.OrphanedWorktree, error) {
+	workspaceMap, err := s.wsEngine.List()
+	if err != nil {
+		return nil, cerrors.NewIOFailed("list workspaces", err)
+	}
+
+	// Get list of canonical repos
+	canonicalRepos, err := s.gitEngine.List()
+	if err != nil {
+		return nil, cerrors.NewIOFailed("list canonical repos", err)
+	}
+
+	canonicalSet := make(map[string]bool)
+	for _, r := range canonicalRepos {
+		canonicalSet[r] = true
+	}
+
+	var orphans []domain.OrphanedWorktree
+
+	for dir, ws := range workspaceMap {
+		for _, repo := range ws.Repos {
+			worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dir, repo.Name)
+
+			// Check 1: Canonical repo exists
+			if !canonicalSet[repo.Name] {
+				orphans = append(orphans, domain.OrphanedWorktree{
+					WorkspaceID:  ws.ID,
+					RepoName:     repo.Name,
+					WorktreePath: worktreePath,
+					Reason:       domain.OrphanReasonCanonicalMissing,
+				})
+
+				continue
+			}
+
+			// Check 2: Worktree directory exists
+			if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+				orphans = append(orphans, domain.OrphanedWorktree{
+					WorkspaceID:  ws.ID,
+					RepoName:     repo.Name,
+					WorktreePath: worktreePath,
+					Reason:       domain.OrphanReasonDirectoryMissing,
+				})
+
+				continue
+			}
+
+			// Check 3: Valid git directory
+			gitDir := filepath.Join(worktreePath, ".git")
+			if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+				orphans = append(orphans, domain.OrphanedWorktree{
+					WorkspaceID:  ws.ID,
+					RepoName:     repo.Name,
+					WorktreePath: worktreePath,
+					Reason:       domain.OrphanReasonInvalidGitDir,
+				})
+
+				continue
+			}
+		}
+	}
+
+	return orphans, nil
+}
+
+// GetWorkspacesUsingRepo returns the IDs of workspaces that use the given canonical repo.
+func (s *Service) GetWorkspacesUsingRepo(repoName string) ([]string, error) {
+	workspaceMap, err := s.wsEngine.List()
+	if err != nil {
+		return nil, cerrors.NewIOFailed("list workspaces", err)
+	}
+
+	var usingRepo []string
+
+	for _, ws := range workspaceMap {
+		for _, repo := range ws.Repos {
+			if repo.Name == repoName {
+				usingRepo = append(usingRepo, ws.ID)
+				break
+			}
+		}
+	}
+
+	return usingRepo, nil
+}
+
+// DetectOrphansForWorkspace returns orphans for a specific workspace.
+func (s *Service) DetectOrphansForWorkspace(workspaceID string) ([]domain.OrphanedWorktree, error) {
+	allOrphans, err := s.DetectOrphans()
+	if err != nil {
+		return nil, err
+	}
+
+	var wsOrphans []domain.OrphanedWorktree
+
+	for _, orphan := range allOrphans {
+		if orphan.WorkspaceID == workspaceID {
+			wsOrphans = append(wsOrphans, orphan)
+		}
+	}
+
+	return wsOrphans, nil
 }
 
 func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, error) {

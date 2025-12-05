@@ -62,6 +62,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 	case workspaceDetailsMsg:
 		m.selectedWS = msg.workspace
 		m.wsStatus = msg.status
+		m.wsOrphans = msg.orphans
 		m.loadingDetail = false
 	case workspaceDetailsErrMsg:
 		m.err = msg.err

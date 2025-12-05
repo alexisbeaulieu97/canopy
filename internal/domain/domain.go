@@ -61,3 +61,35 @@ func (w Workspace) IsStale(thresholdDays int) bool {
 
 	return w.LastModified.Before(cutoff)
 }
+
+// OrphanReason identifies why a worktree is orphaned.
+type OrphanReason string
+
+// Orphan reasons.
+const (
+	OrphanReasonCanonicalMissing OrphanReason = "canonical_missing"
+	OrphanReasonDirectoryMissing OrphanReason = "directory_missing"
+	OrphanReasonInvalidGitDir    OrphanReason = "invalid_git_dir"
+)
+
+// OrphanedWorktree represents a worktree that references missing or invalid resources.
+type OrphanedWorktree struct {
+	WorkspaceID  string       `json:"workspace_id"`
+	RepoName     string       `json:"repo_name"`
+	WorktreePath string       `json:"worktree_path"`
+	Reason       OrphanReason `json:"reason"`
+}
+
+// ReasonDescription returns a human-readable description of the orphan reason.
+func (o OrphanedWorktree) ReasonDescription() string {
+	switch o.Reason {
+	case OrphanReasonCanonicalMissing:
+		return "canonical repo not found"
+	case OrphanReasonDirectoryMissing:
+		return "worktree directory missing"
+	case OrphanReasonInvalidGitDir:
+		return "invalid git directory"
+	default:
+		return string(o.Reason)
+	}
+}
