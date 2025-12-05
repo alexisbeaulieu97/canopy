@@ -146,7 +146,7 @@ This roadmap organizes approved OpenSpec changes into implementation phases base
 
 ## Dependency Graph
 
-```
+```text
 Phase 1 (Foundation)
 ├── refactor-inject-dependencies
 ├── refactor-config-validation  

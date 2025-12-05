@@ -170,3 +170,54 @@ func TestNewWithCustomLogger(t *testing.T) {
 		t.Fatal("expected custom logger to be used")
 	}
 }
+
+func TestNewWithOnlyLogger(t *testing.T) {
+	t.Helper()
+	t.Cleanup(viper.Reset)
+	viper.Reset()
+
+	tempHome := t.TempDir()
+	projectsRoot := filepath.Join(tempHome, "projects")
+	workspacesRoot := filepath.Join(tempHome, "workspaces")
+	closedRoot := filepath.Join(tempHome, "closed")
+
+	configDir := filepath.Join(tempHome, ".canopy")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	configContent := []byte("projects_root: \"" + projectsRoot + "\"\nworkspaces_root: \"" + workspacesRoot + "\"\nclosed_root: \"" + closedRoot + "\"\nworkspace_close_default: \"delete\"\n")
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, configContent, 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	t.Setenv("HOME", tempHome)
+
+	customLogger := logging.New(true)
+
+	// Only provide logger, config/git/storage should use defaults
+	app, err := New(false, WithLogger(customLogger))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// Logger should be the custom one
+	if app.Logger != customLogger {
+		t.Fatal("expected custom logger to be used")
+	}
+
+	// Config should be loaded from disk
+	if app.Config == nil {
+		t.Fatal("expected config to be initialized from disk")
+	}
+
+	if app.Config.GetProjectsRoot() != projectsRoot {
+		t.Fatalf("expected real config projects root, got %s", app.Config.GetProjectsRoot())
+	}
+
+	// Service should be created with default git and storage engines
+	if app.Service == nil {
+		t.Fatal("expected service to be initialized")
+	}
+}

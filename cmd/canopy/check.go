@@ -21,8 +21,8 @@ var checkCmd = &cobra.Command{
 		app.Logger.Infof("Projects Root: %s", cfg.GetProjectsRoot())
 		app.Logger.Infof("Workspaces Root: %s", cfg.GetWorkspacesRoot())
 		app.Logger.Infof("Naming Pattern: %s", cfg.GetWorkspaceNaming())
-		if cfg.GetRegistry() != nil {
-			app.Logger.Infof("Registry File: %s", cfg.GetRegistry().Path())
+		if registry := cfg.GetRegistry(); registry != nil {
+			app.Logger.Infof("Registry File: %s", registry.Path())
 		}
 
 		if err := cfg.Validate(); err != nil {

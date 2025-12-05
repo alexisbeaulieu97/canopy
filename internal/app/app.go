@@ -17,8 +17,8 @@ type App struct {
 	Service *workspaces.Service
 }
 
-// AppOption is a functional option for configuring the App.
-type AppOption func(*appOptions)
+// Option is a functional option for configuring the App.
+type Option func(*appOptions)
 
 // appOptions holds optional dependencies that can be injected.
 type appOptions struct {
@@ -29,28 +29,28 @@ type appOptions struct {
 }
 
 // WithGitOperations sets a custom GitOperations implementation.
-func WithGitOperations(g ports.GitOperations) AppOption {
+func WithGitOperations(g ports.GitOperations) Option {
 	return func(o *appOptions) {
 		o.gitOps = g
 	}
 }
 
 // WithWorkspaceStorage sets a custom WorkspaceStorage implementation.
-func WithWorkspaceStorage(s ports.WorkspaceStorage) AppOption {
+func WithWorkspaceStorage(s ports.WorkspaceStorage) Option {
 	return func(o *appOptions) {
 		o.wsStorage = s
 	}
 }
 
 // WithConfigProvider sets a custom ConfigProvider implementation.
-func WithConfigProvider(c ports.ConfigProvider) AppOption {
+func WithConfigProvider(c ports.ConfigProvider) Option {
 	return func(o *appOptions) {
 		o.configPrv = c
 	}
 }
 
 // WithLogger sets a custom Logger instance.
-func WithLogger(l *logging.Logger) AppOption {
+func WithLogger(l *logging.Logger) Option {
 	return func(o *appOptions) {
 		o.logger = l
 	}
@@ -58,7 +58,7 @@ func WithLogger(l *logging.Logger) AppOption {
 
 // New creates a new App instance with initialized dependencies.
 // Options can be provided to override default implementations for testing.
-func New(debug bool, opts ...AppOption) (*App, error) {
+func New(debug bool, opts ...Option) (*App, error) {
 	// Apply all options
 	options := &appOptions{}
 	for _, opt := range opts {
