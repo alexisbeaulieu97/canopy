@@ -108,35 +108,53 @@ func (c *Config) GetReposForWorkspace(workspaceID string) []string {
 	return nil
 }
 
-// Validate checks if the configuration is valid
+// Validate performs complete configuration validation by first checking values
+// (pure validation) and then verifying the environment (filesystem checks).
+// This is the main validation entry point that maintains backward compatibility.
 func (c *Config) Validate() error {
-	if err := validateRoot("projects_root", c.ProjectsRoot); err != nil {
+	if err := c.ValidateValues(); err != nil {
 		return err
 	}
 
-	if err := validateRoot("workspaces_root", c.WorkspacesRoot); err != nil {
+	return c.ValidateEnvironment()
+}
+
+// ValidateValues performs pure validation of configuration values without any
+// filesystem or I/O operations. This includes checking required fields, enum
+// values, regex patterns, and numeric constraints. Use this method when you
+// need fast validation that doesn't depend on the environment.
+func (c *Config) ValidateValues() error {
+	// Check required fields are non-empty
+	if err := validateRequiredField("projects_root", c.ProjectsRoot); err != nil {
 		return err
 	}
 
-	if err := validateRoot("closed_root", c.ClosedRoot); err != nil {
+	if err := validateRequiredField("workspaces_root", c.WorkspacesRoot); err != nil {
 		return err
 	}
 
+	if err := validateRequiredField("closed_root", c.ClosedRoot); err != nil {
+		return err
+	}
+
+	// Apply default for CloseDefault if empty
 	if c.CloseDefault == "" {
 		c.CloseDefault = "delete"
 	}
 
+	// Check CloseDefault is a valid enum value
 	if c.CloseDefault != "delete" && c.CloseDefault != "archive" {
 		return fmt.Errorf("workspace_close_default must be either 'delete' or 'archive', got %q", c.CloseDefault)
 	}
 
-	// Check Patterns
+	// Check regex patterns compile
 	for _, p := range c.Defaults.WorkspacePatterns {
 		if _, err := regexp.Compile(p.Pattern); err != nil {
 			return fmt.Errorf("invalid regex pattern '%s': %w", p.Pattern, err)
 		}
 	}
 
+	// Check StaleThresholdDays is non-negative
 	if c.StaleThresholdDays < 0 {
 		return fmt.Errorf("stale_threshold_days must be zero or positive, got %d", c.StaleThresholdDays)
 	}
@@ -144,11 +162,38 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func validateRoot(label, path string) error {
-	if path == "" {
+// ValidateEnvironment verifies that the configuration's filesystem paths exist
+// and are directories. This method performs I/O operations and should be called
+// after ValidateValues() when you need to ensure the environment is ready.
+func (c *Config) ValidateEnvironment() error {
+	if err := validateRootPath("projects_root", c.ProjectsRoot); err != nil {
+		return err
+	}
+
+	if err := validateRootPath("workspaces_root", c.WorkspacesRoot); err != nil {
+		return err
+	}
+
+	if err := validateRootPath("closed_root", c.ClosedRoot); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateRequiredField checks that a field value is non-empty.
+func validateRequiredField(label, value string) error {
+	if value == "" {
 		return fmt.Errorf("%s is required", label)
 	}
 
+	return nil
+}
+
+// validateRootPath checks that a path exists and is a directory.
+// If the path doesn't exist but is absolute, it's considered valid
+// (it will be created later). Non-absolute paths that don't exist are invalid.
+func validateRootPath(label, path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
