@@ -187,6 +187,7 @@ func TestNewWithOnlyLogger(t *testing.T) {
 	}
 
 	configContent := []byte("projects_root: \"" + projectsRoot + "\"\nworkspaces_root: \"" + workspacesRoot + "\"\nclosed_root: \"" + closedRoot + "\"\nworkspace_close_default: \"delete\"\n")
+
 	configPath := filepath.Join(configDir, "config.yaml")
 	if err := os.WriteFile(configPath, configContent, 0o644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
