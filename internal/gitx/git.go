@@ -1,4 +1,30 @@
 // Package gitx wraps git operations used by canopy.
+//
+// # go-git Implementation Notes
+//
+// This package uses go-git (github.com/go-git/go-git/v5) for pure Go git operations,
+// eliminating the need for exec.Command("git", ...) calls in most cases.
+//
+// ## Known Limitations
+//
+//   - Authentication: go-git relies on SSH agents for authentication. Users must have
+//     their SSH keys properly configured. HTTPS authentication with credentials is
+//     not directly supported without additional configuration.
+//
+//   - Worktree creation: go-git's Worktree.Add() does not support detached HEAD or
+//     creating a worktree for a non-existent branch. We use git CLI via [GitEngine.RunCommand]
+//     as a fallback for this operation.
+//
+//   - Sparse checkout: Not natively supported by go-git. Would require CLI fallback.
+//
+//   - Interactive operations: Rebase, merge conflict resolution, and other interactive
+//     git operations are not available in go-git.
+//
+// ## Escape Hatch
+//
+// The [GitEngine.RunCommand] method provides an escape hatch for operations that cannot
+// be performed with go-git. It executes git commands directly via exec.Command and
+// should be used sparingly.
 package gitx
 
 import (
@@ -9,6 +35,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -18,10 +45,14 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
+// errStopIteration is a sentinel error used to break out of commit iteration loops.
+var errStopIteration = errors.New("stop iteration")
+
 // Compile-time check that GitEngine implements ports.GitOperations.
 var _ ports.GitOperations = (*GitEngine)(nil)
 
-// GitEngine wraps git operations
+// GitEngine wraps git operations using go-git for pure Go implementations.
+// See package documentation for known limitations.
 type GitEngine struct {
 	ProjectsRoot string
 }
@@ -183,10 +214,13 @@ func (g *GitEngine) Fetch(name string) error {
 	}
 
 	for _, remote := range remotes {
+		// Fetch into refs/remotes/<remote>/* to properly track remote branches
+		// For bare repos used as canonical storage, we fetch directly into refs/heads/*
+		remoteName := remote.Config().Name
+		refSpec := config.RefSpec(fmt.Sprintf("+refs/heads/*:refs/remotes/%s/*", remoteName))
+
 		err := remote.Fetch(&git.FetchOptions{
-			RefSpecs: []config.RefSpec{
-				config.RefSpec("+refs/heads/*:refs/heads/*"),
-			},
+			RefSpecs: []config.RefSpec{refSpec},
 		})
 		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 			return cerrors.WrapGitError(err, "fetch")
@@ -243,12 +277,21 @@ func (g *GitEngine) Push(path, branch string) error {
 		// Set the branch to track the remote
 		cfg, err := r.Config()
 		if err == nil {
+			// Initialize Branches map if nil (can happen on freshly cloned repos)
+			if cfg.Branches == nil {
+				cfg.Branches = make(map[string]*config.Branch)
+			}
+
 			cfg.Branches[branch] = &config.Branch{
 				Name:   branch,
 				Remote: "origin",
 				Merge:  plumbing.NewBranchReferenceName(branch),
 			}
-			_ = r.SetConfig(cfg) // Best effort - don't fail if tracking setup fails
+
+			if setErr := r.SetConfig(cfg); setErr != nil {
+				// Log but don't fail - tracking is nice-to-have, push is the priority
+				log.Warn("failed to set branch tracking config", "branch", branch, "error", setErr)
+			}
 		}
 	}
 
@@ -394,7 +437,7 @@ func (g *GitEngine) countCommitsTo(r *git.Repository, from, to plumbing.Hash) (i
 	count := 0
 	err = commits.ForEach(func(c *object.Commit) error {
 		if c.Hash == to {
-			return errors.New("stop") // Stop iteration
+			return errStopIteration
 		}
 
 		count++
@@ -402,8 +445,8 @@ func (g *GitEngine) countCommitsTo(r *git.Repository, from, to plumbing.Hash) (i
 		return nil
 	})
 
-	// Ignore the "stop" error - it's our way of breaking iteration
-	if err != nil && err.Error() != "stop" {
+	// Ignore the sentinel error - it's our way of breaking iteration
+	if err != nil && !errors.Is(err, errStopIteration) {
 		return 0, cerrors.WrapGitError(err, "iterate commits")
 	}
 
@@ -411,6 +454,11 @@ func (g *GitEngine) countCommitsTo(r *git.Repository, from, to plumbing.Hash) (i
 }
 
 // RunCommand executes an arbitrary git command in the specified repository path.
+// This is an escape hatch for operations that cannot be performed with go-git,
+// such as worktree creation with specific options. Use sparingly.
+//
+// Security note: The git binary path is hardcoded and arguments are passed
+// as separate parameters to prevent shell injection.
 func (g *GitEngine) RunCommand(repoPath string, args ...string) (*ports.CommandResult, error) {
 	if len(args) == 0 {
 		return nil, cerrors.NewInvalidArgument("args", "git command requires at least one argument")
