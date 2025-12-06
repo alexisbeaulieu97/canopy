@@ -702,3 +702,274 @@ func TestPreviewRemoveCanonicalRepoNonexistent(t *testing.T) {
 		t.Fatalf("expected error when previewing nonexistent repo")
 	}
 }
+
+func TestExportWorkspace(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create a workspace with no repos (simple case)
+	if _, err := deps.svc.CreateWorkspace("EXPORT-TEST", "feature/export", []domain.Repo{}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	export, err := deps.svc.ExportWorkspace("EXPORT-TEST")
+	if err != nil {
+		t.Fatalf("ExportWorkspace failed: %v", err)
+	}
+
+	if export.Version != "1" {
+		t.Errorf("expected version 1, got %s", export.Version)
+	}
+
+	if export.ID != "EXPORT-TEST" {
+		t.Errorf("expected ID EXPORT-TEST, got %s", export.ID)
+	}
+
+	if export.Branch != "feature/export" {
+		t.Errorf("expected branch feature/export, got %s", export.Branch)
+	}
+
+	if export.ExportedAt.IsZero() {
+		t.Errorf("expected non-zero export time")
+	}
+}
+
+func TestExportWorkspaceWithRepos(t *testing.T) {
+	deps := newTestService(t)
+
+	sourceRepo := filepath.Join(deps.projectsRoot, "export-source")
+	createRepoWithCommit(t, sourceRepo)
+
+	canonicalPath := filepath.Join(deps.projectsRoot, "export-repo")
+	runGit(t, "", "clone", "--bare", sourceRepo, canonicalPath)
+
+	repoURL := "file://" + sourceRepo
+
+	if _, err := deps.svc.CreateWorkspace("EXPORT-REPOS", "", []domain.Repo{{Name: "export-repo", URL: repoURL}}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	export, err := deps.svc.ExportWorkspace("EXPORT-REPOS")
+	if err != nil {
+		t.Fatalf("ExportWorkspace failed: %v", err)
+	}
+
+	if len(export.Repos) != 1 {
+		t.Fatalf("expected 1 repo in export, got %d", len(export.Repos))
+	}
+
+	if export.Repos[0].Name != "export-repo" {
+		t.Errorf("expected repo name export-repo, got %s", export.Repos[0].Name)
+	}
+
+	if export.Repos[0].URL != repoURL {
+		t.Errorf("expected URL %s, got %s", repoURL, export.Repos[0].URL)
+	}
+}
+
+func TestExportWorkspaceNotFound(t *testing.T) {
+	deps := newTestService(t)
+
+	_, err := deps.svc.ExportWorkspace("NONEXISTENT")
+	if err == nil {
+		t.Fatalf("expected error when exporting nonexistent workspace")
+	}
+}
+
+func TestImportWorkspace(t *testing.T) {
+	deps := newTestService(t)
+
+	export := &domain.WorkspaceExport{
+		Version: "1",
+		ID:      "IMPORT-TEST",
+		Branch:  "main",
+		Repos:   []domain.RepoExport{},
+	}
+
+	dirName, err := deps.svc.ImportWorkspace(export, "", "", false)
+	if err != nil {
+		t.Fatalf("ImportWorkspace failed: %v", err)
+	}
+
+	if dirName != "IMPORT-TEST" {
+		t.Errorf("expected dirName IMPORT-TEST, got %s", dirName)
+	}
+
+	// Verify workspace was created
+	wsPath := filepath.Join(deps.workspacesRoot, dirName)
+	if _, err := os.Stat(wsPath); os.IsNotExist(err) {
+		t.Errorf("workspace directory not created at %s", wsPath)
+	}
+}
+
+func TestImportWorkspaceWithIDOverride(t *testing.T) {
+	deps := newTestService(t)
+
+	export := &domain.WorkspaceExport{
+		Version: "1",
+		ID:      "ORIGINAL-ID",
+		Branch:  "main",
+		Repos:   []domain.RepoExport{},
+	}
+
+	dirName, err := deps.svc.ImportWorkspace(export, "OVERRIDDEN-ID", "", false)
+	if err != nil {
+		t.Fatalf("ImportWorkspace failed: %v", err)
+	}
+
+	if dirName != "OVERRIDDEN-ID" {
+		t.Errorf("expected dirName OVERRIDDEN-ID, got %s", dirName)
+	}
+
+	// Original ID should not exist
+	if _, err := os.Stat(filepath.Join(deps.workspacesRoot, "ORIGINAL-ID")); !os.IsNotExist(err) {
+		t.Errorf("original ID workspace should not exist")
+	}
+
+	// Overridden ID should exist
+	if _, err := os.Stat(filepath.Join(deps.workspacesRoot, "OVERRIDDEN-ID")); os.IsNotExist(err) {
+		t.Errorf("overridden workspace should exist")
+	}
+}
+
+func TestImportWorkspaceWithBranchOverride(t *testing.T) {
+	deps := newTestService(t)
+
+	export := &domain.WorkspaceExport{
+		Version: "1",
+		ID:      "BRANCH-TEST",
+		Branch:  "original-branch",
+		Repos:   []domain.RepoExport{},
+	}
+
+	_, err := deps.svc.ImportWorkspace(export, "", "overridden-branch", false)
+	if err != nil {
+		t.Fatalf("ImportWorkspace failed: %v", err)
+	}
+
+	// Check that workspace metadata has the overridden branch
+	ws, err := deps.wsEngine.Load("BRANCH-TEST")
+	if err != nil {
+		t.Fatalf("failed to load workspace: %v", err)
+	}
+
+	if ws.BranchName != "overridden-branch" {
+		t.Errorf("expected branch overridden-branch, got %s", ws.BranchName)
+	}
+}
+
+func TestImportWorkspaceConflict(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create existing workspace
+	if _, err := deps.svc.CreateWorkspace("CONFLICT-TEST", "", []domain.Repo{}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	export := &domain.WorkspaceExport{
+		Version: "1",
+		ID:      "CONFLICT-TEST",
+		Branch:  "main",
+		Repos:   []domain.RepoExport{},
+	}
+
+	_, err := deps.svc.ImportWorkspace(export, "", "", false)
+	if err == nil {
+		t.Fatalf("expected error when importing workspace that already exists")
+	}
+}
+
+func TestImportWorkspaceForce(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create existing workspace
+	if _, err := deps.svc.CreateWorkspace("FORCE-TEST", "old-branch", []domain.Repo{}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	export := &domain.WorkspaceExport{
+		Version: "1",
+		ID:      "FORCE-TEST",
+		Branch:  "new-branch",
+		Repos:   []domain.RepoExport{},
+	}
+
+	_, err := deps.svc.ImportWorkspace(export, "", "", true)
+	if err != nil {
+		t.Fatalf("ImportWorkspace with force failed: %v", err)
+	}
+
+	// Check that the workspace was replaced
+	ws, err := deps.wsEngine.Load("FORCE-TEST")
+	if err != nil {
+		t.Fatalf("failed to load workspace: %v", err)
+	}
+
+	if ws.BranchName != "new-branch" {
+		t.Errorf("expected branch new-branch, got %s", ws.BranchName)
+	}
+}
+
+func TestImportWorkspaceInvalidVersion(t *testing.T) {
+	deps := newTestService(t)
+
+	export := &domain.WorkspaceExport{
+		Version: "999",
+		ID:      "VERSION-TEST",
+		Branch:  "main",
+		Repos:   []domain.RepoExport{},
+	}
+
+	_, err := deps.svc.ImportWorkspace(export, "", "", false)
+	if err == nil {
+		t.Fatalf("expected error when importing with unsupported version")
+	}
+}
+
+func TestImportWorkspaceNilExport(t *testing.T) {
+	deps := newTestService(t)
+
+	_, err := deps.svc.ImportWorkspace(nil, "", "", false)
+	if err == nil {
+		t.Fatalf("expected error when importing nil export")
+	}
+}
+
+func TestExportImportRoundTrip(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create a workspace
+	if _, err := deps.svc.CreateWorkspace("ROUNDTRIP", "feature/test", []domain.Repo{}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Export it
+	export, err := deps.svc.ExportWorkspace("ROUNDTRIP")
+	if err != nil {
+		t.Fatalf("ExportWorkspace failed: %v", err)
+	}
+
+	// Delete the original
+	if err := deps.svc.CloseWorkspace("ROUNDTRIP", true); err != nil {
+		t.Fatalf("CloseWorkspace failed: %v", err)
+	}
+
+	// Import it back
+	_, err = deps.svc.ImportWorkspace(export, "", "", false)
+	if err != nil {
+		t.Fatalf("ImportWorkspace failed: %v", err)
+	}
+
+	// Verify it exists
+	ws, err := deps.wsEngine.Load("ROUNDTRIP")
+	if err != nil {
+		t.Fatalf("failed to load restored workspace: %v", err)
+	}
+
+	if ws.ID != "ROUNDTRIP" {
+		t.Errorf("expected ID ROUNDTRIP, got %s", ws.ID)
+	}
+
+	if ws.BranchName != "feature/test" {
+		t.Errorf("expected branch feature/test, got %s", ws.BranchName)
+	}
+}

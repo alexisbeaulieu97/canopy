@@ -2,13 +2,16 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
@@ -473,6 +476,127 @@ Examples:
 			return nil
 		},
 	}
+
+	workspaceExportCmd = &cobra.Command{
+		Use:   "export <ID>",
+		Short: "Export a workspace definition to a portable file",
+		Long: `Export a workspace definition to YAML or JSON format.
+
+The exported file contains the workspace ID, branch, and repository URLs,
+allowing the workspace to be recreated on another machine.
+
+Examples:
+  canopy workspace export my-workspace
+  canopy workspace export my-workspace --output ws.yaml
+  canopy workspace export my-workspace --format json`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id := args[0]
+			outputFile, _ := cmd.Flags().GetString("output")
+			format, _ := cmd.Flags().GetString("format")
+			jsonOutput, _ := cmd.Flags().GetBool("json")
+
+			// --json flag is shorthand for --format json
+			if jsonOutput {
+				format = "json"
+			}
+
+			app, err := getApp(cmd)
+			if err != nil {
+				return err
+			}
+
+			export, err := app.Service.ExportWorkspace(id)
+			if err != nil {
+				return err
+			}
+
+			var data []byte
+			switch format {
+			case "json":
+				data, err = json.MarshalIndent(export, "", "  ")
+			default:
+				data, err = yaml.Marshal(export)
+			}
+			if err != nil {
+				return cerrors.NewInternalError("marshal export", err)
+			}
+
+			// Write to file or stdout
+			if outputFile != "" {
+				if err := os.WriteFile(outputFile, data, 0o644); err != nil { //nolint:gosec // user-specified output file
+					return cerrors.NewIOFailed("write export file", err)
+				}
+				fmt.Printf("Exported workspace %s to %s\n", id, outputFile) //nolint:forbidigo // user-facing CLI output
+			} else {
+				fmt.Print(string(data)) //nolint:forbidigo // user-facing CLI output
+			}
+
+			return nil
+		},
+	}
+
+	workspaceImportCmd = &cobra.Command{
+		Use:   "import <file>",
+		Short: "Import a workspace from an exported definition",
+		Long: `Import a workspace from a YAML or JSON export file.
+
+The import command recreates a workspace from a previously exported definition,
+cloning any missing repositories and creating worktrees.
+
+Examples:
+  canopy workspace import ws.yaml
+  canopy workspace import ws.yaml --id NEW-WORKSPACE
+  canopy workspace import ws.yaml --branch develop
+  canopy workspace import - < ws.yaml  # read from stdin`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			inputFile := args[0]
+			idOverride, _ := cmd.Flags().GetString("id")
+			branchOverride, _ := cmd.Flags().GetString("branch")
+			force, _ := cmd.Flags().GetBool("force")
+
+			app, err := getApp(cmd)
+			if err != nil {
+				return err
+			}
+
+			// Read input from file or stdin
+			var data []byte
+			if inputFile == "-" {
+				data, err = io.ReadAll(os.Stdin)
+			} else {
+				data, err = os.ReadFile(inputFile) //nolint:gosec // user-specified input file
+			}
+			if err != nil {
+				return cerrors.NewIOFailed("read import file", err)
+			}
+
+			// Parse as YAML (which also handles JSON)
+			var export domain.WorkspaceExport
+			if err := yaml.Unmarshal(data, &export); err != nil {
+				return cerrors.NewInvalidArgument("file", fmt.Sprintf("invalid export format: %v", err))
+			}
+
+			// Validate export
+			if export.ID == "" && idOverride == "" {
+				return cerrors.NewInvalidArgument("id", "export has no workspace ID and --id was not provided")
+			}
+
+			dirName, err := app.Service.ImportWorkspace(&export, idOverride, branchOverride, force)
+			if err != nil {
+				return err
+			}
+
+			workspaceID := export.ID
+			if idOverride != "" {
+				workspaceID = idOverride
+			}
+
+			fmt.Printf("Imported workspace %s to %s/%s\n", workspaceID, app.Config.GetWorkspacesRoot(), dirName) //nolint:forbidigo // user-facing CLI output
+			return nil
+		},
+	}
 )
 
 func printGitResults(results []workspaces.RepoGitResult) {
@@ -580,6 +704,8 @@ func init() {
 	workspaceCmd.AddCommand(workspacePathCmd)
 	workspaceCmd.AddCommand(workspaceBranchCmd)
 	workspaceCmd.AddCommand(workspaceGitCmd)
+	workspaceCmd.AddCommand(workspaceExportCmd)
+	workspaceCmd.AddCommand(workspaceImportCmd)
 
 	// Repo subcommands
 	workspaceRepoCmd := &cobra.Command{
@@ -611,4 +737,14 @@ func init() {
 
 	workspaceGitCmd.Flags().Bool("parallel", false, "Execute git command in repos concurrently")
 	workspaceGitCmd.Flags().Bool("continue-on-error", false, "Continue execution even if a repo fails")
+
+	// Export flags
+	workspaceExportCmd.Flags().StringP("output", "o", "", "Write export to file instead of stdout")
+	workspaceExportCmd.Flags().StringP("format", "f", "yaml", "Output format: yaml or json")
+	workspaceExportCmd.Flags().Bool("json", false, "Output in JSON format (shorthand for --format json)")
+
+	// Import flags
+	workspaceImportCmd.Flags().String("id", "", "Override workspace ID from export file")
+	workspaceImportCmd.Flags().String("branch", "", "Override branch name from export file")
+	workspaceImportCmd.Flags().Bool("force", false, "Overwrite existing workspace if it exists")
 }
