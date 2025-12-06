@@ -485,6 +485,10 @@ Examples:
 The exported file contains the workspace ID, branch, and repository URLs,
 allowing the workspace to be recreated on another machine.
 
+Note: Only workspace metadata is exported. Local changes, uncommitted work,
+and worktree state are NOT included. If repository URLs contain credentials,
+avoid committing export files to version control.
+
 Examples:
   canopy workspace export my-workspace
   canopy workspace export my-workspace --output ws.yaml
@@ -543,6 +547,10 @@ Examples:
 
 The import command recreates a workspace from a previously exported definition,
 cloning any missing repositories and creating worktrees.
+
+Warning: When using --force to overwrite an existing workspace, the old workspace
+is deleted before the new one is created. If the import fails (e.g., network issues
+cloning repos), the original workspace cannot be recovered.
 
 Examples:
   canopy workspace import ws.yaml

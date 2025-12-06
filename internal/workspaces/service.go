@@ -856,6 +856,11 @@ func (s *Service) ImportWorkspace(export *domain.WorkspaceExport, idOverride, br
 		branchName = branchOverride
 	}
 
+	// Default branch to workspace ID if not specified (consistent with workspace new)
+	if branchName == "" {
+		branchName = workspaceID
+	}
+
 	// Check if workspace already exists
 	if _, _, err := s.findWorkspace(workspaceID); err == nil {
 		if !force {
@@ -886,7 +891,10 @@ func (s *Service) resolveExportedRepos(exportedRepos []domain.RepoExport, worksp
 
 		var resolved bool
 
-		// Try registry alias first if available
+		// Try registry alias first if available.
+		// When alias resolves, we use the registry's canonical name (entry.Alias) rather than
+		// the exported name. This ensures consistency with the local registry and handles cases
+		// where the exporting machine used a different alias for the same repo.
 		if exported.Alias != "" && s.resolver != nil && s.resolver.registry != nil {
 			if entry, ok := s.resolver.registry.Resolve(exported.Alias); ok {
 				repo = domain.Repo{Name: entry.Alias, URL: entry.URL}

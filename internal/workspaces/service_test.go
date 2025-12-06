@@ -857,6 +857,32 @@ func TestImportWorkspaceWithBranchOverride(t *testing.T) {
 	}
 }
 
+func TestImportWorkspaceEmptyBranchDefaultsToID(t *testing.T) {
+	deps := newTestService(t)
+
+	export := &domain.WorkspaceExport{
+		Version: "1",
+		ID:      "EMPTY-BRANCH-TEST",
+		Branch:  "", // Empty branch should default to workspace ID
+		Repos:   []domain.RepoExport{},
+	}
+
+	_, err := deps.svc.ImportWorkspace(export, "", "", false)
+	if err != nil {
+		t.Fatalf("ImportWorkspace failed: %v", err)
+	}
+
+	// Check that workspace metadata has branch defaulted to workspace ID
+	ws, err := deps.wsEngine.Load("EMPTY-BRANCH-TEST")
+	if err != nil {
+		t.Fatalf("failed to load workspace: %v", err)
+	}
+
+	if ws.BranchName != "EMPTY-BRANCH-TEST" {
+		t.Errorf("expected branch to default to EMPTY-BRANCH-TEST, got %s", ws.BranchName)
+	}
+}
+
 func TestImportWorkspaceConflict(t *testing.T) {
 	deps := newTestService(t)
 
