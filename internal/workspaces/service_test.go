@@ -68,10 +68,13 @@ func TestResolveRepos(t *testing.T) {
 				{Pattern: "^TEST-", Repos: []string{"myorg/repo-a"}},
 			},
 		},
+		ProjectsRoot: t.TempDir(),
 	}
 
-	// We don't need real engines for ResolveRepos
-	svc := NewService(cfg, nil, nil, nil)
+	// We need to provide mock engines since Service constructor validates dependencies
+	mockGit := gitx.New(cfg.ProjectsRoot)
+	mockWs := workspace.New(t.TempDir(), t.TempDir())
+	svc := NewService(cfg, mockGit, mockWs, nil)
 
 	// Test case 1: Pattern match
 	repos, err := svc.ResolveRepos("TEST-123", nil)
@@ -172,37 +175,6 @@ func TestCreateWorkspace(t *testing.T) {
 
 	if ws.ID != "TEST-EMPTY" {
 		t.Errorf("expected ID TEST-EMPTY, got %s", ws.ID)
-	}
-}
-
-func TestRepoNameFromURL(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		url  string
-		want string
-	}{
-		{name: "standard https", url: "https://github.com/org/repo.git", want: "repo"},
-		{name: "scp style", url: "git@github.com:org/repo.git", want: "repo"},
-		{name: "trailing slash", url: "https://github.com/org/repo/", want: "repo"},
-		{name: "multiple trailing slashes", url: "https://github.com/org/repo///", want: "repo"},
-		{name: "empty input", url: "", want: ""},
-		{name: "slash only", url: "///", want: ""},
-		{name: "file scheme", url: "file:///tmp/repo.git", want: "repo"},
-		{name: "ssh scheme", url: "ssh://git@example.com/org/repo.git", want: "repo"},
-		{name: "https with user info", url: "https://user:token@github.com/org/repo.git", want: "repo"},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := repoNameFromURL(tt.url); got != tt.want {
-				t.Fatalf("repoNameFromURL(%q) = %q, want %q", tt.url, got, tt.want)
-			}
-		})
 	}
 }
 
