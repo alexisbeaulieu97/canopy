@@ -1,15 +1,43 @@
 // Package gitx wraps git operations used by canopy.
+//
+// # go-git Implementation Notes
+//
+// This package uses go-git (github.com/go-git/go-git/v5) for pure Go git operations,
+// eliminating the need for exec.Command("git", ...) calls in most cases.
+//
+// ## Known Limitations
+//
+//   - Authentication: go-git relies on SSH agents for authentication. Users must have
+//     their SSH keys properly configured. HTTPS authentication with credentials is
+//     not directly supported without additional configuration.
+//
+//   - Worktree creation: go-git's Worktree.Add() does not support detached HEAD or
+//     creating a worktree for a non-existent branch. We use git CLI via [GitEngine.RunCommand]
+//     as a fallback for this operation.
+//
+//   - Sparse checkout: Not natively supported by go-git. Would require CLI fallback.
+//
+//   - Interactive operations: Rebase, merge conflict resolution, and other interactive
+//     git operations are not available in go-git.
+//
+// ## Escape Hatch
+//
+// The [GitEngine.RunCommand] method provides an escape hatch for operations that cannot
+// be performed with go-git. It executes git commands directly via exec.Command and
+// should be used sparingly.
 package gitx
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
@@ -17,10 +45,14 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
+// errStopIteration is a sentinel error used to break out of commit iteration loops.
+var errStopIteration = errors.New("stop iteration")
+
 // Compile-time check that GitEngine implements ports.GitOperations.
 var _ ports.GitOperations = (*GitEngine)(nil)
 
-// GitEngine wraps git operations
+// GitEngine wraps git operations using go-git for pure Go implementations.
+// See package documentation for known limitations.
 type GitEngine struct {
 	ProjectsRoot string
 }
@@ -55,17 +87,40 @@ func (g *GitEngine) EnsureCanonical(repoURL, repoName string) (*git.Repository, 
 func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) error {
 	canonicalPath := filepath.Join(g.ProjectsRoot, repoName)
 
-	// Use git CLI for robustness
-	// 1. Clone
-	cmd := exec.Command("git", "clone", canonicalPath, worktreePath) //nolint:gosec // arguments are constructed internally
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "clone")
+	// Open the canonical (bare) repository
+	canonicalRepo, err := git.PlainOpen(canonicalPath)
+	if err != nil {
+		return cerrors.WrapGitError(err, "open canonical repo")
 	}
 
-	// 2. Checkout new branch
-	cmd = exec.Command("git", "-C", worktreePath, "checkout", "-b", branchName) //nolint:gosec // arguments are constructed internally
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "checkout -b")
+	// Clone from the canonical repo to the worktree path (non-bare)
+	repo, err := git.PlainClone(worktreePath, false, &git.CloneOptions{
+		URL: canonicalPath,
+	})
+	if err != nil {
+		return cerrors.WrapGitError(err, "clone")
+	}
+
+	// Get the worktree
+	wt, err := repo.Worktree()
+	if err != nil {
+		return cerrors.WrapGitError(err, "get worktree")
+	}
+
+	// Get the HEAD reference to use as the starting point for the new branch
+	head, err := canonicalRepo.Head()
+	if err != nil {
+		return cerrors.WrapGitError(err, "get HEAD")
+	}
+
+	// Create and checkout a new branch
+	err = wt.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(branchName),
+		Hash:   head.Hash(),
+		Create: true,
+	})
+	if err != nil {
+		return cerrors.WrapGitError(err, "checkout -b")
 	}
 
 	return nil
@@ -98,7 +153,7 @@ func (g *GitEngine) Status(path string) (bool, int, int, string, error) {
 
 	branchName := head.Name().Short()
 
-	// Check unpushed commits
+	// Check unpushed commits using pure go-git
 	unpushed := 0
 	behindRemote := 0
 
@@ -106,26 +161,11 @@ func (g *GitEngine) Status(path string) (bool, int, int, string, error) {
 	remoteRefName := plumbing.NewRemoteReferenceName(remoteName, branchName)
 
 	if ref, refErr := r.Reference(remoteRefName, true); refErr == nil {
-		// Prefer git CLI for accurate ahead/behind counts; fallback to go-git walk if it fails.
-		if ahead, behind, cliErr := g.aheadBehindCounts(path, branchName); cliErr == nil {
+		// Calculate ahead/behind using go-git rev walking
+		ahead, behind, countErr := g.countAheadBehind(r, head.Hash(), ref.Hash())
+		if countErr == nil {
 			unpushed = ahead
 			behindRemote = behind
-		} else {
-			// Calculate log between remote and HEAD
-			commits, err := r.Log(&git.LogOptions{
-				From: head.Hash(),
-			})
-			if err == nil {
-				_ = commits.ForEach(func(c *object.Commit) error {
-					if c.Hash == ref.Hash() {
-						return fmt.Errorf("found") // Stop iteration
-					}
-
-					unpushed++
-
-					return nil
-				})
-			}
 		}
 	}
 
@@ -141,10 +181,12 @@ func (g *GitEngine) Clone(url, name string) error {
 		return cerrors.NewRepoAlreadyExists(name, "projects root")
 	}
 
-	// Use git CLI for robustness
-	cmd := exec.Command("git", "clone", "--bare", url, path) //nolint:gosec // arguments are constructed internally
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "clone")
+	// Clone as bare using go-git
+	_, err := git.PlainClone(path, true, &git.CloneOptions{
+		URL: url,
+	})
+	if err != nil {
+		return cerrors.WrapGitError(err, "clone")
 	}
 
 	return nil
@@ -159,10 +201,30 @@ func (g *GitEngine) Fetch(name string) error {
 		return cerrors.NewRepoNotFound(name)
 	}
 
-	// Use git CLI
-	cmd := exec.Command("git", "-C", path, "fetch", "--all") //nolint:gosec // arguments are constructed internally
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "fetch")
+	// Open the repository
+	r, err := git.PlainOpen(path)
+	if err != nil {
+		return cerrors.WrapGitError(err, "open repo")
+	}
+
+	// Fetch from all remotes
+	remotes, err := r.Remotes()
+	if err != nil {
+		return cerrors.WrapGitError(err, "list remotes")
+	}
+
+	for _, remote := range remotes {
+		// Fetch into refs/remotes/<remote>/* to properly track remote branches
+		// For bare repos used as canonical storage, we fetch directly into refs/heads/*
+		remoteName := remote.Config().Name
+		refSpec := config.RefSpec(fmt.Sprintf("+refs/heads/*:refs/remotes/%s/*", remoteName))
+
+		err := remote.Fetch(&git.FetchOptions{
+			RefSpecs: []config.RefSpec{refSpec},
+		})
+		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return cerrors.WrapGitError(err, "fetch")
+		}
 	}
 
 	return nil
@@ -170,10 +232,24 @@ func (g *GitEngine) Fetch(name string) error {
 
 // Pull pulls updates for a repository worktree
 func (g *GitEngine) Pull(path string) error {
-	// Use git CLI
-	cmd := exec.Command("git", "-C", path, "pull") //nolint:gosec // arguments are constructed internally
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "pull")
+	// Open the repository
+	r, err := git.PlainOpen(path)
+	if err != nil {
+		return cerrors.WrapGitError(err, "open repo")
+	}
+
+	// Get the worktree
+	w, err := r.Worktree()
+	if err != nil {
+		return cerrors.WrapGitError(err, "get worktree")
+	}
+
+	// Pull changes
+	err = w.Pull(&git.PullOptions{
+		RemoteName: "origin",
+	})
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return cerrors.WrapGitError(err, "pull")
 	}
 
 	return nil
@@ -181,14 +257,48 @@ func (g *GitEngine) Pull(path string) error {
 
 // Push pushes the current branch to its upstream.
 func (g *GitEngine) Push(path, branch string) error {
-	args := []string{"-C", path, "push"}
-	if branch != "" {
-		args = append(args, "--set-upstream", "origin", branch)
+	// Open the repository
+	r, err := git.PlainOpen(path)
+	if err != nil {
+		return cerrors.WrapGitError(err, "open repo")
 	}
 
-	cmd := exec.Command("git", args...) //nolint:gosec // arguments are constructed internally
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return cerrors.WrapGitError(fmt.Errorf("%s: %w", strings.TrimSpace(string(output)), err), "push")
+	// Build push options
+	pushOpts := &git.PushOptions{
+		RemoteName: "origin",
+	}
+
+	// If branch is specified, set up the refspec for pushing and tracking
+	if branch != "" {
+		// Push the branch and set upstream tracking
+		refSpec := config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", branch, branch))
+		pushOpts.RefSpecs = []config.RefSpec{refSpec}
+
+		// Set the branch to track the remote
+		cfg, err := r.Config()
+		if err == nil {
+			// Initialize Branches map if nil (can happen on freshly cloned repos)
+			if cfg.Branches == nil {
+				cfg.Branches = make(map[string]*config.Branch)
+			}
+
+			cfg.Branches[branch] = &config.Branch{
+				Name:   branch,
+				Remote: "origin",
+				Merge:  plumbing.NewBranchReferenceName(branch),
+			}
+
+			if setErr := r.SetConfig(cfg); setErr != nil {
+				// Log but don't fail - tracking is nice-to-have, push is the priority
+				log.Warn("failed to set branch tracking config", "branch", branch, "error", setErr)
+			}
+		}
+	}
+
+	// Push changes
+	err = r.Push(pushOpts)
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return cerrors.WrapGitError(err, "push")
 	}
 
 	return nil
@@ -222,59 +332,133 @@ func (g *GitEngine) List() ([]string, error) {
 
 // Checkout checks out a branch in the given path, optionally creating it
 func (g *GitEngine) Checkout(path, branchName string, create bool) error {
-	args := []string{"-C", path, "checkout"}
-	if create {
-		args = append(args, "-b")
+	// Open the repository
+	r, err := git.PlainOpen(path)
+	if err != nil {
+		return cerrors.WrapGitError(err, "open repo")
 	}
 
-	args = append(args, branchName)
+	// Get the worktree
+	w, err := r.Worktree()
+	if err != nil {
+		return cerrors.WrapGitError(err, "get worktree")
+	}
 
-	cmd := exec.Command("git", args...) //nolint:gosec // arguments are constructed internally
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return cerrors.WrapGitError(fmt.Errorf("%s: %w", string(output), err), "checkout")
+	// Build checkout options
+	checkoutOpts := &git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(branchName),
+		Create: create,
+	}
+
+	// If creating a new branch, use HEAD as the starting point
+	if create {
+		head, err := r.Head()
+		if err != nil {
+			return cerrors.WrapGitError(err, "get HEAD")
+		}
+
+		checkoutOpts.Hash = head.Hash()
+	}
+
+	// Checkout the branch
+	err = w.Checkout(checkoutOpts)
+	if err != nil {
+		return cerrors.WrapGitError(err, "checkout")
 	}
 
 	return nil
 }
 
-func (g *GitEngine) aheadBehindCounts(path, branch string) (int, int, error) {
-	if branch == "" {
-		return 0, 0, cerrors.NewInvalidArgument("branch", "branch name is required")
+// countAheadBehind calculates how many commits local is ahead and behind remote.
+// This is a pure go-git implementation of git rev-list --left-right --count.
+func (g *GitEngine) countAheadBehind(r *git.Repository, localHash, remoteHash plumbing.Hash) (int, int, error) {
+	// If both hashes are the same, we're not ahead or behind
+	if localHash == remoteHash {
+		return 0, 0, nil
 	}
 
-	cmd := exec.Command( //nolint:gosec // arguments are constructed internally
-		"git",
-		"-C", path,
-		"rev-list",
-		"--left-right",
-		"--count",
-		fmt.Sprintf("HEAD...origin/%s", branch),
-	)
-
-	output, err := cmd.CombinedOutput()
+	// Find the merge base (common ancestor)
+	localCommit, err := r.CommitObject(localHash)
 	if err != nil {
-		return 0, 0, cerrors.WrapGitError(fmt.Errorf("%s: %w", strings.TrimSpace(string(output)), err), "rev-list")
+		return 0, 0, cerrors.WrapGitError(err, "get local commit")
 	}
 
-	fields := strings.Fields(strings.TrimSpace(string(output)))
-	if len(fields) != 2 {
-		return 0, 0, cerrors.WrapGitError(fmt.Errorf("unexpected output: %s", strings.TrimSpace(string(output))), "rev-list")
-	}
-
-	ahead, err := strconv.Atoi(fields[0])
+	remoteCommit, err := r.CommitObject(remoteHash)
 	if err != nil {
-		return 0, 0, cerrors.NewInternalError("failed to parse ahead count", err)
+		return 0, 0, cerrors.WrapGitError(err, "get remote commit")
 	}
 
-	behind, err := strconv.Atoi(fields[1])
+	// Find merge bases
+	bases, err := localCommit.MergeBase(remoteCommit)
 	if err != nil {
-		return 0, 0, cerrors.NewInternalError("failed to parse behind count", err)
+		return 0, 0, cerrors.WrapGitError(err, "find merge base")
+	}
+
+	if len(bases) == 0 {
+		// No common ancestor - count all commits
+		ahead, err := g.countCommitsTo(r, localHash, plumbing.ZeroHash)
+		if err != nil {
+			return 0, 0, err
+		}
+
+		behind, err := g.countCommitsTo(r, remoteHash, plumbing.ZeroHash)
+		if err != nil {
+			return 0, 0, err
+		}
+
+		return ahead, behind, nil
+	}
+
+	// Count commits from merge base to local (ahead)
+	ahead, err := g.countCommitsTo(r, localHash, bases[0].Hash)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// Count commits from merge base to remote (behind)
+	behind, err := g.countCommitsTo(r, remoteHash, bases[0].Hash)
+	if err != nil {
+		return 0, 0, err
 	}
 
 	return ahead, behind, nil
 }
 
+// countCommitsTo counts the number of commits from 'from' to 'to' (exclusive).
+// If 'to' is ZeroHash, counts all commits reachable from 'from'.
+func (g *GitEngine) countCommitsTo(r *git.Repository, from, to plumbing.Hash) (int, error) {
+	commits, err := r.Log(&git.LogOptions{
+		From: from,
+	})
+	if err != nil {
+		return 0, cerrors.WrapGitError(err, "get log")
+	}
+
+	count := 0
+	err = commits.ForEach(func(c *object.Commit) error {
+		if c.Hash == to {
+			return errStopIteration
+		}
+
+		count++
+
+		return nil
+	})
+
+	// Ignore the sentinel error - it's our way of breaking iteration
+	if err != nil && !errors.Is(err, errStopIteration) {
+		return 0, cerrors.WrapGitError(err, "iterate commits")
+	}
+
+	return count, nil
+}
+
 // RunCommand executes an arbitrary git command in the specified repository path.
+// This is an escape hatch for operations that cannot be performed with go-git,
+// such as worktree creation with specific options. Use sparingly.
+//
+// Security note: The git binary path is hardcoded and arguments are passed
+// as separate parameters to prevent shell injection.
 func (g *GitEngine) RunCommand(repoPath string, args ...string) (*ports.CommandResult, error) {
 	if len(args) == 0 {
 		return nil, cerrors.NewInvalidArgument("args", "git command requires at least one argument")
