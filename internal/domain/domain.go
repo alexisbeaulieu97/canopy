@@ -111,3 +111,19 @@ type RepoRemovePreview struct {
 	DiskUsageBytes     int64    `json:"disk_usage_bytes"`
 	WorkspacesAffected []string `json:"workspaces_affected"`
 }
+
+// WorkspaceExport is the portable format for exporting/importing workspaces.
+type WorkspaceExport struct {
+	Version    string       `yaml:"version" json:"version"`
+	ID         string       `yaml:"id" json:"id"`
+	Branch     string       `yaml:"branch" json:"branch"`
+	Repos      []RepoExport `yaml:"repos" json:"repos"`
+	ExportedAt time.Time    `yaml:"exported_at" json:"exported_at"`
+}
+
+// RepoExport is the portable format for a repository in an export.
+type RepoExport struct {
+	Name  string `yaml:"name" json:"name"`
+	URL   string `yaml:"url" json:"url"`
+	Alias string `yaml:"alias,omitempty" json:"alias,omitempty"`
+}
