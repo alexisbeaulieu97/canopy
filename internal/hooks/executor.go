@@ -1,9 +1,17 @@
 // Package hooks provides lifecycle hook execution for workspaces.
+//
+// Hooks are user-defined commands that execute at specific points in the workspace
+// lifecycle. They run sequentially in the order defined in configuration, and each
+// hook can be filtered to run only in specific repositories.
+//
+// Security: Hooks execute arbitrary commands from user-controlled configuration.
+// The trust boundary is the user's config file - no sandboxing is applied.
 package hooks
 
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -144,7 +152,9 @@ func (e *Executor) runCommand(hook config.Hook, ctx HookContext, workDir string,
 
 		// Get exit code if available
 		exitCode := -1
-		if exitErr, ok := err.(*exec.ExitError); ok {
+
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		}
 
@@ -157,6 +167,11 @@ func (e *Executor) runCommand(hook config.Hook, ctx HookContext, workDir string,
 	}
 
 	e.logger.Info("Hook completed", "index", index, "exit_code", 0, "duration", duration.Round(time.Millisecond))
+
+	// Log stdout at debug level if present
+	if stdout.Len() > 0 {
+		e.logger.Debug("Hook stdout output", "index", index, "stdout", stdout.String())
+	}
 
 	// Log stderr as warning if present
 	if stderr.Len() > 0 {

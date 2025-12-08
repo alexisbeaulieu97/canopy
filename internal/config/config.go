@@ -175,6 +175,32 @@ func (c *Config) ValidateValues() error {
 		return fmt.Errorf("stale_threshold_days must be zero or positive, got %d", c.StaleThresholdDays)
 	}
 
+	// Validate hooks
+	for i, h := range c.Hooks.PostCreate {
+		if err := validateHook(h, "post_create", i); err != nil {
+			return err
+		}
+	}
+
+	for i, h := range c.Hooks.PreClose {
+		if err := validateHook(h, "pre_close", i); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateHook checks that a hook has valid configuration.
+func validateHook(h Hook, hookType string, index int) error {
+	if h.Command == "" {
+		return fmt.Errorf("%s hook[%d] command cannot be empty", hookType, index)
+	}
+
+	if h.Timeout < 0 {
+		return fmt.Errorf("%s hook[%d] timeout must be non-negative, got %d", hookType, index, h.Timeout)
+	}
+
 	return nil
 }
 

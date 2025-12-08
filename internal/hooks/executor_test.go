@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -347,15 +348,21 @@ func TestExecuteHooks_WorkingDirectory(t *testing.T) {
 	}
 
 	// Working directory should be the workspace path
-	got := string(content)
-	if !filepath.IsAbs(got) {
-		// Handle symlinks (macOS /tmp -> /private/tmp)
-		realTmpDir, _ := filepath.EvalSymlinks(tmpDir)
+	got := strings.TrimSpace(string(content))
 
-		realGot, _ := filepath.EvalSymlinks(filepath.Dir(outputFile))
-		if realGot != realTmpDir {
-			t.Errorf("Working directory mismatch: expected %s, got %s", realTmpDir, realGot)
-		}
+	// Handle symlinks (macOS /tmp -> /private/tmp)
+	realTmpDir, err := filepath.EvalSymlinks(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to resolve symlinks for tmpDir: %v", err)
+	}
+
+	realGot, err := filepath.EvalSymlinks(got)
+	if err != nil {
+		t.Fatalf("Failed to resolve symlinks for pwd output: %v", err)
+	}
+
+	if realGot != realTmpDir {
+		t.Errorf("Working directory mismatch: expected %s, got %s", realTmpDir, realGot)
 	}
 }
 
