@@ -268,6 +268,77 @@ func TestValidateValues(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "valid hooks configuration",
+			cfg: &Config{
+				ProjectsRoot:       "/tmp/projects",
+				WorkspacesRoot:     "/tmp/workspaces",
+				ClosedRoot:         "/tmp/closed",
+				CloseDefault:       "delete",
+				StaleThresholdDays: 14,
+				Hooks: Hooks{
+					PostCreate: []Hook{
+						{Command: "npm install", Repos: []string{"frontend"}},
+					},
+					PreClose: []Hook{
+						{Command: "git stash"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "post_create hook with empty command",
+			cfg: &Config{
+				ProjectsRoot:       "/tmp/projects",
+				WorkspacesRoot:     "/tmp/workspaces",
+				ClosedRoot:         "/tmp/closed",
+				CloseDefault:       "delete",
+				StaleThresholdDays: 14,
+				Hooks: Hooks{
+					PostCreate: []Hook{
+						{Command: ""},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "post_create hook[0] command cannot be empty",
+		},
+		{
+			name: "pre_close hook with empty command",
+			cfg: &Config{
+				ProjectsRoot:       "/tmp/projects",
+				WorkspacesRoot:     "/tmp/workspaces",
+				ClosedRoot:         "/tmp/closed",
+				CloseDefault:       "delete",
+				StaleThresholdDays: 14,
+				Hooks: Hooks{
+					PreClose: []Hook{
+						{Command: "echo first"},
+						{Command: ""},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "pre_close hook[1] command cannot be empty",
+		},
+		{
+			name: "hook with negative timeout",
+			cfg: &Config{
+				ProjectsRoot:       "/tmp/projects",
+				WorkspacesRoot:     "/tmp/workspaces",
+				ClosedRoot:         "/tmp/closed",
+				CloseDefault:       "delete",
+				StaleThresholdDays: 14,
+				Hooks: Hooks{
+					PostCreate: []Hook{
+						{Command: "npm install", Timeout: -5},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "post_create hook[0] timeout must be non-negative",
+		},
 	}
 
 	for _, tt := range tests {

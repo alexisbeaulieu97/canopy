@@ -10,6 +10,21 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Hook defines a single lifecycle hook command.
+type Hook struct {
+	Command         string   `mapstructure:"command"`
+	Repos           []string `mapstructure:"repos,omitempty"`             // filter to specific repos
+	Shell           string   `mapstructure:"shell,omitempty"`             // default: sh -c
+	Timeout         int      `mapstructure:"timeout,omitempty"`           // default: 30 seconds
+	ContinueOnError bool     `mapstructure:"continue_on_error,omitempty"` // don't fail workspace operation
+}
+
+// Hooks holds lifecycle hook configurations.
+type Hooks struct {
+	PostCreate []Hook `mapstructure:"post_create"`
+	PreClose   []Hook `mapstructure:"pre_close"`
+}
+
 // Config holds the global configuration
 type Config struct {
 	ProjectsRoot       string        `mapstructure:"projects_root"`
@@ -19,6 +34,7 @@ type Config struct {
 	WorkspaceNaming    string        `mapstructure:"workspace_naming"`
 	StaleThresholdDays int           `mapstructure:"stale_threshold_days"`
 	Defaults           Defaults      `mapstructure:"defaults"`
+	Hooks              Hooks         `mapstructure:"hooks"`
 	Registry           *RepoRegistry `mapstructure:"-"`
 }
 
@@ -124,7 +140,27 @@ func (c *Config) Validate() error {
 // values, regex patterns, and numeric constraints. Use this method when you
 // need fast validation that doesn't depend on the environment.
 func (c *Config) ValidateValues() error {
-	// Check required fields are non-empty
+	if err := c.validateRequiredFields(); err != nil {
+		return err
+	}
+
+	if err := c.validateCloseDefault(); err != nil {
+		return err
+	}
+
+	if err := c.validatePatterns(); err != nil {
+		return err
+	}
+
+	if err := c.validateStaleThreshold(); err != nil {
+		return err
+	}
+
+	return c.validateHooks()
+}
+
+// validateRequiredFields checks that all required configuration fields are set.
+func (c *Config) validateRequiredFields() error {
 	if err := validateRequiredField("projects_root", c.ProjectsRoot); err != nil {
 		return err
 	}
@@ -133,30 +169,67 @@ func (c *Config) ValidateValues() error {
 		return err
 	}
 
-	if err := validateRequiredField("closed_root", c.ClosedRoot); err != nil {
-		return err
-	}
+	return validateRequiredField("closed_root", c.ClosedRoot)
+}
 
-	// Apply default for CloseDefault if empty
+// validateCloseDefault validates and applies default for the close behavior.
+func (c *Config) validateCloseDefault() error {
 	if c.CloseDefault == "" {
 		c.CloseDefault = "delete"
 	}
 
-	// Check CloseDefault is a valid enum value
 	if c.CloseDefault != "delete" && c.CloseDefault != "archive" {
 		return fmt.Errorf("workspace_close_default must be either 'delete' or 'archive', got %q", c.CloseDefault)
 	}
 
-	// Check regex patterns compile
+	return nil
+}
+
+// validatePatterns checks that all workspace regex patterns are valid.
+func (c *Config) validatePatterns() error {
 	for _, p := range c.Defaults.WorkspacePatterns {
 		if _, err := regexp.Compile(p.Pattern); err != nil {
 			return fmt.Errorf("invalid regex pattern '%s': %w", p.Pattern, err)
 		}
 	}
 
-	// Check StaleThresholdDays is non-negative
+	return nil
+}
+
+// validateStaleThreshold checks that the stale threshold is non-negative.
+func (c *Config) validateStaleThreshold() error {
 	if c.StaleThresholdDays < 0 {
 		return fmt.Errorf("stale_threshold_days must be zero or positive, got %d", c.StaleThresholdDays)
+	}
+
+	return nil
+}
+
+// validateHooks validates all hook configurations.
+func (c *Config) validateHooks() error {
+	for i, h := range c.Hooks.PostCreate {
+		if err := validateHook(h, "post_create", i); err != nil {
+			return err
+		}
+	}
+
+	for i, h := range c.Hooks.PreClose {
+		if err := validateHook(h, "pre_close", i); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateHook checks that a hook has valid configuration.
+func validateHook(h Hook, hookType string, index int) error {
+	if h.Command == "" {
+		return fmt.Errorf("%s hook[%d] command cannot be empty", hookType, index)
+	}
+
+	if h.Timeout < 0 {
+		return fmt.Errorf("%s hook[%d] timeout must be non-negative, got %d", hookType, index, h.Timeout)
 	}
 
 	return nil
@@ -247,4 +320,9 @@ func (c *Config) GetStaleThresholdDays() int {
 // GetRegistry returns the repository registry.
 func (c *Config) GetRegistry() *RepoRegistry {
 	return c.Registry
+}
+
+// GetHooks returns the lifecycle hooks configuration.
+func (c *Config) GetHooks() Hooks {
+	return c.Hooks
 }

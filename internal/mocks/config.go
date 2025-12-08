@@ -20,6 +20,7 @@ type MockConfigProvider struct {
 	GetWorkspaceNamingFunc    func() string
 	GetStaleThresholdDaysFunc func() int
 	GetRegistryFunc           func() *config.RepoRegistry
+	GetHooksFunc              func() config.Hooks
 
 	// Default values for simple getters.
 	ProjectsRoot       string
@@ -29,6 +30,7 @@ type MockConfigProvider struct {
 	WorkspaceNaming    string
 	StaleThresholdDays int
 	Registry           *config.RepoRegistry
+	Hooks              config.Hooks
 	RepoNames          []string
 }
 
@@ -125,4 +127,13 @@ func (m *MockConfigProvider) GetRegistry() *config.RepoRegistry {
 	}
 
 	return m.Registry
+}
+
+// GetHooks calls the mock function if set, otherwise returns Hooks.
+func (m *MockConfigProvider) GetHooks() config.Hooks {
+	if m.GetHooksFunc != nil {
+		return m.GetHooksFunc()
+	}
+
+	return m.Hooks
 }

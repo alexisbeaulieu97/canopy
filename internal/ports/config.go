@@ -31,4 +31,7 @@ type ConfigProvider interface {
 
 	// GetRegistry returns the repository registry.
 	GetRegistry() *config.RepoRegistry
+
+	// GetHooks returns the lifecycle hooks configuration.
+	GetHooks() config.Hooks
 }
