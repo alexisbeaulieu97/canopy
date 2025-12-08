@@ -11,16 +11,18 @@ import (
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/hooks"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
 // Service manages workspace operations
 type Service struct {
-	config    ports.ConfigProvider
-	gitEngine ports.GitOperations
-	wsEngine  ports.WorkspaceStorage
-	logger    *logging.Logger
+	config       ports.ConfigProvider
+	gitEngine    ports.GitOperations
+	wsEngine     ports.WorkspaceStorage
+	logger       *logging.Logger
+	hookExecutor *hooks.Executor
 
 	// Sub-services for specific responsibilities
 	resolver  *RepoResolver
@@ -36,13 +38,14 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 	diskUsage := DefaultDiskUsageCalculator()
 
 	return &Service{
-		config:    cfg,
-		gitEngine: gitEngine,
-		wsEngine:  wsEngine,
-		logger:    logger,
-		resolver:  NewRepoResolver(cfg.GetRegistry()),
-		diskUsage: diskUsage,
-		canonical: NewCanonicalRepoService(gitEngine, wsEngine, cfg.GetProjectsRoot(), logger, diskUsage),
+		config:       cfg,
+		gitEngine:    gitEngine,
+		wsEngine:     wsEngine,
+		logger:       logger,
+		hookExecutor: hooks.NewExecutor(logger),
+		resolver:     NewRepoResolver(cfg.GetRegistry()),
+		diskUsage:    diskUsage,
+		canonical:    NewCanonicalRepoService(gitEngine, wsEngine, cfg.GetProjectsRoot(), logger, diskUsage),
 	}
 }
 
@@ -80,8 +83,19 @@ func (s *Service) ResolveRepos(workspaceID string, requestedRepos []string) ([]d
 	return repos, nil
 }
 
+// CreateOptions configures workspace creation behavior.
+type CreateOptions struct {
+	SkipHooks         bool // Skip post_create hooks
+	ContinueOnHookErr bool // Continue if hooks fail
+}
+
 // CreateWorkspace creates a new workspace directory and returns the directory name
 func (s *Service) CreateWorkspace(id, branchName string, repos []domain.Repo) (string, error) {
+	return s.CreateWorkspaceWithOptions(id, branchName, repos, CreateOptions{})
+}
+
+// CreateWorkspaceWithOptions creates a new workspace with configurable options.
+func (s *Service) CreateWorkspaceWithOptions(id, branchName string, repos []domain.Repo, opts CreateOptions) (string, error) {
 	dirName := id
 
 	// Default branch name is the workspace ID
@@ -113,6 +127,28 @@ func (s *Service) CreateWorkspace(id, branchName string, repos []domain.Repo) (s
 		if err := s.gitEngine.CreateWorktree(repo.Name, worktreePath, branchName); err != nil {
 			cleanup()
 			return "", cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
+		}
+	}
+
+	// Run post_create hooks
+	if !opts.SkipHooks {
+		hooksConfig := s.config.GetHooks()
+		if len(hooksConfig.PostCreate) > 0 {
+			hookCtx := hooks.HookContext{
+				WorkspaceID:   id,
+				WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
+				BranchName:    branchName,
+				Repos:         repos,
+			}
+
+			if err := s.hookExecutor.ExecuteHooks(hooksConfig.PostCreate, hookCtx, opts.ContinueOnHookErr); err != nil {
+				s.logger.Error("post_create hooks failed", "error", err)
+				// Hook failures don't rollback the workspace (per design.md)
+				// But we log the error and can optionally fail the operation
+				if !opts.ContinueOnHookErr {
+					return dirName, err
+				}
+			}
 		}
 	}
 
@@ -226,8 +262,19 @@ func (s *Service) RemoveRepoFromWorkspace(workspaceID, repoName string) error {
 	return nil
 }
 
+// CloseOptions configures workspace close behavior.
+type CloseOptions struct {
+	SkipHooks         bool // Skip pre_close hooks
+	ContinueOnHookErr bool // Continue if hooks fail
+}
+
 // CloseWorkspace removes a workspace with safety checks
 func (s *Service) CloseWorkspace(workspaceID string, force bool) error {
+	return s.CloseWorkspaceWithOptions(workspaceID, force, CloseOptions{})
+}
+
+// CloseWorkspaceWithOptions removes a workspace with configurable options.
+func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts CloseOptions) error {
 	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return err
@@ -239,12 +286,38 @@ func (s *Service) CloseWorkspace(workspaceID string, force bool) error {
 		}
 	}
 
-	// 2. Delete workspace
+	// Run pre_close hooks before deletion
+	if !opts.SkipHooks {
+		hooksConfig := s.config.GetHooks()
+		if len(hooksConfig.PreClose) > 0 {
+			hookCtx := hooks.HookContext{
+				WorkspaceID:   workspaceID,
+				WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
+				BranchName:    targetWorkspace.BranchName,
+				Repos:         targetWorkspace.Repos,
+			}
+
+			if err := s.hookExecutor.ExecuteHooks(hooksConfig.PreClose, hookCtx, opts.ContinueOnHookErr); err != nil {
+				s.logger.Error("pre_close hooks failed", "error", err)
+				// Per design.md: pre_close failure aborts close operation
+				if !opts.ContinueOnHookErr {
+					return err
+				}
+			}
+		}
+	}
+
+	// Delete workspace
 	return s.wsEngine.Delete(dirName)
 }
 
 // CloseWorkspaceKeepMetadata moves workspace metadata to the closed store and removes the active worktree.
 func (s *Service) CloseWorkspaceKeepMetadata(workspaceID string, force bool) (*domain.ClosedWorkspace, error) {
+	return s.CloseWorkspaceKeepMetadataWithOptions(workspaceID, force, CloseOptions{})
+}
+
+// CloseWorkspaceKeepMetadataWithOptions moves workspace metadata to the closed store with configurable options.
+func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, force bool, opts CloseOptions) (*domain.ClosedWorkspace, error) {
 	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
@@ -253,6 +326,27 @@ func (s *Service) CloseWorkspaceKeepMetadata(workspaceID string, force bool) (*d
 	if !force {
 		if err := s.ensureWorkspaceClean(targetWorkspace, dirName, "close"); err != nil {
 			return nil, err
+		}
+	}
+
+	// Run pre_close hooks before archiving
+	if !opts.SkipHooks {
+		hooksConfig := s.config.GetHooks()
+		if len(hooksConfig.PreClose) > 0 {
+			hookCtx := hooks.HookContext{
+				WorkspaceID:   workspaceID,
+				WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
+				BranchName:    targetWorkspace.BranchName,
+				Repos:         targetWorkspace.Repos,
+			}
+
+			if err := s.hookExecutor.ExecuteHooks(hooksConfig.PreClose, hookCtx, opts.ContinueOnHookErr); err != nil {
+				s.logger.Error("pre_close hooks failed", "error", err)
+				// Per design.md: pre_close failure aborts close operation
+				if !opts.ContinueOnHookErr {
+					return nil, err
+				}
+			}
 		}
 	}
 

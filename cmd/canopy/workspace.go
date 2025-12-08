@@ -41,6 +41,7 @@ var (
 			repos, _ := cmd.Flags().GetStringSlice("repos")
 			branch, _ := cmd.Flags().GetString("branch")
 			printPath, _ := cmd.Flags().GetBool("print-path")
+			noHooks, _ := cmd.Flags().GetBool("no-hooks")
 
 			app, err := getApp(cmd)
 			if err != nil {
@@ -68,7 +69,11 @@ var (
 				}
 			}
 
-			dirName, err := service.CreateWorkspace(id, branch, resolvedRepos)
+			opts := workspaces.CreateOptions{
+				SkipHooks: noHooks,
+			}
+
+			dirName, err := service.CreateWorkspaceWithOptions(id, branch, resolvedRepos, opts)
 			if err != nil {
 				return err
 			}
@@ -184,6 +189,7 @@ var (
 			deleteFlag, _ := cmd.Flags().GetBool("delete")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			jsonOutput, _ := cmd.Flags().GetBool("json")
+			noHooks, _ := cmd.Flags().GetBool("no-hooks")
 
 			if keepFlag && deleteFlag {
 				return cerrors.NewInvalidArgument("flags", "cannot use --keep and --delete together")
@@ -197,6 +203,10 @@ var (
 			service := app.Service
 			configDefaultArchive := strings.EqualFold(app.Config.GetCloseDefault(), "archive")
 			interactive := isInteractiveTerminal()
+
+			closeOpts := workspaces.CloseOptions{
+				SkipHooks: noHooks,
+			}
 
 			// Determine keepMetadata based on flags and config
 			keepMetadata := configDefaultArchive
@@ -225,19 +235,19 @@ var (
 			}
 
 			if keepFlag {
-				return keepAndPrint(service, id, force)
+				return keepAndPrint(service, id, force, closeOpts)
 			}
 
 			if deleteFlag {
-				return closeAndPrint(service, id, force)
+				return closeAndPrint(service, id, force, closeOpts)
 			}
 
 			if !interactive {
 				if configDefaultArchive {
-					return keepAndPrint(service, id, force)
+					return keepAndPrint(service, id, force, closeOpts)
 				}
 
-				return closeAndPrint(service, id, force)
+				return closeAndPrint(service, id, force, closeOpts)
 			}
 
 			reader := bufio.NewReader(os.Stdin)
@@ -251,31 +261,31 @@ var (
 			answer, err := reader.ReadString('\n')
 			if err != nil {
 				if configDefaultArchive {
-					return keepAndPrint(service, id, force)
+					return keepAndPrint(service, id, force, closeOpts)
 				}
 
-				return closeAndPrint(service, id, force)
+				return closeAndPrint(service, id, force, closeOpts)
 			}
 
 			answer = strings.ToLower(strings.TrimSpace(answer))
 
 			switch answer {
 			case "y", "yes":
-				return keepAndPrint(service, id, force)
+				return keepAndPrint(service, id, force, closeOpts)
 			case "n", "no":
-				return closeAndPrint(service, id, force)
+				return closeAndPrint(service, id, force, closeOpts)
 			case "":
 				if configDefaultArchive {
-					return keepAndPrint(service, id, force)
+					return keepAndPrint(service, id, force, closeOpts)
 				}
 
-				return closeAndPrint(service, id, force)
+				return closeAndPrint(service, id, force, closeOpts)
 			default:
 				if configDefaultArchive {
-					return keepAndPrint(service, id, force)
+					return keepAndPrint(service, id, force, closeOpts)
 				}
 
-				return closeAndPrint(service, id, force)
+				return closeAndPrint(service, id, force, closeOpts)
 			}
 		},
 	}
@@ -669,8 +679,8 @@ func printWorkspaceClosePreview(preview *domain.WorkspaceClosePreview) {
 	}
 }
 
-func keepAndPrint(service *workspaces.Service, id string, force bool) error {
-	archived, err := service.CloseWorkspaceKeepMetadata(id, force)
+func keepAndPrint(service *workspaces.Service, id string, force bool, opts workspaces.CloseOptions) error {
+	archived, err := service.CloseWorkspaceKeepMetadataWithOptions(id, force, opts)
 	if err != nil {
 		return err
 	}
@@ -685,8 +695,8 @@ func keepAndPrint(service *workspaces.Service, id string, force bool) error {
 	return nil
 }
 
-func closeAndPrint(service *workspaces.Service, id string, force bool) error {
-	if err := service.CloseWorkspace(id, force); err != nil {
+func closeAndPrint(service *workspaces.Service, id string, force bool, opts workspaces.CloseOptions) error {
+	if err := service.CloseWorkspaceWithOptions(id, force, opts); err != nil {
 		return err
 	}
 
@@ -738,6 +748,7 @@ func init() {
 	workspaceNewCmd.Flags().StringSlice("repos", []string{}, "List of repositories to include")
 	workspaceNewCmd.Flags().String("branch", "", "Custom branch name (optional)")
 	workspaceNewCmd.Flags().Bool("print-path", false, "Print the created workspace path to stdout")
+	workspaceNewCmd.Flags().Bool("no-hooks", false, "Skip post_create hooks")
 
 	workspaceListCmd.Flags().Bool("json", false, "Output in JSON format")
 	workspaceListCmd.Flags().Bool("closed", false, "List closed workspaces")
@@ -750,6 +761,7 @@ func init() {
 	workspaceCloseCmd.Flags().Bool("delete", false, "Delete without keeping metadata")
 	workspaceCloseCmd.Flags().Bool("dry-run", false, "Preview what would be deleted without actually deleting")
 	workspaceCloseCmd.Flags().Bool("json", false, "Output in JSON format (use with --dry-run)")
+	workspaceCloseCmd.Flags().Bool("no-hooks", false, "Skip pre_close hooks")
 	workspaceReopenCmd.Flags().Bool("force", false, "Overwrite existing workspace if one already exists")
 
 	workspaceBranchCmd.Flags().Bool("create", false, "Create branch if it doesn't exist")

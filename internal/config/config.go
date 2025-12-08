@@ -10,6 +10,21 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Hook defines a single lifecycle hook command.
+type Hook struct {
+	Command         string   `mapstructure:"command"`
+	Repos           []string `mapstructure:"repos,omitempty"`             // filter to specific repos
+	Shell           string   `mapstructure:"shell,omitempty"`             // default: sh -c
+	Timeout         int      `mapstructure:"timeout,omitempty"`           // default: 30 seconds
+	ContinueOnError bool     `mapstructure:"continue_on_error,omitempty"` // don't fail workspace operation
+}
+
+// Hooks holds lifecycle hook configurations.
+type Hooks struct {
+	PostCreate []Hook `mapstructure:"post_create"`
+	PreClose   []Hook `mapstructure:"pre_close"`
+}
+
 // Config holds the global configuration
 type Config struct {
 	ProjectsRoot       string        `mapstructure:"projects_root"`
@@ -19,6 +34,7 @@ type Config struct {
 	WorkspaceNaming    string        `mapstructure:"workspace_naming"`
 	StaleThresholdDays int           `mapstructure:"stale_threshold_days"`
 	Defaults           Defaults      `mapstructure:"defaults"`
+	Hooks              Hooks         `mapstructure:"hooks"`
 	Registry           *RepoRegistry `mapstructure:"-"`
 }
 
@@ -247,4 +263,9 @@ func (c *Config) GetStaleThresholdDays() int {
 // GetRegistry returns the repository registry.
 func (c *Config) GetRegistry() *RepoRegistry {
 	return c.Registry
+}
+
+// GetHooks returns the lifecycle hooks configuration.
+func (c *Config) GetHooks() Hooks {
+	return c.Hooks
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ErrorCode identifies the type of error.
@@ -31,6 +32,8 @@ const (
 	ErrWorkspaceMetadata   ErrorCode = "WORKSPACE_METADATA_ERROR"
 	ErrNoReposConfigured   ErrorCode = "NO_REPOS_CONFIGURED"
 	ErrMissingBranchConfig ErrorCode = "MISSING_BRANCH_CONFIG"
+	ErrHookFailed          ErrorCode = "HOOK_FAILED"
+	ErrHookTimeout         ErrorCode = "HOOK_TIMEOUT"
 )
 
 // CanopyError is a typed error with code, message, cause, and context.
@@ -276,6 +279,47 @@ func NewMissingBranchConfig(workspaceID string) *CanopyError {
 	}
 }
 
+// NewHookFailed creates an error for a failed hook execution.
+func NewHookFailed(index int, command string, exitCode int, repoName, stderr string) *CanopyError {
+	ctx := map[string]string{
+		"index":     fmt.Sprintf("%d", index),
+		"command":   command,
+		"exit_code": fmt.Sprintf("%d", exitCode),
+	}
+
+	if repoName != "" {
+		ctx["repo_name"] = repoName
+	}
+
+	if stderr != "" {
+		ctx["stderr"] = stderr
+	}
+
+	msg := fmt.Sprintf("hook[%d] failed", index)
+	if repoName != "" {
+		msg = fmt.Sprintf("hook[%d] failed in repo '%s'", index, repoName)
+	}
+
+	return &CanopyError{
+		Code:    ErrHookFailed,
+		Message: msg,
+		Context: ctx,
+	}
+}
+
+// NewHookTimeout creates an error for a hook that timed out.
+func NewHookTimeout(index int, command string, timeout time.Duration) *CanopyError {
+	return &CanopyError{
+		Code:    ErrHookTimeout,
+		Message: fmt.Sprintf("hook[%d] timed out after %s", index, timeout),
+		Context: map[string]string{
+			"index":   fmt.Sprintf("%d", index),
+			"command": command,
+			"timeout": timeout.String(),
+		},
+	}
+}
+
 // Sentinel errors for use with errors.Is().
 var (
 	WorkspaceNotFound   = &CanopyError{Code: ErrWorkspaceNotFound}
@@ -297,4 +341,6 @@ var (
 	WorkspaceMetadata   = &CanopyError{Code: ErrWorkspaceMetadata}
 	NoReposConfigured   = &CanopyError{Code: ErrNoReposConfigured}
 	MissingBranchConfig = &CanopyError{Code: ErrMissingBranchConfig}
+	HookFailed          = &CanopyError{Code: ErrHookFailed}
+	HookTimeout         = &CanopyError{Code: ErrHookTimeout}
 )
