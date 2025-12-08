@@ -88,46 +88,14 @@ func (e *Executor) executeHook(hook config.Hook, ctx HookContext, index int) err
 
 // runCommand executes the hook command in the specified directory.
 func (e *Executor) runCommand(hook config.Hook, ctx HookContext, workDir string, repo *domain.Repo, index int) error {
-	// Determine shell
-	shell := hook.Shell
-	if shell == "" {
-		shell = os.Getenv("SHELL")
-		if shell == "" {
-			shell = "/bin/sh"
-		}
-	}
+	shell := resolveShell(hook.Shell)
+	timeout := resolveTimeout(hook.Timeout)
 
-	// Determine timeout
-	timeout := DefaultTimeout
-	if hook.Timeout > 0 {
-		timeout = time.Duration(hook.Timeout) * time.Second
-	}
-
-	// Create context with timeout
 	execCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Build command
-	// The hook command comes from user-controlled config, which is the trust boundary.
-	// See design.md threat model for security considerations.
-	cmd := exec.CommandContext(execCtx, shell, "-c", hook.Command) //nolint:gosec // user-controlled config is trusted
-	cmd.Dir = workDir
+	cmd := e.buildCommand(execCtx, shell, hook.Command, workDir, ctx, repo)
 
-	// Set environment variables
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("CANOPY_WORKSPACE_ID=%s", ctx.WorkspaceID),
-		fmt.Sprintf("CANOPY_WORKSPACE_PATH=%s", ctx.WorkspacePath),
-		fmt.Sprintf("CANOPY_BRANCH=%s", ctx.BranchName),
-	)
-
-	if repo != nil {
-		cmd.Env = append(cmd.Env,
-			fmt.Sprintf("CANOPY_REPO_NAME=%s", repo.Name),
-			fmt.Sprintf("CANOPY_REPO_PATH=%s/%s", ctx.WorkspacePath, repo.Name),
-		)
-	}
-
-	// Capture output
 	var stdout, stderr bytes.Buffer
 
 	cmd.Stdout = &stdout
@@ -145,40 +113,110 @@ func (e *Executor) runCommand(hook config.Hook, ctx HookContext, workDir string,
 	duration := time.Since(start)
 
 	if err != nil {
-		// Check if it was a timeout
-		if execCtx.Err() == context.DeadlineExceeded {
-			return cerrors.NewHookTimeout(index, hook.Command, timeout)
-		}
-
-		// Get exit code if available
-		exitCode := -1
-
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			exitCode = exitErr.ExitCode()
-		}
-
-		repoName := ""
-		if repo != nil {
-			repoName = repo.Name
-		}
-
-		return cerrors.NewHookFailed(index, hook.Command, exitCode, repoName, stderr.String())
+		return e.handleCommandError(execCtx, err, hook, index, repo, timeout, stderr.String())
 	}
 
-	e.logger.Info("Hook completed", "index", index, "exit_code", 0, "duration", duration.Round(time.Millisecond))
-
-	// Log stdout at debug level if present
-	if stdout.Len() > 0 {
-		e.logger.Debug("Hook stdout output", "index", index, "stdout", stdout.String())
-	}
-
-	// Log stderr as warning if present
-	if stderr.Len() > 0 {
-		e.logger.Warn("Hook stderr output", "index", index, "stderr", stderr.String())
-	}
+	e.logCommandSuccess(index, duration, stdout.String(), stderr.String())
 
 	return nil
+}
+
+// resolveShell determines the shell to use for executing the hook.
+func resolveShell(hookShell string) string {
+	if hookShell != "" {
+		return hookShell
+	}
+
+	if envShell := os.Getenv("SHELL"); envShell != "" {
+		return envShell
+	}
+
+	return "/bin/sh"
+}
+
+// resolveTimeout determines the timeout duration for the hook.
+func resolveTimeout(hookTimeout int) time.Duration {
+	if hookTimeout > 0 {
+		return time.Duration(hookTimeout) * time.Second
+	}
+
+	return DefaultTimeout
+}
+
+// buildCommand creates the exec.Cmd with proper environment variables.
+func (e *Executor) buildCommand(
+	ctx context.Context,
+	shell, command, workDir string,
+	hookCtx HookContext,
+	repo *domain.Repo,
+) *exec.Cmd {
+	// The hook command comes from user-controlled config, which is the trust boundary.
+	// See design.md threat model for security considerations.
+	cmd := exec.CommandContext(ctx, shell, "-c", command) //nolint:gosec // user-controlled config is trusted
+	cmd.Dir = workDir
+	cmd.Env = e.buildEnvVars(hookCtx, repo)
+
+	return cmd
+}
+
+// buildEnvVars creates the environment variables for the hook command.
+func (e *Executor) buildEnvVars(ctx HookContext, repo *domain.Repo) []string {
+	env := append(os.Environ(),
+		fmt.Sprintf("CANOPY_WORKSPACE_ID=%s", ctx.WorkspaceID),
+		fmt.Sprintf("CANOPY_WORKSPACE_PATH=%s", ctx.WorkspacePath),
+		fmt.Sprintf("CANOPY_BRANCH=%s", ctx.BranchName),
+	)
+
+	if repo != nil {
+		env = append(env,
+			fmt.Sprintf("CANOPY_REPO_NAME=%s", repo.Name),
+			fmt.Sprintf("CANOPY_REPO_PATH=%s/%s", ctx.WorkspacePath, repo.Name),
+		)
+	}
+
+	return env
+}
+
+// handleCommandError processes errors from hook command execution.
+func (e *Executor) handleCommandError(
+	execCtx context.Context,
+	err error,
+	hook config.Hook,
+	index int,
+	repo *domain.Repo,
+	timeout time.Duration,
+	stderrOutput string,
+) error {
+	if execCtx.Err() == context.DeadlineExceeded {
+		return cerrors.NewHookTimeout(index, hook.Command, timeout)
+	}
+
+	exitCode := -1
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		exitCode = exitErr.ExitCode()
+	}
+
+	repoName := ""
+	if repo != nil {
+		repoName = repo.Name
+	}
+
+	return cerrors.NewHookFailed(index, hook.Command, exitCode, repoName, stderrOutput)
+}
+
+// logCommandSuccess logs successful hook completion and any output.
+func (e *Executor) logCommandSuccess(index int, duration time.Duration, stdoutOutput, stderrOutput string) {
+	e.logger.Info("Hook completed", "index", index, "exit_code", 0, "duration", duration.Round(time.Millisecond))
+
+	if stdoutOutput != "" {
+		e.logger.Debug("Hook stdout output", "index", index, "stdout", stdoutOutput)
+	}
+
+	if stderrOutput != "" {
+		e.logger.Warn("Hook stderr output", "index", index, "stderr", stderrOutput)
+	}
 }
 
 // filterRepos returns only repos whose names match the filter list.
