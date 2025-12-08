@@ -845,7 +845,26 @@ func (s *Service) ImportWorkspace(export *domain.WorkspaceExport, idOverride, br
 		return "", cerrors.NewInvalidArgument("version", fmt.Sprintf("unsupported export version: %s", export.Version))
 	}
 
-	// Use overrides if provided
+	// Resolve final workspace ID and branch name
+	workspaceID, branchName := s.resolveImportOverrides(export, idOverride, branchOverride)
+
+	// Handle existing workspace
+	if err := s.prepareForImport(workspaceID, force); err != nil {
+		return "", err
+	}
+
+	// Resolve repos from export
+	repos, err := s.resolveExportedRepos(export.Repos, workspaceID)
+	if err != nil {
+		return "", err
+	}
+
+	// Create the workspace
+	return s.CreateWorkspace(workspaceID, branchName, repos)
+}
+
+// resolveImportOverrides determines the final workspace ID and branch name for import.
+func (s *Service) resolveImportOverrides(export *domain.WorkspaceExport, idOverride, branchOverride string) (string, string) {
 	workspaceID := export.ID
 	if idOverride != "" {
 		workspaceID = idOverride
@@ -861,25 +880,32 @@ func (s *Service) ImportWorkspace(export *domain.WorkspaceExport, idOverride, br
 		branchName = workspaceID
 	}
 
-	// Check if workspace already exists
-	if _, _, err := s.findWorkspace(workspaceID); err == nil {
+	return workspaceID, branchName
+}
+
+// prepareForImport checks for existing workspace and removes it if force is set.
+func (s *Service) prepareForImport(workspaceID string, force bool) error {
+	_, _, findErr := s.findWorkspace(workspaceID)
+	if findErr == nil {
+		// Workspace exists
 		if !force {
-			return "", cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to overwrite or --id to specify a different ID")
+			return cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to overwrite or --id to specify a different ID")
 		}
 		// Force mode: delete existing workspace
 		if err := s.CloseWorkspace(workspaceID, true); err != nil {
-			return "", cerrors.NewIOFailed("remove existing workspace", err)
+			return cerrors.NewIOFailed("remove existing workspace", err)
 		}
+
+		return nil
 	}
 
-	// Resolve repos from export
-	repos, err := s.resolveExportedRepos(export.Repos, workspaceID)
-	if err != nil {
-		return "", err
+	if !errors.Is(findErr, cerrors.WorkspaceNotFound) {
+		// Unexpected error (IO failure, etc.) - propagate it
+		return findErr
 	}
 
-	// Create the workspace
-	return s.CreateWorkspace(workspaceID, branchName, repos)
+	// Workspace not found, proceed with import
+	return nil
 }
 
 // resolveExportedRepos converts exported repo definitions to domain.Repo objects.

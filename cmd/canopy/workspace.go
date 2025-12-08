@@ -19,6 +19,12 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
+// Export format constants.
+const (
+	formatJSON = "json"
+	formatYAML = "yaml"
+)
+
 var (
 	workspaceCmd = &cobra.Command{
 		Use:     "workspace",
@@ -27,7 +33,6 @@ var (
 	}
 
 	workspaceNewCmd = &cobra.Command{
-		Use:   "new <ID>",
 		Short: "Create a new workspace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -502,7 +507,12 @@ Examples:
 
 			// --json flag is shorthand for --format json
 			if jsonOutput {
-				format = "json"
+				format = formatJSON
+			}
+
+			// Validate format
+			if format != formatYAML && format != formatJSON {
+				return cerrors.NewInvalidArgument("format", "must be 'yaml' or 'json'")
 			}
 
 			app, err := getApp(cmd)
@@ -517,7 +527,7 @@ Examples:
 
 			var data []byte
 			switch format {
-			case "json":
+			case formatJSON:
 				data, err = json.MarshalIndent(export, "", "  ")
 			default:
 				data, err = yaml.Marshal(export)

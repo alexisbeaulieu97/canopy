@@ -11,7 +11,6 @@
       Branch     string            `yaml:"branch"`
       Repos      []RepoExport      `yaml:"repos"`
       ExportedAt time.Time         `yaml:"exported_at"`
-      Notes      string            `yaml:"notes,omitempty"`
   }
   
   type RepoExport struct {

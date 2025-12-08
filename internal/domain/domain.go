@@ -119,7 +119,6 @@ type WorkspaceExport struct {
 	Branch     string       `yaml:"branch" json:"branch"`
 	Repos      []RepoExport `yaml:"repos" json:"repos"`
 	ExportedAt time.Time    `yaml:"exported_at" json:"exported_at"`
-	Notes      string       `yaml:"notes,omitempty" json:"notes,omitempty"`
 }
 
 // RepoExport is the portable format for a repository in an export.
