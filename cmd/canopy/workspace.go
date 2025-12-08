@@ -33,6 +33,7 @@ var (
 	}
 
 	workspaceNewCmd = &cobra.Command{
+		Use:   "new <ID>",
 		Short: "Create a new workspace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
