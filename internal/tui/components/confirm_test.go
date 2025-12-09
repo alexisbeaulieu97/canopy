@@ -1,6 +1,7 @@
 package components
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -162,7 +163,7 @@ func TestConfirmDialog_Render(t *testing.T) {
 			t.Error("expected non-empty render for active dialog")
 		}
 		// Should contain the workspace name
-		if !findSubstring(result, "my-workspace") {
+		if !strings.Contains(result, "my-workspace") {
 			t.Error("expected render to contain workspace name")
 		}
 	})
@@ -181,7 +182,7 @@ func TestActionDescription(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(string(tt.action), func(t *testing.T) {
 			desc := tt.action.ActionDescription()
-			if !findSubstring(desc, tt.contains) {
+			if !strings.Contains(desc, tt.contains) {
 				t.Errorf("expected description to contain %q, got %s", tt.contains, desc)
 			}
 		})

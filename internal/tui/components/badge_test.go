@@ -1,6 +1,7 @@
 package components
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -185,7 +186,7 @@ func TestNewBadgeSet(t *testing.T) {
 				t.Errorf("expected empty result, got %s", result)
 			}
 
-			if tt.expectContain != "" && !contains(result, tt.expectContain) {
+			if tt.expectContain != "" && !strings.Contains(result, tt.expectContain) {
 				t.Errorf("expected result to contain %q, got %s", tt.expectContain, result)
 			}
 		})
@@ -231,24 +232,9 @@ func TestNewStatusLine(t *testing.T) {
 			sl := NewStatusLine(tt.input)
 			result := sl.Render()
 
-			if !contains(result, tt.expectContain) {
+			if !strings.Contains(result, tt.expectContain) {
 				t.Errorf("expected result to contain %q, got %s", tt.expectContain, result)
 			}
 		})
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-
-	return false
 }

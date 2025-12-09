@@ -1,6 +1,7 @@
 package components
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,7 +50,7 @@ func TestRelativeTime(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := RelativeTime(tt.time)
-			if !findSubstring(result, tt.contains) {
+			if !strings.Contains(result, tt.contains) {
 				t.Errorf("expected result to contain %q, got %s", tt.contains, result)
 			}
 		})

@@ -109,12 +109,13 @@ var (
 )
 
 // Status icons (using Unicode for cross-platform support)
+// Icons are chosen to be distinguishable by shape, not just color.
 const (
-	IconClean    = "●"
-	IconDirty    = "●"
-	IconWarning  = "●"
-	IconLoading  = "○"
-	IconError    = "✗"
-	IconCursor   = "❯"
+	IconClean    = "✓" // Checkmark for clean/healthy state
+	IconDirty    = "●" // Filled circle for dirty/needs attention
+	IconWarning  = "⚠" // Warning triangle for stale/behind
+	IconLoading  = "○" // Empty circle for loading
+	IconError    = "✗" // X mark for errors
+	IconCursor   = "❯" // Arrow for selection cursor
 	IconNoCursor = " "
 )

@@ -40,7 +40,12 @@ func (i WorkspaceItem) Description() string { return "" }
 func (i WorkspaceItem) FilterValue() string { return i.Workspace.ID }
 
 // SummarizeStatus creates a WorkspaceSummary from domain.WorkspaceStatus.
+// Returns an empty summary if status is nil.
 func SummarizeStatus(status *domain.WorkspaceStatus) WorkspaceSummary {
+	if status == nil {
+		return WorkspaceSummary{}
+	}
+
 	summary := WorkspaceSummary{
 		RepoCount: len(status.Repos),
 	}

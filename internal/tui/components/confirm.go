@@ -72,6 +72,9 @@ func (d ConfirmDialog) Render() string {
 // Returns: confirmed (bool), handled (bool)
 // - confirmed: true if user pressed y/Y to confirm
 // - handled: true if the key was processed by the dialog
+//
+// Note: Callers should read Action and TargetID before calling HandleKey
+// if they need those values, as Hide() clears them.
 func (d *ConfirmDialog) HandleKey(key string) (confirmed, handled bool) {
 	if !d.Active {
 		return false, false
@@ -79,12 +82,7 @@ func (d *ConfirmDialog) HandleKey(key string) (confirmed, handled bool) {
 
 	switch key {
 	case "y", "Y":
-		action := d.Action
-		targetID := d.TargetID
 		d.Hide()
-		// Return true for confirmed, with action details stored before hide
-		_ = action   // Caller should read Action before HandleKey if needed
-		_ = targetID // Caller should read TargetID before HandleKey if needed
 
 		return true, true
 	case "n", "N", "esc":
