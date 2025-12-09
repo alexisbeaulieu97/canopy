@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
 // View renders the UI for the current state.
@@ -101,26 +102,15 @@ func (m Model) renderHeader() string {
 	return header
 }
 
-// renderConfirmPrompt renders the confirmation dialog.
+// renderConfirmPrompt renders the confirmation dialog using the ConfirmDialog component.
 func (m Model) renderConfirmPrompt() string {
-	var actionDesc string
-
-	switch m.actionToConfirm {
-	case actionClose:
-		actionDesc = "close (delete local files)"
-	case actionPush:
-		actionDesc = "push all changes in"
-	default:
-		actionDesc = m.actionToConfirm
+	dialog := components.ConfirmDialog{
+		Active:   m.confirming,
+		Action:   components.ConfirmAction(m.actionToConfirm),
+		TargetID: m.confirmingID,
 	}
 
-	prompt := fmt.Sprintf("⚠️  Confirm %s workspace %s?",
-		actionDesc,
-		accentTextStyle.Render(m.confirmingID))
-
-	hint := subtleTextStyle.Render("Press [y] to confirm, [n] or [esc] to cancel")
-
-	return confirmPromptStyle.Render(prompt) + "\n" + hint
+	return dialog.Render()
 }
 
 // renderFooter renders the keyboard shortcuts footer.

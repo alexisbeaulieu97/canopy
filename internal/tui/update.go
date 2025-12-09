@@ -33,7 +33,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 
 		var cmds []tea.Cmd
 		for _, it := range msg.items {
-			cmds = append(cmds, m.loadWorkspaceStatus(it.workspace.ID))
+			cmds = append(cmds, m.loadWorkspaceStatus(it.Workspace.ID))
 		}
 
 		return m, tea.Batch(cmds...)
@@ -104,18 +104,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 // updateWorkspaceSummary updates the summary for a workspace in both allItems and list.
 func (m *Model) updateWorkspaceSummary(id string, status *domain.WorkspaceStatus, err error) {
 	for idx, it := range m.allItems {
-		if it.workspace.ID != id {
+		if it.Workspace.ID != id {
 			continue
 		}
 
 		if status != nil {
-			it.loaded = true
-			it.err = nil
-			it.summary = summarizeStatus(status)
+			it.Loaded = true
+			it.Err = nil
+			it.Summary = summarizeStatus(status)
 		}
 
 		if err != nil {
-			it.err = err
+			it.Err = err
 		}
 
 		m.allItems[idx] = it
@@ -123,18 +123,18 @@ func (m *Model) updateWorkspaceSummary(id string, status *domain.WorkspaceStatus
 
 	for idx, listItem := range m.list.Items() {
 		ws, ok := listItem.(workspaceItem)
-		if !ok || ws.workspace.ID != id {
+		if !ok || ws.Workspace.ID != id {
 			continue
 		}
 
 		if status != nil {
-			ws.loaded = true
-			ws.err = nil
-			ws.summary = summarizeStatus(status)
+			ws.Loaded = true
+			ws.Err = nil
+			ws.Summary = summarizeStatus(status)
 		}
 
 		if err != nil {
-			ws.err = err
+			ws.Err = err
 		}
 
 		m.list.SetItem(idx, ws)
@@ -148,11 +148,11 @@ func (m *Model) applyFilters() {
 	search := strings.ToLower(strings.TrimSpace(m.list.FilterValue()))
 
 	for _, it := range m.allItems {
-		if m.filterStale && !it.workspace.IsStale(m.staleThresholdDays) {
+		if m.filterStale && !it.Workspace.IsStale(m.staleThresholdDays) {
 			continue
 		}
 
-		if search != "" && !strings.Contains(strings.ToLower(it.workspace.ID), search) {
+		if search != "" && !strings.Contains(strings.ToLower(it.Workspace.ID), search) {
 			continue
 		}
 
@@ -277,7 +277,7 @@ func (m Model) handleEnter() (Model, tea.Cmd, bool) {
 	}
 
 	if m.printPath {
-		path, err := m.svc.WorkspacePath(selected.workspace.ID)
+		path, err := m.svc.WorkspacePath(selected.Workspace.ID)
 		if err != nil {
 			m.err = err
 			return m, nil, true
@@ -291,14 +291,14 @@ func (m Model) handleEnter() (Model, tea.Cmd, bool) {
 	m.detailView = true
 	m.loadingDetail = true
 
-	wsCopy := selected.workspace
-	if cached, ok := m.statusCache[selected.workspace.ID]; ok {
+	wsCopy := selected.Workspace
+	if cached, ok := m.statusCache[selected.Workspace.ID]; ok {
 		return m, func() tea.Msg {
 			return workspaceDetailsMsg{workspace: &wsCopy, status: cached}
 		}, true
 	}
 
-	return m, m.loadWorkspaceDetails(selected.workspace.ID), true
+	return m, m.loadWorkspaceDetails(selected.Workspace.ID), true
 }
 
 // handlePushConfirm initiates push confirmation.
@@ -309,7 +309,7 @@ func (m Model) handlePushConfirm() (Model, tea.Cmd, bool) {
 	}
 
 	m.confirming = true
-	m.confirmingID = selected.workspace.ID
+	m.confirmingID = selected.Workspace.ID
 	m.actionToConfirm = actionPush
 	m.infoMessage = ""
 
@@ -323,7 +323,7 @@ func (m Model) handleOpenEditor() (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	return m, m.openWorkspace(selected.workspace.ID), true
+	return m, m.openWorkspace(selected.Workspace.ID), true
 }
 
 // handleCloseConfirm initiates close confirmation.
@@ -335,7 +335,7 @@ func (m Model) handleCloseConfirm() (Model, tea.Cmd, bool) {
 
 	m.confirming = true
 	m.actionToConfirm = actionClose
-	m.confirmingID = selected.workspace.ID
+	m.confirmingID = selected.Workspace.ID
 
 	return m, nil, true
 }
