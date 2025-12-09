@@ -1,123 +1,45 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
+)
 
-// Action constants for confirmation dialogs.
+// Action constants for confirmation dialogs - aliased from components.
 const (
-	actionClose = "close"
-	actionPush  = "push"
+	actionClose = string(components.ActionClose)
+	actionPush  = string(components.ActionPush)
 )
 
-// Color palette - using a modern, accessible color scheme
+// Status indicator styles - aliased from components
 var (
-	// Primary colors
-	colorPrimary   = lipgloss.Color("#7C3AED") // Violet
-	colorSecondary = lipgloss.Color("#A78BFA") // Light violet
-
-	// Status colors - softer, more modern tones
-	colorSuccess = lipgloss.Color("#10B981") // Emerald green
-	colorWarning = lipgloss.Color("#F59E0B") // Amber
-	colorDanger  = lipgloss.Color("#EF4444") // Red
-	colorMuted   = lipgloss.Color("#6B7280") // Gray
+	statusCleanStyle = components.StatusCleanStyle
+	statusDirtyStyle = components.StatusDirtyStyle
+	statusWarnStyle  = components.StatusWarnStyle
 )
 
-// Status indicator styles
+// Text styles - aliased from components
 var (
-	statusCleanStyle = lipgloss.NewStyle().
-				Foreground(colorSuccess).
-				Bold(true)
-
-	statusDirtyStyle = lipgloss.NewStyle().
-				Foreground(colorDanger).
-				Bold(true)
-
-	statusWarnStyle = lipgloss.NewStyle().
-			Foreground(colorWarning).
-			Bold(true)
-
-	statusLoadingStyle = lipgloss.NewStyle().
-				Foreground(colorMuted).
-				Italic(true)
+	subtleTextStyle = components.SubtleTextStyle
+	mutedTextStyle  = components.MutedTextStyle
+	boldTextStyle   = components.BoldTextStyle
+	accentTextStyle = components.AccentTextStyle
 )
 
-// Text styles
+// Badge styles - aliased from components
 var (
-	subtleTextStyle = lipgloss.NewStyle().
-			Foreground(colorMuted)
-
-	mutedTextStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#9CA3AF"))
-
-	boldTextStyle = lipgloss.NewStyle().
-			Bold(true)
-
-	accentTextStyle = lipgloss.NewStyle().
-			Foreground(colorPrimary).
-			Bold(true)
+	badgeWarnStyle = components.BadgeWarnStyle
+	badgeInfoStyle = components.BadgeInfoStyle
 )
 
-// Badge styles - pill-shaped status indicators
+// Layout styles - aliased from components
 var (
-	baseBadgeStyle = lipgloss.NewStyle().
-			Padding(0, 1).
-			MarginRight(1)
-
-	badgeDirtyStyle = baseBadgeStyle.
-			Foreground(colorDanger).
-			Background(lipgloss.Color("#7F1D1D"))
-
-	badgeWarnStyle = baseBadgeStyle.
-			Foreground(colorWarning).
-			Background(lipgloss.Color("#78350F"))
-
-	badgeInfoStyle = baseBadgeStyle.
-			Foreground(colorSecondary).
-			Background(lipgloss.Color("#312E81"))
+	titleStyle        = components.TitleStyle
+	detailHeaderStyle = components.DetailHeaderStyle
+	detailLabelStyle  = components.DetailLabelStyle
+	detailValueStyle  = components.DetailValueStyle
 )
 
-// Layout styles
+// Interactive element styles - aliased from components
 var (
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#F9FAFB"))
-
-	detailHeaderStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(colorPrimary).
-				MarginBottom(1)
-
-	detailLabelStyle = lipgloss.NewStyle().
-				Foreground(colorMuted).
-				Width(14)
-
-	detailValueStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#F9FAFB"))
-)
-
-// Interactive element styles
-var (
-	cursorStyle = lipgloss.NewStyle().
-			Foreground(colorPrimary).
-			Bold(true)
-
-	confirmPromptStyle = lipgloss.NewStyle().
-				Foreground(colorWarning).
-				Bold(true).
-				Padding(1, 0)
-
-	helpTextStyle = lipgloss.NewStyle().
-			Foreground(colorMuted).
-			Italic(true).
-			MarginTop(1)
-)
-
-// Status icons (using Unicode for cross-platform support)
-const (
-	iconClean    = "●"
-	iconDirty    = "●"
-	iconWarning  = "●"
-	iconLoading  = "○"
-	iconError    = "✗"
-	iconCursor   = "❯"
-	iconNoCursor = " "
+	helpTextStyle = components.HelpTextStyle
 )

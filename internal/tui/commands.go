@@ -35,12 +35,12 @@ func (m Model) loadWorkspaces() tea.Msg {
 
 	for _, w := range workspaces {
 		items = append(items, workspaceItem{
-			workspace: w,
-			summary: workspaceSummary{
-				repoCount: len(w.Repos),
+			Workspace: w,
+			Summary: workspaceSummary{
+				RepoCount: len(w.Repos),
 			},
-			orphanCount:       orphanCounts[w.ID],
-			orphanCheckFailed: orphanCheckFailed,
+			OrphanCount:       orphanCounts[w.ID],
+			OrphanCheckFailed: orphanCheckFailed,
 		})
 		totalUsage += w.DiskUsageBytes
 	}
@@ -79,7 +79,7 @@ func (m Model) loadWorkspaceDetails(id string) tea.Cmd {
 		// Get orphans for this workspace
 		orphans, _ := m.svc.DetectOrphansForWorkspace(id)
 
-		wsCopy := wsItem.workspace
+		wsCopy := wsItem.Workspace
 
 		return workspaceDetailsMsg{workspace: &wsCopy, status: status, orphans: orphans}
 	}

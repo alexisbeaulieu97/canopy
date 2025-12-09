@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
@@ -49,7 +50,7 @@ func NewModel(svc *workspaces.Service, printPath bool) Model {
 	l.SetShowHelp(false)
 	l.SetFilteringEnabled(true)
 	l.SetShowStatusBar(false)
-	l.Styles.NoItems = subtleTextStyle
+	l.Styles.NoItems = components.SubtleTextStyle
 
 	l.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
@@ -62,7 +63,7 @@ func NewModel(svc *workspaces.Service, printPath bool) Model {
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(colorPrimary)
+	s.Style = lipgloss.NewStyle().Foreground(components.ColorPrimary)
 
 	return Model{
 		list:               l,
@@ -91,7 +92,7 @@ func (m Model) selectedWorkspaceItem() (workspaceItem, bool) {
 // workspaceItemByID finds a workspace item by its ID.
 func (m Model) workspaceItemByID(id string) (workspaceItem, bool) {
 	for _, it := range m.allItems {
-		if it.workspace.ID == id {
+		if it.Workspace.ID == id {
 			return it, true
 		}
 	}
