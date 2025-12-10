@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -646,6 +647,28 @@ func TestKeybindingsValidation(t *testing.T) {
 				Quit:       []string{"q", "ctrl+c"},
 			}.WithDefaults(),
 		},
+		{
+			name: "invalid empty key rejected",
+			kb: Keybindings{
+				Quit: []string{""},
+			}.WithDefaults(),
+			wantErr:   true,
+			errSubstr: "invalid key \"\" for action \"quit\"",
+		},
+		{
+			name: "invalid key name rejected",
+			kb: Keybindings{
+				Quit: []string{"foo"},
+			}.WithDefaults(),
+			wantErr:   true,
+			errSubstr: "invalid key \"foo\" for action \"quit\"",
+		},
+		{
+			name: "valid modifier keys accepted",
+			kb: Keybindings{
+				Quit: []string{"ctrl+c", "alt+q", "shift+x"},
+			}.WithDefaults(),
+		},
 	}
 
 	for _, tt := range tests {
@@ -657,7 +680,7 @@ func TestKeybindingsValidation(t *testing.T) {
 					return
 				}
 
-				if tt.errSubstr != "" && !contains(err.Error(), tt.errSubstr) {
+				if tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
 					t.Errorf("ValidateKeybindings() error = %q, want substring %q", err.Error(), tt.errSubstr)
 				}
 			} else if err != nil {
@@ -714,7 +737,23 @@ func TestConfigValidateKeybindings(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "keybinding conflicts detected",
+			errSubstr: "keybinding validation errors",
+		},
+		{
+			name: "invalid config with bad key name",
+			cfg: &Config{
+				ProjectsRoot:   "/tmp/projects",
+				WorkspacesRoot: "/tmp/workspaces",
+				ClosedRoot:     "/tmp/closed",
+				CloseDefault:   "delete",
+				TUI: TUIConfig{
+					Keybindings: Keybindings{
+						Quit: []string{"invalid-key"},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "invalid key",
 		},
 	}
 
@@ -727,7 +766,7 @@ func TestConfigValidateKeybindings(t *testing.T) {
 					return
 				}
 
-				if tt.errSubstr != "" && !contains(err.Error(), tt.errSubstr) {
+				if tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
 					t.Errorf("ValidateValues() error = %q, want substring %q", err.Error(), tt.errSubstr)
 				}
 			} else if err != nil {

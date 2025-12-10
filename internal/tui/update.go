@@ -185,18 +185,18 @@ func (m Model) handleKey(key string) (Model, tea.Cmd, bool) {
 
 // handleDetailKey handles key events in the detail view.
 func (m Model) handleDetailKey(key string) (Model, tea.Cmd, bool) {
-	// Cancel keys return to list view
-	if !matchesKey(key, m.keybindings.Cancel) && !matchesKey(key, m.keybindings.Quit) {
-		return m, nil, false
+	// Only cancel or quit keys exit detail view
+	if matchesKey(key, m.keybindings.Cancel) || matchesKey(key, m.keybindings.Quit) {
+		m.detailView = false
+		m.loadingDetail = false
+		m.selectedWS = nil
+		m.wsStatus = nil
+		m.wsOrphans = nil
+
+		return m, nil, true
 	}
 
-	m.detailView = false
-	m.loadingDetail = false
-	m.selectedWS = nil
-	m.wsStatus = nil
-	m.wsOrphans = nil
-
-	return m, nil, true
+	return m, nil, false
 }
 
 // handleConfirmKey handles key events during confirmation dialogs.

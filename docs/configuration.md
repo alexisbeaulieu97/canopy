@@ -95,13 +95,17 @@ tui:
 
 ### Key Name Format
 
-Keys are specified as strings. Special keys use lowercase names:
-- Modifier keys: `ctrl+<key>`, `shift+<key>`, `alt+<key>`
-- Special keys: `enter`, `esc`, `tab`, `backspace`, `delete`, `up`, `down`, `left`, `right`
-- Function keys: `f1` through `f12`
-- Regular keys: `a`, `b`, `1`, `/`, etc.
+Keys are specified as strings:
+- **Regular keys**: Lowercase letters (`a`, `b`, `q`), numbers (`1`, `2`), and symbols (`/`, `.`, `-`)
+- **Uppercase letters**: Use uppercase directly (`Y`, `N`) for case-sensitive matching in dialogs
+- **Modifier keys**: `ctrl+<key>`, `alt+<key>`, `shift+<key>` (e.g., `ctrl+c`, `alt+x`)
+- **Special keys**: `enter`, `esc`, `tab`, `backspace`, `delete`, `space`
+- **Arrow keys**: `up`, `down`, `left`, `right`, `home`, `end`, `pgup`, `pgdown`
+- **Function keys**: `f1` through `f12`
 
-Examples: `ctrl+c`, `shift+a`, `alt+x`, `enter`, `esc`
+Examples: `ctrl+c`, `shift+a`, `alt+x`, `enter`, `esc`, `Y`
+
+**Note**: Keys are case-sensitive. `y` and `Y` are different keybindings.
 
 ### Multiple Keys Per Action
 

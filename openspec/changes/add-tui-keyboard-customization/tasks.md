@@ -1,4 +1,3 @@
-````markdown
 # Tasks: Add TUI Keyboard Customization
 
 ## Implementation Checklist
@@ -60,6 +59,3 @@
 - [x] 7.3 Test multiple keys per action
 - [x] 7.4 Test invalid keybinding handling
 - [x] 7.5 Test conflicting keybindings are rejected
-
-````
-- [ ] 7.5 Test conflicting keybindings are rejected
