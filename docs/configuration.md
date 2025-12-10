@@ -1,6 +1,27 @@
 # Configuration Reference
 
-Canopy uses a YAML configuration file. Files are loaded in this order (first found wins):
+Canopy uses a YAML configuration file for all settings.
+
+## Table of Contents
+
+- [Configuration Reference](#configuration-reference)
+  - [Table of Contents](#table-of-contents)
+  - [File Locations](#file-locations)
+  - [Core Settings](#core-settings)
+    - [Workspace Naming Template](#workspace-naming-template)
+  - [Workspace Patterns](#workspace-patterns)
+  - [Environment Variables](#environment-variables)
+  - [Hooks](#hooks)
+  - [Full Example](#full-example)
+  - [TUI Keybindings](#tui-keybindings)
+    - [Available Actions](#available-actions)
+    - [Key Name Format](#key-name-format)
+    - [Multiple Keys Per Action](#multiple-keys-per-action)
+    - [Conflict Detection](#conflict-detection)
+
+## File Locations
+
+Configuration files are loaded in this order (first found wins):
 
 1. `./config.yaml` (current directory)
 2. `~/.canopy/config.yaml`
@@ -8,17 +29,30 @@ Canopy uses a YAML configuration file. Files are loaded in this order (first fou
 
 If no config file exists, Canopy uses sensible defaults.
 
-## Settings
+## Core Settings
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `projects_root` | `~/.canopy/projects` | Directory for bare git repositories |
 | `workspaces_root` | `~/.canopy/workspaces` | Directory for active worktrees |
 | `archives_root` | `~/.canopy/archives` | Directory for archived workspace metadata |
-| `workspace_close_default` | `delete` | Behavior when `workspace close` is called without flags. Must be `delete` or `archive`. Override per-command with `--archive` or `--no-archive` |
+| `workspace_close_default` | `delete` | Default behavior for `workspace close`. Set to `archive` to archive by default |
 | `workspace_naming` | `{{.ID}}` | Template for workspace directory names |
 
 All paths support `~` expansion and must be absolute (after expansion).
+
+### Workspace Naming Template
+
+The `workspace_naming` setting uses Go templates:
+
+| Variable | Description |
+|----------|-------------|
+| `{{.ID}}` | Workspace identifier |
+| `{{.Slug}}` | Optional slug (from `--slug` flag) |
+
+Examples:
+- `{{.ID}}` → `PROJ-123`
+- `{{.ID}}__{{.Slug}}` → `PROJ-123__authentication`
 
 ## Workspace Patterns
 
@@ -44,6 +78,21 @@ export CANOPY_PROJECTS_ROOT=/custom/path
 export CANOPY_WORKSPACE_CLOSE_DEFAULT=archive
 ```
 
+## Hooks
+
+Configure lifecycle hooks to run commands on workspace creation and closure:
+
+```yaml
+hooks:
+  post_create:
+    - command: "echo 'Created {{.WorkspaceID}}'"
+    - command: "cd {{.WorkspacePath}}/backend && npm install"
+  pre_close:
+    - command: "docker-compose down"
+```
+
+See [Hooks Documentation](hooks.md) for complete details on template variables and configuration options.
+
 ## Full Example
 
 ```yaml
@@ -59,6 +108,17 @@ defaults:
       repos: ["backend", "frontend", "shared"]
     - pattern: "^DOCS-"
       repos: ["documentation"]
+
+hooks:
+  post_create:
+    - command: "echo 'Workspace ready'"
+  pre_close:
+    - command: "echo 'Closing workspace'"
+
+tui:
+  keybindings:
+    quit: ["q", "ctrl+c"]
+    open_editor: ["o", "e"]
 ```
 
 ## TUI Keybindings
