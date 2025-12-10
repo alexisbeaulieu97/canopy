@@ -97,20 +97,14 @@ canopy workspace new PROJ-123 --repos backend,frontend
 canopy workspace new PROJ-123 --repos backend --branch feature/auth
 ```
 
-**With directory slug:**
-```bash
-canopy workspace new PROJ-123 --repos backend --slug authentication
-# Creates: ~/workspaces/PROJ-123__authentication/
-```
-
 ### Listing Workspaces
 
 ```bash
 # List active workspaces
 canopy workspace list
 
-# List archived workspaces
-canopy workspace list --archived
+# List closed workspaces
+canopy workspace list --closed
 
 # JSON output for scripting
 canopy workspace list --json
@@ -146,11 +140,11 @@ cd "$(canopy workspace path PROJ-123)"
 # Interactive (prompts in TTY)
 canopy workspace close PROJ-123
 
-# Archive metadata for later restoration
-canopy workspace close PROJ-123 --archive
+# Keep metadata for later restoration
+canopy workspace close PROJ-123 --keep
 
 # Delete completely
-canopy workspace close PROJ-123 --no-archive
+canopy workspace close PROJ-123 --delete
 
 # Run pre_close hooks only (don't actually close)
 canopy workspace close PROJ-123 --hooks-only

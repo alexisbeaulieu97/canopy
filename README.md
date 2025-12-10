@@ -81,12 +81,11 @@ See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 **Flags for `workspace new`:**
 - `--repos` — Comma-separated list of repositories
 - `--branch` — Custom branch name (defaults to ID)
-- `--slug` — Optional slug for directory naming
 - `--hooks-only` — Run post_create hooks without creating workspace
 
 **Flags for `workspace close`:**
-- `--archive` — Archive metadata for later restoration
-- `--no-archive` — Delete without archiving
+- `--keep` — Keep metadata for later restoration
+- `--delete` — Delete without keeping metadata
 - `--hooks-only` — Run pre_close hooks without closing workspace
 
 ### Repositories
@@ -97,7 +96,6 @@ See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 | `canopy repo add <URL>` | Clone and register a repository |
 | `canopy repo remove <NAME>` | Remove a repository |
 | `canopy repo sync <NAME>` | Fetch updates from remote |
-| `canopy repo status [NAME]` | Show repository status |
 
 ### Registry
 

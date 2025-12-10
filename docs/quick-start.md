@@ -1,9 +1,22 @@
 # Quick Start
 
-Get up and running with Canopy in 5 minutes.
+Get up and running with Canopy in a few minutes.
+
+## Prerequisites
+
+- **Go 1.21+** — [Install Go](https://go.dev/doc/install)
+- **Git** — Must be available in your PATH
 
 ## Installation
 
+**Option 1: Install from source**
+```bash
+git clone https://github.com/alexisbeaulieu97/canopy.git
+cd canopy
+go install ./cmd/canopy
+```
+
+**Option 2: Install directly (requires release tag)**
 ```bash
 go install github.com/alexisbeaulieu97/canopy/cmd/canopy@latest
 ```

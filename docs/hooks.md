@@ -54,10 +54,7 @@ Example iterating over repos:
 ```yaml
 hooks:
   post_create:
-    - command: |
-        {{range .Repos}}
-        echo "Repo: {{.Name}} from {{.URL}}"
-        {{end}}
+    - command: "for repo in {{range .Repos}}{{.Name}} {{end}}; do echo \"Repo: $repo\"; done"
 ```
 
 ## Execution
@@ -87,9 +84,14 @@ canopy workspace close PROJ-123 --hooks-only
 ## Security
 
 Canopy validates hook commands to prevent injection attacks:
-- Commands cannot contain null bytes
-- Commands cannot contain newlines (prevents command chaining)
-- Empty or whitespace-only commands are rejected
+
+- **Null bytes rejected** — Prevents path traversal and injection attacks
+- **Newlines rejected** — Commands must be single-line; use `&&` or `;` for chaining within the command
+- **Empty commands rejected** — Whitespace-only commands are not allowed
+
+These validations prevent shell injection attacks where untrusted input could execute arbitrary commands.
+
+> **Note:** Multi-line YAML syntax (`|`) is not supported for hook commands. All commands must be on a single line.
 
 ## Examples
 
@@ -109,10 +111,7 @@ hooks:
 ```yaml
 hooks:
   post_create:
-    - command: |
-        curl -X POST -H 'Content-type: application/json' \
-          --data '{"text":"Started work on {{.WorkspaceID}}"}' \
-          $SLACK_WEBHOOK_URL
+    - command: "curl -X POST -H 'Content-type: application/json' --data '{\"text\":\"Started work on {{.WorkspaceID}}\"}' $SLACK_WEBHOOK_URL"
       description: "Notify team"
 ```
 
