@@ -2,9 +2,7 @@
 
 ## Purpose
 Interactive TUI enhancements for workspace visibility and quick actions. Includes stale detection, disk usage display, behind-remote indicators, and keyboard shortcuts.
-
 ## Requirements
-
 ### Requirement: Stale Workspace Detection
 The TUI SHALL identify and visually indicate workspaces that haven't been modified recently based on configurable threshold.
 
@@ -84,3 +82,51 @@ The TUI SHALL use color coding to indicate workspace health status.
 - **WHEN** workspace is behind remote or stale
 - **THEN** workspace is shown in yellow
 - **AND** user can identify workspaces needing sync
+
+### Requirement: Customizable Keyboard Bindings
+The TUI SHALL support user-configurable keyboard bindings.
+
+#### Scenario: Default keybindings work
+- **GIVEN** no keybinding configuration exists
+- **WHEN** user launches TUI
+- **THEN** default keybindings are active (q=quit, j/k=navigate, etc.)
+
+#### Scenario: Custom keybinding from config
+- **GIVEN** config contains `tui.keybindings.delete: "d"`
+- **WHEN** user presses "d" in TUI
+- **THEN** delete action is triggered
+
+#### Scenario: Override default keybinding
+- **GIVEN** config contains `tui.keybindings.quit: "x"`
+- **WHEN** user presses "x" in TUI
+- **THEN** quit action is triggered
+- **AND** "q" no longer triggers quit
+
+#### Scenario: Keybinding conflict detection
+- **GIVEN** config assigns same key to two actions
+- **WHEN** config is validated
+- **THEN** error is reported: "keybinding conflict: 'd' assigned to both 'delete' and 'details'"
+
+#### Scenario: Invalid keybinding rejected
+- **GIVEN** config contains invalid keybinding value
+- **WHEN** config is validated
+- **THEN** error is reported with the invalid value
+
+### Requirement: Reusable TUI Components
+The TUI SHALL provide reusable UI components that can be shared across views.
+
+#### Scenario: StatusBadge renders workspace state
+- **WHEN** rendering a workspace item
+- **THEN** the StatusBadge component renders the appropriate state (dirty, clean, stale, error)
+- **AND** styling is consistent across all views using the component
+
+#### Scenario: ConfirmDialog handles user confirmation
+- **WHEN** a destructive action requires confirmation
+- **THEN** the ConfirmDialog component displays the prompt
+- **AND** handles yes/no response with callbacks
+
+#### Scenario: WorkspaceListItem renders workspace entry
+- **WHEN** displaying a workspace in a list
+- **THEN** the WorkspaceListItem component renders name, status, and metadata
+- **AND** styling is consistent with the delegate pattern
+

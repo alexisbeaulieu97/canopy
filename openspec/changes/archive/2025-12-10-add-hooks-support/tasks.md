@@ -35,12 +35,12 @@
 ### 4. CLI Flags
 - [x] 4.1 Add `--no-hooks` flag to `workspace new`
 - [x] 4.2 Add `--no-hooks` flag to `workspace close`
-- [ ] 4.3 Add `--hooks-only` flag to run hooks on existing workspace
+- [x] 4.3 Add `--hooks-only` flag to run hooks on existing workspace
 
 ### 5. Security Considerations
 - [x] 5.1 Document that hooks run arbitrary commands
 - [x] 5.2 Consider adding `--dry-run` to show hooks without running
-- [ ] 5.3 Validate hook commands don't contain dangerous patterns (optional)
+- [x] 5.3 Validate hook commands don't contain dangerous patterns (optional)
 
 ### 6. Testing
 - [x] 6.1 Add unit tests for hook execution

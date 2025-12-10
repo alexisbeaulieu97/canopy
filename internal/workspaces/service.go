@@ -34,6 +34,16 @@ type Service struct {
 // ErrNoReposConfigured indicates no repos were specified and none matched configuration.
 var ErrNoReposConfigured = errors.New("no repositories specified and no patterns matched")
 
+// HookPhase identifies which lifecycle hook set to execute.
+type HookPhase string
+
+const (
+	// HookPhasePostCreate executes post_create hooks.
+	HookPhasePostCreate HookPhase = "post_create"
+	// HookPhasePreClose executes pre_close hooks.
+	HookPhasePreClose HookPhase = "pre_close"
+)
+
 // NewService creates a new workspace service
 func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngine ports.WorkspaceStorage, logger *logging.Logger) *Service {
 	diskUsage := DefaultDiskUsageCalculator()
@@ -362,6 +372,50 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, forc
 	}
 
 	return archived, nil
+}
+
+// RunHooks executes lifecycle hooks for an existing workspace without performing other actions.
+func (s *Service) RunHooks(workspaceID string, phase HookPhase, continueOnError bool) error {
+	workspace, dirName, err := s.findWorkspace(workspaceID)
+	if err != nil {
+		return err
+	}
+
+	hooksConfig := s.config.GetHooks()
+
+	var selected []config.Hook
+
+	switch phase {
+	case HookPhasePostCreate:
+		selected = hooksConfig.PostCreate
+	case HookPhasePreClose:
+		selected = hooksConfig.PreClose
+	default:
+		return cerrors.NewInvalidArgument("hook_phase", fmt.Sprintf("unsupported hook phase %q", phase))
+	}
+
+	if len(selected) == 0 {
+		return nil
+	}
+
+	hookCtx := hooks.HookContext{
+		WorkspaceID:   workspaceID,
+		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
+		BranchName:    workspace.BranchName,
+		Repos:         workspace.Repos,
+	}
+
+	if err := s.hookExecutor.ExecuteHooks(selected, hookCtx, continueOnError); err != nil {
+		if s.logger != nil {
+			s.logger.Error(fmt.Sprintf("%s hooks failed", phase), "error", err)
+		}
+
+		if !continueOnError {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // PreviewCloseWorkspace returns a preview of what would happen when closing a workspace.

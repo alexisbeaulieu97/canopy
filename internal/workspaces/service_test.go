@@ -11,6 +11,8 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	"github.com/alexisbeaulieu97/canopy/internal/gitx"
+	"github.com/alexisbeaulieu97/canopy/internal/logging"
+	"github.com/alexisbeaulieu97/canopy/internal/mocks"
 	"github.com/alexisbeaulieu97/canopy/internal/workspace"
 )
 
@@ -997,5 +999,66 @@ func TestExportImportRoundTrip(t *testing.T) {
 
 	if ws.BranchName != "feature/test" {
 		t.Errorf("expected branch feature/test, got %s", ws.BranchName)
+	}
+}
+
+func TestService_RunHooksHooksOnly(t *testing.T) {
+	t.Parallel()
+
+	mockStorage := mocks.NewMockWorkspaceStorage()
+	mockStorage.Workspaces["HOOKS-1"] = domain.Workspace{
+		ID:         "HOOKS-1",
+		BranchName: "main",
+		Repos: []domain.Repo{
+			{Name: "repo-a", URL: "https://example.com/repo-a"},
+		},
+	}
+
+	workspacesRoot := t.TempDir()
+
+	workspaceDir := filepath.Join(workspacesRoot, "HOOKS-1")
+
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		t.Fatalf("failed to create workspace dir: %v", err)
+	}
+
+	mockConfig := mocks.NewMockConfigProvider()
+	mockConfig.WorkspacesRoot = workspacesRoot
+	mockConfig.Hooks = config.Hooks{
+		PostCreate: []config.Hook{
+			{Command: "echo post-hook > hooks.out"},
+		},
+		PreClose: []config.Hook{
+			{Command: "echo pre-hook > pre.out"},
+		},
+	}
+
+	logger := logging.New(false)
+	svc := NewService(mockConfig, mocks.NewMockGitOperations(), mockStorage, logger)
+
+	if err := svc.RunHooks("HOOKS-1", HookPhasePostCreate, false); err != nil {
+		t.Fatalf("RunHooks post_create failed: %v", err)
+	}
+
+	postData, err := os.ReadFile(filepath.Join(workspaceDir, "hooks.out"))
+	if err != nil {
+		t.Fatalf("failed to read hook output: %v", err)
+	}
+
+	if !strings.Contains(string(postData), "post-hook") {
+		t.Fatalf("post_create hook did not run, got %q", string(postData))
+	}
+
+	if err := svc.RunHooks("HOOKS-1", HookPhasePreClose, false); err != nil {
+		t.Fatalf("RunHooks pre_close failed: %v", err)
+	}
+
+	preData, err := os.ReadFile(filepath.Join(workspaceDir, "pre.out"))
+	if err != nil {
+		t.Fatalf("failed to read pre_close hook output: %v", err)
+	}
+
+	if !strings.Contains(string(preData), "pre-hook") {
+		t.Fatalf("pre_close hook did not run, got %q", string(preData))
 	}
 }

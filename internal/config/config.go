@@ -268,8 +268,16 @@ func (c *Config) validateHooks() error {
 
 // validateHook checks that a hook has valid configuration.
 func validateHook(h Hook, hookType string, index int) error {
-	if h.Command == "" {
+	if strings.TrimSpace(h.Command) == "" {
 		return fmt.Errorf("%s hook[%d] command cannot be empty", hookType, index)
+	}
+
+	if strings.Contains(h.Command, "\x00") {
+		return fmt.Errorf("%s hook[%d] command contains invalid null byte", hookType, index)
+	}
+
+	if strings.ContainsAny(h.Command, "\n\r") {
+		return fmt.Errorf("%s hook[%d] command cannot contain newlines", hookType, index)
 	}
 
 	if h.Timeout < 0 {
