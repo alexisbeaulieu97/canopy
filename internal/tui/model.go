@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
@@ -16,6 +17,7 @@ import (
 type Model struct {
 	list               list.Model
 	svc                *workspaces.Service
+	keybindings        config.Keybindings
 	err                error
 	infoMessage        string
 	printPath          bool
@@ -42,6 +44,7 @@ type Model struct {
 // NewModel creates a new TUI model.
 func NewModel(svc *workspaces.Service, printPath bool) Model {
 	threshold := svc.StaleThresholdDays()
+	kb := svc.Keybindings()
 
 	delegate := newWorkspaceDelegate(threshold)
 	l := list.New([]list.Item{}, delegate, 0, 0)
@@ -52,12 +55,18 @@ func NewModel(svc *workspaces.Service, printPath bool) Model {
 	l.SetShowStatusBar(false)
 	l.Styles.NoItems = components.SubtleTextStyle
 
+	// Build keybinding help based on configured keys
+	searchKey := firstKey(kb.Search)
+	toggleStaleKey := firstKey(kb.ToggleStale)
+	pushKey := firstKey(kb.Push)
+	openKey := firstKey(kb.OpenEditor)
+
 	l.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
-			key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
-			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "toggle stale")),
-			key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "push selected")),
-			key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in editor")),
+			key.NewBinding(key.WithKeys(searchKey), key.WithHelp(searchKey, "search")),
+			key.NewBinding(key.WithKeys(toggleStaleKey), key.WithHelp(toggleStaleKey, "toggle stale")),
+			key.NewBinding(key.WithKeys(pushKey), key.WithHelp(pushKey, "push selected")),
+			key.NewBinding(key.WithKeys(openKey), key.WithHelp(openKey, "open in editor")),
 		}
 	}
 
@@ -68,6 +77,7 @@ func NewModel(svc *workspaces.Service, printPath bool) Model {
 	return Model{
 		list:               l,
 		svc:                svc,
+		keybindings:        kb,
 		printPath:          printPath,
 		spinner:            s,
 		statusCache:        make(map[string]*domain.WorkspaceStatus),
@@ -78,6 +88,26 @@ func NewModel(svc *workspaces.Service, printPath bool) Model {
 // Init configures initial commands.
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(m.loadWorkspaces, m.spinner.Tick)
+}
+
+// matchesKey checks if the pressed key matches any of the configured keybindings.
+func matchesKey(key string, bindings []string) bool {
+	for _, b := range bindings {
+		if key == b {
+			return true
+		}
+	}
+
+	return false
+}
+
+// firstKey returns the first key from the bindings, or empty string if none.
+func firstKey(bindings []string) string {
+	if len(bindings) > 0 {
+		return bindings[0]
+	}
+
+	return ""
 }
 
 // selectedWorkspaceItem returns the currently selected workspace item.

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/hooks"
@@ -724,6 +725,11 @@ func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
 // StaleThresholdDays returns the configured stale threshold in days.
 func (s *Service) StaleThresholdDays() int {
 	return s.config.GetStaleThresholdDays()
+}
+
+// Keybindings returns the TUI keybindings configuration with defaults applied.
+func (s *Service) Keybindings() config.Keybindings {
+	return s.config.GetKeybindings()
 }
 
 // DetectOrphans finds orphaned worktrees across all workspaces.

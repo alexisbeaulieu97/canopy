@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -547,6 +548,229 @@ func TestValidate(t *testing.T) {
 				}
 			} else if err != nil {
 				t.Errorf("Validate() unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestKeybindingsWithDefaults(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    Keybindings
+		wantQuit []string
+	}{
+		{
+			name:     "empty keybindings gets defaults",
+			input:    Keybindings{},
+			wantQuit: DefaultQuitKeys,
+		},
+		{
+			name:     "custom keybindings preserved",
+			input:    Keybindings{Quit: []string{"x"}},
+			wantQuit: []string{"x"},
+		},
+		{
+			name:     "partial custom keybindings preserved with defaults for others",
+			input:    Keybindings{Quit: []string{"x"}, Search: []string{}},
+			wantQuit: []string{"x"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.input.WithDefaults()
+			if len(result.Quit) != len(tt.wantQuit) {
+				t.Errorf("WithDefaults().Quit = %v, want %v", result.Quit, tt.wantQuit)
+			}
+
+			for i, k := range result.Quit {
+				if k != tt.wantQuit[i] {
+					t.Errorf("WithDefaults().Quit[%d] = %q, want %q", i, k, tt.wantQuit[i])
+				}
+			}
+
+			// Verify other defaults are applied when empty
+			if len(tt.input.Search) == 0 && len(result.Search) != len(DefaultSearchKeys) {
+				t.Errorf("WithDefaults().Search = %v, want %v", result.Search, DefaultSearchKeys)
+			}
+		})
+	}
+}
+
+func TestKeybindingsValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		kb        Keybindings
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "no conflicts with defaults",
+			kb:   Keybindings{}.WithDefaults(),
+		},
+		{
+			name: "no conflicts with custom keybindings",
+			kb: Keybindings{
+				Quit:        []string{"x"},
+				Search:      []string{"/"},
+				Push:        []string{"p"},
+				Close:       []string{"c"},
+				OpenEditor:  []string{"o"},
+				ToggleStale: []string{"s"},
+				Details:     []string{"enter"},
+				Confirm:     []string{"y"},
+				Cancel:      []string{"n"},
+			},
+		},
+		{
+			name: "conflict detected between quit and push",
+			kb: Keybindings{
+				Quit: []string{"p"},
+				Push: []string{"p"},
+			}.WithDefaults(),
+			wantErr:   true,
+			errSubstr: "key \"p\" is assigned to multiple actions",
+		},
+		{
+			name: "conflict detected with multiple keys",
+			kb: Keybindings{
+				Quit:   []string{"q", "x"},
+				Search: []string{"x", "/"},
+			}.WithDefaults(),
+			wantErr:   true,
+			errSubstr: "key \"x\" is assigned to multiple actions",
+		},
+		{
+			name: "multiple keys per action without conflict",
+			kb: Keybindings{
+				OpenEditor: []string{"o", "e"},
+				Quit:       []string{"q", "ctrl+c"},
+			}.WithDefaults(),
+		},
+		{
+			name: "invalid empty key rejected",
+			kb: Keybindings{
+				Quit: []string{""},
+			}.WithDefaults(),
+			wantErr:   true,
+			errSubstr: "invalid key \"\" for action \"quit\"",
+		},
+		{
+			name: "invalid key name rejected",
+			kb: Keybindings{
+				Quit: []string{"foo"},
+			}.WithDefaults(),
+			wantErr:   true,
+			errSubstr: "invalid key \"foo\" for action \"quit\"",
+		},
+		{
+			name: "valid modifier keys accepted",
+			kb: Keybindings{
+				Quit: []string{"ctrl+c", "alt+q", "shift+x"},
+			}.WithDefaults(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.kb.ValidateKeybindings()
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ValidateKeybindings() expected error, got nil")
+					return
+				}
+
+				if tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("ValidateKeybindings() error = %q, want substring %q", err.Error(), tt.errSubstr)
+				}
+			} else if err != nil {
+				t.Errorf("ValidateKeybindings() unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestConfigValidateKeybindings(t *testing.T) {
+	tests := []struct {
+		name      string
+		cfg       *Config
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "valid config with default keybindings",
+			cfg: &Config{
+				ProjectsRoot:   "/tmp/projects",
+				WorkspacesRoot: "/tmp/workspaces",
+				ClosedRoot:     "/tmp/closed",
+				CloseDefault:   "delete",
+			},
+		},
+		{
+			name: "valid config with custom keybindings",
+			cfg: &Config{
+				ProjectsRoot:   "/tmp/projects",
+				WorkspacesRoot: "/tmp/workspaces",
+				ClosedRoot:     "/tmp/closed",
+				CloseDefault:   "delete",
+				TUI: TUIConfig{
+					Keybindings: Keybindings{
+						Quit:   []string{"x"},
+						Search: []string{"f"},
+					},
+				},
+			},
+		},
+		{
+			name: "invalid config with keybinding conflicts",
+			cfg: &Config{
+				ProjectsRoot:   "/tmp/projects",
+				WorkspacesRoot: "/tmp/workspaces",
+				ClosedRoot:     "/tmp/closed",
+				CloseDefault:   "delete",
+				TUI: TUIConfig{
+					Keybindings: Keybindings{
+						Quit:   []string{"p"},
+						Push:   []string{"p"},
+						Search: []string{"/"},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "keybinding validation errors",
+		},
+		{
+			name: "invalid config with bad key name",
+			cfg: &Config{
+				ProjectsRoot:   "/tmp/projects",
+				WorkspacesRoot: "/tmp/workspaces",
+				ClosedRoot:     "/tmp/closed",
+				CloseDefault:   "delete",
+				TUI: TUIConfig{
+					Keybindings: Keybindings{
+						Quit: []string{"invalid-key"},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "invalid key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.ValidateValues()
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ValidateValues() expected error, got nil")
+					return
+				}
+
+				if tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("ValidateValues() error = %q, want substring %q", err.Error(), tt.errSubstr)
+				}
+			} else if err != nil {
+				t.Errorf("ValidateValues() unexpected error: %v", err)
 			}
 		})
 	}

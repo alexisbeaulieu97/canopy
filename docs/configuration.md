@@ -60,3 +60,65 @@ defaults:
     - pattern: "^DOCS-"
       repos: ["documentation"]
 ```
+
+## TUI Keybindings
+
+Customize TUI keyboard shortcuts to match your preferences or resolve terminal conflicts:
+
+```yaml
+tui:
+  keybindings:
+    quit: ["q", "ctrl+c"]
+    search: ["/"]
+    push: ["p"]
+    close: ["c"]
+    open_editor: ["o"]
+    toggle_stale: ["s"]
+    details: ["enter"]
+    confirm: ["y", "Y"]
+    cancel: ["n", "N", "esc"]
+```
+
+### Available Actions
+
+| Action | Default Keys | Description |
+|--------|-------------|-------------|
+| `quit` | `q`, `ctrl+c` | Exit the TUI |
+| `search` | `/` | Start workspace search/filter |
+| `push` | `p` | Push selected workspace |
+| `close` | `c` | Close selected workspace |
+| `open_editor` | `o` | Open workspace in editor |
+| `toggle_stale` | `s` | Toggle stale workspace filter |
+| `details` | `enter` | View workspace details |
+| `confirm` | `y`, `Y` | Confirm action in dialogs |
+| `cancel` | `n`, `N`, `esc` | Cancel/go back |
+
+### Key Name Format
+
+Keys are specified as strings:
+- **Regular keys**: Lowercase letters (`a`, `b`, `q`), numbers (`1`, `2`), and symbols (`/`, `.`, `-`)
+- **Uppercase letters**: Use uppercase directly (`Y`, `N`) for case-sensitive matching in dialogs
+- **Modifier keys**: `ctrl+<key>`, `alt+<key>`, `shift+<key>` (e.g., `ctrl+c`, `alt+x`)
+- **Special keys**: `enter`, `esc`, `tab`, `backspace`, `delete`, `space`
+- **Arrow keys**: `up`, `down`, `left`, `right`, `home`, `end`, `pgup`, `pgdown`
+- **Function keys**: `f1` through `f12`
+
+Examples: `ctrl+c`, `shift+a`, `alt+x`, `enter`, `esc`, `Y`
+
+**Note**: Keys are case-sensitive. `y` and `Y` are different keybindings.
+
+### Multiple Keys Per Action
+
+Each action can have multiple keys assigned:
+
+```yaml
+tui:
+  keybindings:
+    open_editor: ["o", "e"]  # Both 'o' and 'e' open in editor
+    quit: ["q", "ctrl+c", "ctrl+q"]
+```
+
+### Conflict Detection
+
+Canopy validates keybindings at startup. If the same key is assigned to multiple actions, an error is returned listing all conflicts.
+

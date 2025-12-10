@@ -173,7 +173,7 @@ func (m Model) handleKey(key string) (Model, tea.Cmd, bool) {
 	}
 
 	if m.pushing {
-		if key == "ctrl+c" || key == "q" {
+		if matchesKey(key, m.keybindings.Quit) {
 			return m, tea.Quit, true
 		}
 
@@ -185,22 +185,23 @@ func (m Model) handleKey(key string) (Model, tea.Cmd, bool) {
 
 // handleDetailKey handles key events in the detail view.
 func (m Model) handleDetailKey(key string) (Model, tea.Cmd, bool) {
-	if key != "esc" && key != "q" {
-		return m, nil, false
+	// Only cancel or quit keys exit detail view
+	if matchesKey(key, m.keybindings.Cancel) || matchesKey(key, m.keybindings.Quit) {
+		m.detailView = false
+		m.loadingDetail = false
+		m.selectedWS = nil
+		m.wsStatus = nil
+		m.wsOrphans = nil
+
+		return m, nil, true
 	}
 
-	m.detailView = false
-	m.loadingDetail = false
-	m.selectedWS = nil
-	m.wsStatus = nil
-	m.wsOrphans = nil
-
-	return m, nil, true
+	return m, nil, false
 }
 
 // handleConfirmKey handles key events during confirmation dialogs.
 func (m Model) handleConfirmKey(key string) (Model, tea.Cmd, bool) {
-	if key == "y" || key == "Y" {
+	if matchesKey(key, m.keybindings.Confirm) {
 		m.confirming = false
 
 		switch m.actionToConfirm {
@@ -227,7 +228,7 @@ func (m Model) handleConfirmKey(key string) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	if key == "n" || key == "N" || key == "esc" {
+	if matchesKey(key, m.keybindings.Cancel) {
 		m.confirming = false
 		m.actionToConfirm = ""
 		m.confirmingID = ""
@@ -245,24 +246,24 @@ func (m Model) handleListKey(key string) (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 
-	switch key {
-	case "ctrl+c", "q":
+	switch {
+	case matchesKey(key, m.keybindings.Quit):
 		return m, tea.Quit, true
-	case "enter":
+	case matchesKey(key, m.keybindings.Details):
 		return m.handleEnter()
-	case "/":
+	case matchesKey(key, m.keybindings.Search):
 		m.list.SetFilterState(list.Filtering)
 		return m, nil, true
-	case "s":
+	case matchesKey(key, m.keybindings.ToggleStale):
 		m.filterStale = !m.filterStale
 		m.applyFilters()
 
 		return m, nil, true
-	case "p":
+	case matchesKey(key, m.keybindings.Push):
 		return m.handlePushConfirm()
-	case "o":
+	case matchesKey(key, m.keybindings.OpenEditor):
 		return m.handleOpenEditor()
-	case "c":
+	case matchesKey(key, m.keybindings.Close):
 		return m.handleCloseConfirm()
 	}
 

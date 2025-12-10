@@ -34,4 +34,7 @@ type ConfigProvider interface {
 
 	// GetHooks returns the lifecycle hooks configuration.
 	GetHooks() config.Hooks
+
+	// GetKeybindings returns the TUI keybindings with defaults applied.
+	GetKeybindings() config.Keybindings
 }

@@ -5,9 +5,23 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/spf13/viper"
+)
+
+// Default keybindings for TUI actions.
+var (
+	DefaultQuitKeys        = []string{"q", "ctrl+c"}
+	DefaultSearchKeys      = []string{"/"}
+	DefaultPushKeys        = []string{"p"}
+	DefaultCloseKeys       = []string{"c"}
+	DefaultOpenEditorKeys  = []string{"o"}
+	DefaultToggleStaleKeys = []string{"s"}
+	DefaultDetailsKeys     = []string{"enter"}
+	DefaultConfirmKeys     = []string{"y", "Y"}
+	DefaultCancelKeys      = []string{"n", "N", "esc"}
 )
 
 // Hook defines a single lifecycle hook command.
@@ -25,6 +39,24 @@ type Hooks struct {
 	PreClose   []Hook `mapstructure:"pre_close"`
 }
 
+// Keybindings holds TUI keybinding configurations.
+type Keybindings struct {
+	Quit        []string `mapstructure:"quit"`
+	Search      []string `mapstructure:"search"`
+	Push        []string `mapstructure:"push"`
+	Close       []string `mapstructure:"close"`
+	OpenEditor  []string `mapstructure:"open_editor"`
+	ToggleStale []string `mapstructure:"toggle_stale"`
+	Details     []string `mapstructure:"details"`
+	Confirm     []string `mapstructure:"confirm"`
+	Cancel      []string `mapstructure:"cancel"`
+}
+
+// TUIConfig holds TUI-specific configuration.
+type TUIConfig struct {
+	Keybindings Keybindings `mapstructure:"keybindings"`
+}
+
 // Config holds the global configuration
 type Config struct {
 	ProjectsRoot       string        `mapstructure:"projects_root"`
@@ -35,6 +67,7 @@ type Config struct {
 	StaleThresholdDays int           `mapstructure:"stale_threshold_days"`
 	Defaults           Defaults      `mapstructure:"defaults"`
 	Hooks              Hooks         `mapstructure:"hooks"`
+	TUI                TUIConfig     `mapstructure:"tui"`
 	Registry           *RepoRegistry `mapstructure:"-"`
 }
 
@@ -156,7 +189,18 @@ func (c *Config) ValidateValues() error {
 		return err
 	}
 
-	return c.validateHooks()
+	if err := c.validateHooks(); err != nil {
+		return err
+	}
+
+	return c.validateKeybindings()
+}
+
+// validateKeybindings validates the TUI keybindings configuration.
+func (c *Config) validateKeybindings() error {
+	// Apply defaults first, then validate for conflicts
+	kb := c.TUI.Keybindings.WithDefaults()
+	return kb.ValidateKeybindings()
 }
 
 // validateRequiredFields checks that all required configuration fields are set.
@@ -325,4 +369,182 @@ func (c *Config) GetRegistry() *RepoRegistry {
 // GetHooks returns the lifecycle hooks configuration.
 func (c *Config) GetHooks() Hooks {
 	return c.Hooks
+}
+
+// GetTUI returns the TUI configuration.
+func (c *Config) GetTUI() TUIConfig {
+	return c.TUI
+}
+
+// GetKeybindings returns the TUI keybindings with defaults applied.
+func (c *Config) GetKeybindings() Keybindings {
+	return c.TUI.Keybindings.WithDefaults()
+}
+
+// copyKeys creates a copy of a string slice to avoid sharing references.
+func copyKeys(keys []string) []string {
+	if keys == nil {
+		return nil
+	}
+
+	result := make([]string, len(keys))
+	copy(result, keys)
+
+	return result
+}
+
+// WithDefaults returns a copy of Keybindings with defaults applied for empty fields.
+// Returned slices are copies to prevent mutation of global defaults.
+func (k Keybindings) WithDefaults() Keybindings {
+	result := k
+
+	if len(result.Quit) == 0 {
+		result.Quit = copyKeys(DefaultQuitKeys)
+	}
+
+	if len(result.Search) == 0 {
+		result.Search = copyKeys(DefaultSearchKeys)
+	}
+
+	if len(result.Push) == 0 {
+		result.Push = copyKeys(DefaultPushKeys)
+	}
+
+	if len(result.Close) == 0 {
+		result.Close = copyKeys(DefaultCloseKeys)
+	}
+
+	if len(result.OpenEditor) == 0 {
+		result.OpenEditor = copyKeys(DefaultOpenEditorKeys)
+	}
+
+	if len(result.ToggleStale) == 0 {
+		result.ToggleStale = copyKeys(DefaultToggleStaleKeys)
+	}
+
+	if len(result.Details) == 0 {
+		result.Details = copyKeys(DefaultDetailsKeys)
+	}
+
+	if len(result.Confirm) == 0 {
+		result.Confirm = copyKeys(DefaultConfirmKeys)
+	}
+
+	if len(result.Cancel) == 0 {
+		result.Cancel = copyKeys(DefaultCancelKeys)
+	}
+
+	return result
+}
+
+// validKeys is the set of recognized key names for TUI keybindings.
+var validKeys = map[string]bool{
+	// Letters
+	"a": true, "b": true, "c": true, "d": true, "e": true, "f": true, "g": true, "h": true,
+	"i": true, "j": true, "k": true, "l": true, "m": true, "n": true, "o": true, "p": true,
+	"q": true, "r": true, "s": true, "t": true, "u": true, "v": true, "w": true, "x": true,
+	"y": true, "z": true,
+	// Uppercase letters (for confirm/cancel dialogs)
+	"A": true, "B": true, "C": true, "D": true, "E": true, "F": true, "G": true, "H": true,
+	"I": true, "J": true, "K": true, "L": true, "M": true, "N": true, "O": true, "P": true,
+	"Q": true, "R": true, "S": true, "T": true, "U": true, "V": true, "W": true, "X": true,
+	"Y": true, "Z": true,
+	// Numbers
+	"0": true, "1": true, "2": true, "3": true, "4": true,
+	"5": true, "6": true, "7": true, "8": true, "9": true,
+	// Special keys
+	"enter": true, "esc": true, "tab": true, "backspace": true, "delete": true,
+	"up": true, "down": true, "left": true, "right": true,
+	"home": true, "end": true, "pgup": true, "pgdown": true,
+	"space": true,
+	// Function keys
+	"f1": true, "f2": true, "f3": true, "f4": true, "f5": true, "f6": true,
+	"f7": true, "f8": true, "f9": true, "f10": true, "f11": true, "f12": true,
+	// Symbols
+	"/": true, "\\": true, ".": true, ",": true, ";": true, "'": true, "`": true,
+	"[": true, "]": true, "-": true, "=": true,
+}
+
+// isValidKey checks if a key string is a recognized keybinding.
+func isValidKey(key string) bool {
+	if key == "" {
+		return false
+	}
+
+	// Check for modifier combinations (ctrl+x, alt+x, shift+x)
+	for _, prefix := range []string{"ctrl+", "alt+", "shift+"} {
+		if strings.HasPrefix(key, prefix) {
+			base := strings.TrimPrefix(key, prefix)
+			return isValidKey(base)
+		}
+	}
+
+	return validKeys[key]
+}
+
+// ValidateKeybindings checks for invalid and conflicting keybindings.
+// Returns an error listing all issues found.
+func (k Keybindings) ValidateKeybindings() error {
+	var errors []string
+
+	// Validate each key is a recognized format
+	validateKeys := func(keys []string, action string) {
+		for _, key := range keys {
+			if !isValidKey(key) {
+				errors = append(errors, fmt.Sprintf("invalid key %q for action %q", key, action))
+			}
+		}
+	}
+
+	validateKeys(k.Quit, "quit")
+	validateKeys(k.Search, "search")
+	validateKeys(k.Push, "push")
+	validateKeys(k.Close, "close")
+	validateKeys(k.OpenEditor, "open_editor")
+	validateKeys(k.ToggleStale, "toggle_stale")
+	validateKeys(k.Details, "details")
+	validateKeys(k.Confirm, "confirm")
+	validateKeys(k.Cancel, "cancel")
+
+	// Map key -> list of actions using that key
+	keyUsage := make(map[string][]string)
+
+	addKeys := func(keys []string, action string) {
+		for _, key := range keys {
+			keyUsage[key] = append(keyUsage[key], action)
+		}
+	}
+
+	addKeys(k.Quit, "quit")
+	addKeys(k.Search, "search")
+	addKeys(k.Push, "push")
+	addKeys(k.Close, "close")
+	addKeys(k.OpenEditor, "open_editor")
+	addKeys(k.ToggleStale, "toggle_stale")
+	addKeys(k.Details, "details")
+	addKeys(k.Confirm, "confirm")
+	addKeys(k.Cancel, "cancel")
+
+	// Find conflicts (sort keys for deterministic output)
+	var conflictKeys []string
+
+	for key, actions := range keyUsage {
+		if len(actions) > 1 {
+			conflictKeys = append(conflictKeys, key)
+		}
+	}
+
+	sort.Strings(conflictKeys)
+
+	for _, key := range conflictKeys {
+		sort.Strings(keyUsage[key])
+		errors = append(errors, fmt.Sprintf("key %q is assigned to multiple actions: %s",
+			key, strings.Join(keyUsage[key], ", ")))
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("keybinding validation errors:\n  %s", strings.Join(errors, "\n  "))
+	}
+
+	return nil
 }
