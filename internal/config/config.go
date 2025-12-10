@@ -10,6 +10,19 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Default keybindings for TUI actions.
+var (
+	DefaultQuitKeys        = []string{"q", "ctrl+c"}
+	DefaultSearchKeys      = []string{"/"}
+	DefaultPushKeys        = []string{"p"}
+	DefaultCloseKeys       = []string{"c"}
+	DefaultOpenEditorKeys  = []string{"o"}
+	DefaultToggleStaleKeys = []string{"s"}
+	DefaultDetailsKeys     = []string{"enter"}
+	DefaultConfirmKeys     = []string{"y", "Y"}
+	DefaultCancelKeys      = []string{"n", "N", "esc"}
+)
+
 // Hook defines a single lifecycle hook command.
 type Hook struct {
 	Command         string   `mapstructure:"command"`
@@ -25,6 +38,24 @@ type Hooks struct {
 	PreClose   []Hook `mapstructure:"pre_close"`
 }
 
+// Keybindings holds TUI keybinding configurations.
+type Keybindings struct {
+	Quit        []string `mapstructure:"quit"`
+	Search      []string `mapstructure:"search"`
+	Push        []string `mapstructure:"push"`
+	Close       []string `mapstructure:"close"`
+	OpenEditor  []string `mapstructure:"open_editor"`
+	ToggleStale []string `mapstructure:"toggle_stale"`
+	Details     []string `mapstructure:"details"`
+	Confirm     []string `mapstructure:"confirm"`
+	Cancel      []string `mapstructure:"cancel"`
+}
+
+// TUIConfig holds TUI-specific configuration.
+type TUIConfig struct {
+	Keybindings Keybindings `mapstructure:"keybindings"`
+}
+
 // Config holds the global configuration
 type Config struct {
 	ProjectsRoot       string        `mapstructure:"projects_root"`
@@ -35,6 +66,7 @@ type Config struct {
 	StaleThresholdDays int           `mapstructure:"stale_threshold_days"`
 	Defaults           Defaults      `mapstructure:"defaults"`
 	Hooks              Hooks         `mapstructure:"hooks"`
+	TUI                TUIConfig     `mapstructure:"tui"`
 	Registry           *RepoRegistry `mapstructure:"-"`
 }
 
@@ -156,7 +188,18 @@ func (c *Config) ValidateValues() error {
 		return err
 	}
 
-	return c.validateHooks()
+	if err := c.validateHooks(); err != nil {
+		return err
+	}
+
+	return c.validateKeybindings()
+}
+
+// validateKeybindings validates the TUI keybindings configuration.
+func (c *Config) validateKeybindings() error {
+	// Apply defaults first, then validate for conflicts
+	kb := c.TUI.Keybindings.WithDefaults()
+	return kb.ValidateKeybindings()
 }
 
 // validateRequiredFields checks that all required configuration fields are set.
@@ -325,4 +368,95 @@ func (c *Config) GetRegistry() *RepoRegistry {
 // GetHooks returns the lifecycle hooks configuration.
 func (c *Config) GetHooks() Hooks {
 	return c.Hooks
+}
+
+// GetTUI returns the TUI configuration.
+func (c *Config) GetTUI() TUIConfig {
+	return c.TUI
+}
+
+// GetKeybindings returns the TUI keybindings with defaults applied.
+func (c *Config) GetKeybindings() Keybindings {
+	return c.TUI.Keybindings.WithDefaults()
+}
+
+// WithDefaults returns a copy of Keybindings with defaults applied for empty fields.
+func (k Keybindings) WithDefaults() Keybindings {
+	result := k
+
+	if len(result.Quit) == 0 {
+		result.Quit = DefaultQuitKeys
+	}
+
+	if len(result.Search) == 0 {
+		result.Search = DefaultSearchKeys
+	}
+
+	if len(result.Push) == 0 {
+		result.Push = DefaultPushKeys
+	}
+
+	if len(result.Close) == 0 {
+		result.Close = DefaultCloseKeys
+	}
+
+	if len(result.OpenEditor) == 0 {
+		result.OpenEditor = DefaultOpenEditorKeys
+	}
+
+	if len(result.ToggleStale) == 0 {
+		result.ToggleStale = DefaultToggleStaleKeys
+	}
+
+	if len(result.Details) == 0 {
+		result.Details = DefaultDetailsKeys
+	}
+
+	if len(result.Confirm) == 0 {
+		result.Confirm = DefaultConfirmKeys
+	}
+
+	if len(result.Cancel) == 0 {
+		result.Cancel = DefaultCancelKeys
+	}
+
+	return result
+}
+
+// ValidateKeybindings checks for conflicting keybindings.
+// Returns an error listing all conflicts if any keys are assigned to multiple actions.
+func (k Keybindings) ValidateKeybindings() error {
+	// Map key -> list of actions using that key
+	keyUsage := make(map[string][]string)
+
+	addKeys := func(keys []string, action string) {
+		for _, key := range keys {
+			keyUsage[key] = append(keyUsage[key], action)
+		}
+	}
+
+	addKeys(k.Quit, "quit")
+	addKeys(k.Search, "search")
+	addKeys(k.Push, "push")
+	addKeys(k.Close, "close")
+	addKeys(k.OpenEditor, "open_editor")
+	addKeys(k.ToggleStale, "toggle_stale")
+	addKeys(k.Details, "details")
+	addKeys(k.Confirm, "confirm")
+	addKeys(k.Cancel, "cancel")
+
+	// Find conflicts
+	var conflicts []string
+
+	for key, actions := range keyUsage {
+		if len(actions) > 1 {
+			conflicts = append(conflicts, fmt.Sprintf("key %q is assigned to multiple actions: %s", key, strings.Join(actions, ", ")))
+		}
+	}
+
+	if len(conflicts) > 0 {
+		return fmt.Errorf("keybinding conflicts detected:\n  %s", strings.Join(conflicts, "\n  "))
+	}
+
+	return nil
 }

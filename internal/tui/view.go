@@ -123,15 +123,24 @@ func (m Model) renderFooter() string {
 		return ""
 	}
 
+	// Build shortcuts using configured keybindings
+	searchKey := firstKey(m.keybindings.Search)
+	toggleStaleKey := firstKey(m.keybindings.ToggleStale)
+	detailsKey := firstKey(m.keybindings.Details)
+	openKey := firstKey(m.keybindings.OpenEditor)
+	pushKey := firstKey(m.keybindings.Push)
+	closeKey := firstKey(m.keybindings.Close)
+	quitKey := firstKey(m.keybindings.Quit)
+
 	shortcuts := []string{
 		"↑↓ navigate",
-		"/ search",
-		"s stale",
-		"⏎ details",
-		"o open",
-		"p push",
-		"c close",
-		"q quit",
+		fmt.Sprintf("%s search", searchKey),
+		fmt.Sprintf("%s stale", toggleStaleKey),
+		fmt.Sprintf("%s details", detailsKey),
+		fmt.Sprintf("%s open", openKey),
+		fmt.Sprintf("%s push", pushKey),
+		fmt.Sprintf("%s close", closeKey),
+		fmt.Sprintf("%s quit", quitKey),
 	}
 
 	return subtleTextStyle.Render(strings.Join(shortcuts, "  •  "))
@@ -176,8 +185,13 @@ func (m Model) renderDetailView() string {
 	b.WriteString(m.renderDetailRepos())
 	b.WriteString("\n\n")
 
-	// Footer
-	b.WriteString(helpTextStyle.Render("Press [esc] or [q] to return"))
+	// Footer with configured keys
+	cancelKeys := m.keybindings.Cancel
+	if len(cancelKeys) > 0 {
+		b.WriteString(helpTextStyle.Render(fmt.Sprintf("Press [%s] to return", cancelKeys[0])))
+	} else {
+		b.WriteString(helpTextStyle.Render("Press [esc] to return"))
+	}
 
 	return b.String()
 }

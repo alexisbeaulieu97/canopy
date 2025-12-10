@@ -137,3 +137,8 @@ func (m *MockConfigProvider) GetHooks() config.Hooks {
 
 	return m.Hooks
 }
+
+// GetKeybindings returns the TUI keybindings with defaults applied.
+func (m *MockConfigProvider) GetKeybindings() config.Keybindings {
+	return config.Keybindings{}.WithDefaults()
+}
