@@ -29,6 +29,12 @@ The system SHALL use hexagonal architecture with interface-defined ports to deco
 ### Requirement: Centralized Service Initialization
 The system SHALL initialize all services through a centralized App struct that manages dependencies and lifecycle. The App struct SHALL support functional options for injecting custom implementations.
 
+**Supported Functional Options:**
+- `WithGitOperations(ports.GitOperations)` — Inject custom git engine or mock for testing
+- `WithWorkspaceStorage(ports.WorkspaceStorage)` — Inject custom workspace storage or mock for testing
+- `WithConfigProvider(ports.ConfigProvider)` — Inject custom config provider or mock for testing
+- `WithLogger(*logging.Logger)` — Inject custom logger instance
+
 #### Scenario: App creation with defaults
 - **WHEN** `app.New(debug)` is called with valid config and no options
 - **THEN** an App struct is returned with default GitEngine, WorkspaceStore, and ConfigProvider
@@ -140,7 +146,7 @@ The codebase SHALL follow hexagonal architecture patterns.
 - **THEN** the domain layer SHALL remain decoupled from infrastructure
 
 ### Requirement: Pure go-git Implementation
-The system SHALL use only go-git library for all git operations without shelling out to the git CLI.
+The system SHALL use go-git library as the primary implementation for all git operations. An explicit, documented escape hatch (`internal/gitx/git.go:RunCommand`) MAY invoke the git CLI for operations go-git cannot support.
 
 #### Scenario: Clone repository with go-git
 - **WHEN** a repository needs to be cloned
@@ -162,13 +168,34 @@ The system SHALL use only go-git library for all git operations without shelling
 - **THEN** the operation is performed using go-git's Branch and Checkout APIs
 - **AND** no external git process is spawned
 
+#### Scenario: Escape hatch for unsupported operations
+- **WHEN** a git operation cannot be performed with go-git (e.g., worktree creation with detached HEAD)
+- **THEN** the `RunCommand` escape hatch MAY be used to invoke the git CLI
+- **AND** usage is documented in the code
+- **AND** the CLI invocation still returns domain errors wrapped with contextual information
+
 ### Requirement: Uniform Error Handling for Git Operations
-All git operations SHALL return domain errors wrapped with context, without exposing go-git internals.
+All git operations SHALL return domain errors wrapped with context, without exposing go-git internals. This requirement extends the Typed Error System to specifically cover git operation failures.
 
 #### Scenario: Git operation returns domain error
 - **WHEN** a git operation fails
 - **THEN** the error is wrapped as an internal/errors type
 - **AND** the original go-git error is available via errors.Unwrap()
+
+#### Scenario: go-git error mapping
+- **WHEN** a go-git operation fails
+- **THEN** the error is mapped to an appropriate CanopyError code:
+  - Authentication failures (SSH key issues, credentials) → `ErrAuthenticationFailed`
+  - Network/timeouts (DNS, connection refused, timeouts) → `ErrNetworkFailed`
+  - Repository not found (invalid URL, 404) → `ErrRepoNotFound`
+  - Permission denied (403, read-only repo) → `ErrPermissionDenied`
+  - Protocol errors (git protocol issues) → `ErrGitOperationFailed`
+- **AND** the original error is preserved via `errors.Unwrap()`
+
+#### Scenario: CLI escape hatch error handling
+- **WHEN** a git CLI command (via RunCommand) fails
+- **THEN** the error is wrapped as `ErrCommandFailed` with exit code context
+- **AND** stderr output is included in the error context
 
 ### Requirement: Typed Error System
 The application SHALL use typed errors with error codes for all domain errors.

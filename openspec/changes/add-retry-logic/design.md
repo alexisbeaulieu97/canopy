@@ -34,6 +34,11 @@ Use exponential backoff with random jitter to prevent thundering herd:
 
 **Rationale:** Industry standard approach, prevents synchronized retries.
 
+**Alternatives Considered:**
+- *Linear backoff* — Rejected: slower recovery under light contention, doesn't scale well for burst failures.
+- *Fixed delay* — Rejected: causes thundering herd when multiple operations retry simultaneously.
+- *Jittered fixed delay* — Rejected: better than fixed but lacks progressive back-off, leading to higher contention under sustained failures.
+
 ### Decision: Retry Only Specific Errors
 Only retry errors that indicate transient failures:
 - Network timeouts
@@ -49,12 +54,22 @@ Do NOT retry:
 
 **Rationale:** Retrying permanent failures wastes time and can trigger rate limits.
 
+**Alternatives Considered:**
+- *Retry-all errors* — Rejected: wastes time on permanent failures (auth, not found), risks rate-limit escalation.
+- *Retry on 4xx client errors* — Rejected: most 4xx errors are permanent (auth failures, bad requests); retrying escalates rate limits.
+- *Exponential backoff for client errors* — Rejected: auth failures won't resolve with time; delays user feedback unnecessarily.
+
 ### Decision: Default Configuration
 - Max attempts: 3
 - Initial delay: 1s
 - Configurable via config file (optional)
 
 **Rationale:** Sensible defaults that work for most cases without configuration.
+
+**Alternatives Considered:**
+- *2 attempts* — Rejected: insufficient for transient network issues; often fails on the first retry.
+- *5 attempts* — Rejected: adds ~30s latency on permanent failures; diminishing returns after 3 attempts.
+- *10 attempts* — Rejected: excessive latency (minutes); operational overhead outweighs marginal success gains.
 
 ## Risks / Trade-offs
 
