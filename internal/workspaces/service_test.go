@@ -1015,6 +1015,7 @@ func TestService_RunHooksHooksOnly(t *testing.T) {
 	}
 
 	workspacesRoot := t.TempDir()
+
 	workspaceDir := filepath.Join(workspacesRoot, "HOOKS-1")
 	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
 		t.Fatalf("failed to create workspace dir: %v", err)

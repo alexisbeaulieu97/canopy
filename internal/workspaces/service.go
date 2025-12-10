@@ -384,6 +384,7 @@ func (s *Service) RunHooks(workspaceID string, phase HookPhase, continueOnError 
 	hooksConfig := s.config.GetHooks()
 
 	var selected []config.Hook
+
 	switch phase {
 	case HookPhasePostCreate:
 		selected = hooksConfig.PostCreate
