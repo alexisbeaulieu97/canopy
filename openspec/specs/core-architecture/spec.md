@@ -27,17 +27,27 @@ The system SHALL use hexagonal architecture with interface-defined ports to deco
 - **EXAMPLES**: `var _ ports.GitOperations = (*gitx.GitEngine)(nil)`
 
 ### Requirement: Centralized Service Initialization
-The system SHALL initialize all services through a centralized App struct that manages dependencies and lifecycle.
+The system SHALL initialize all services through a centralized App struct that manages dependencies and lifecycle. The App struct SHALL support functional options for injecting custom implementations.
 
-#### Scenario: App creation succeeds
-- **WHEN** `app.New(debug)` is called with valid config
-- **THEN** an App struct is returned with initialized config, service, and logger
+#### Scenario: App creation with defaults
+- **WHEN** `app.New(debug)` is called with valid config and no options
+- **THEN** an App struct is returned with default GitEngine, WorkspaceStore, and ConfigProvider
 - **AND** all services are ready for use
+
+#### Scenario: App creation with custom dependencies
+- **WHEN** `app.New(debug, WithGitOperations(mockGit), WithWorkspaceStorage(mockStore))` is called
+- **THEN** an App struct is returned with the provided mock implementations
+- **AND** the service uses the injected dependencies
 
 #### Scenario: App creation fails with missing config
 - **WHEN** `app.New(debug)` is called and config file does not exist
 - **THEN** an error is returned describing the missing config
 - **AND** no App instance is created
+
+#### Scenario: Unit test with injected mocks
+- **WHEN** a test creates App with `WithGitOperations(mocks.NewGitOps())`
+- **THEN** the App uses the mock implementation
+- **AND** no real git operations occur
 
 ### Requirement: Command Registration Uses App Context
 Commands SHALL be registered through builder functions that retrieve dependencies from the App stored in command context.
@@ -129,6 +139,37 @@ The codebase SHALL follow hexagonal architecture patterns.
 - **WHEN** adapters implement these interfaces
 - **THEN** the domain layer SHALL remain decoupled from infrastructure
 
+### Requirement: Pure go-git Implementation
+The system SHALL use only go-git library for all git operations without shelling out to the git CLI.
+
+#### Scenario: Clone repository with go-git
+- **WHEN** a repository needs to be cloned
+- **THEN** the operation is performed using go-git's Clone function
+- **AND** no external git process is spawned
+
+#### Scenario: Create worktree with go-git
+- **WHEN** a worktree needs to be created
+- **THEN** the operation is performed using go-git's Worktree API
+- **AND** no external git process is spawned
+
+#### Scenario: Fetch updates with go-git
+- **WHEN** repository updates need to be fetched
+- **THEN** the operation is performed using go-git's Fetch function
+- **AND** no external git process is spawned
+
+#### Scenario: Branch operations with go-git
+- **WHEN** branch creation or checkout is needed
+- **THEN** the operation is performed using go-git's Branch and Checkout APIs
+- **AND** no external git process is spawned
+
+### Requirement: Uniform Error Handling for Git Operations
+All git operations SHALL return domain errors wrapped with context, without exposing go-git internals.
+
+#### Scenario: Git operation returns domain error
+- **WHEN** a git operation fails
+- **THEN** the error is wrapped as an internal/errors type
+- **AND** the original go-git error is available via errors.Unwrap()
+
 ### Requirement: Typed Error System
 The application SHALL use typed errors with error codes for all domain errors.
 
@@ -171,4 +212,22 @@ Errors SHALL support contextual key-value pairs for debugging.
 - **WHEN** error is created with Context map
 - **THEN** Context SHALL contain all provided key-value pairs
 - **AND** Context SHALL be accessible for logging and debugging
+
+### Requirement: Single Responsibility Service Components
+The workspaces service layer SHALL be composed of focused sub-services, each with a single responsibility.
+
+#### Scenario: RepoResolver handles identifier resolution
+- **WHEN** a repo identifier is provided (name, alias, or URL)
+- **THEN** the RepoResolver component resolves it to a canonical repo path
+- **AND** the resolution logic is isolated from workspace operations
+
+#### Scenario: DiskUsageCalculator handles size computation
+- **WHEN** workspace disk usage is requested
+- **THEN** the DiskUsageCalculator component computes and caches the result
+- **AND** caching logic is isolated from workspace operations
+
+#### Scenario: CanonicalRepoService handles repo management
+- **WHEN** canonical repo operations are performed (list, add, remove, sync)
+- **THEN** the CanonicalRepoService component handles the operation
+- **AND** repo management is isolated from workspace lifecycle
 

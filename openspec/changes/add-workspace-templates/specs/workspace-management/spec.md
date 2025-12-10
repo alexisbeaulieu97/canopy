@@ -59,7 +59,7 @@ The system SHALL provide commands to list available templates and show template 
 - **AND** indicates which repos are available in registry/canonical storage
 
 ### Requirement: Template Setup Commands
-Templates MAY include setup commands that execute after workspace creation to configure the environment.
+Templates SHALL support optional setup commands that execute after workspace creation to configure the environment.
 
 #### Scenario: Execute template setup commands
 - **WHEN** workspace is created from template with setup_commands defined

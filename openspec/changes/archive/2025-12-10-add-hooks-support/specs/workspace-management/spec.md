@@ -33,3 +33,18 @@ The system SHALL support configurable hooks that run during workspace lifecycle 
 - **WHEN** the hook executes
 - **THEN** error is logged with hook output
 - **AND** subsequent hooks continue (fail-soft by default)
+
+#### Scenario: Run hooks without lifecycle action
+- **WHEN** user runs `canopy workspace new PROJ-123 --hooks-only`
+- **THEN** post_create hooks execute for the existing workspace
+- **AND** no workspace creation or worktree changes occur
+
+#### Scenario: Hooks-only close
+- **WHEN** user runs `canopy workspace close PROJ-123 --hooks-only`
+- **THEN** pre_close hooks execute for the workspace
+- **AND** the workspace remains open
+
+#### Scenario: Reject invalid hook commands
+- **GIVEN** a hook command is empty, whitespace-only, or contains newlines
+- **WHEN** configuration is validated
+- **THEN** validation fails with an error referencing the offending hook

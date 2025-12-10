@@ -42,6 +42,11 @@ var (
 			branch, _ := cmd.Flags().GetString("branch")
 			printPath, _ := cmd.Flags().GetBool("print-path")
 			noHooks, _ := cmd.Flags().GetBool("no-hooks")
+			hooksOnly, _ := cmd.Flags().GetBool("hooks-only")
+
+			if hooksOnly && noHooks {
+				return cerrors.NewInvalidArgument("flags", "cannot use --hooks-only with --no-hooks")
+			}
 
 			app, err := getApp(cmd)
 			if err != nil {
@@ -50,6 +55,27 @@ var (
 
 			service := app.Service
 			cfg := app.Config
+
+			if hooksOnly {
+				if len(repos) > 0 {
+					return cerrors.NewInvalidArgument("flags", "--hooks-only cannot be combined with --repos")
+				}
+
+				if branch != "" {
+					return cerrors.NewInvalidArgument("flags", "--hooks-only cannot override branch")
+				}
+
+				if printPath {
+					return cerrors.NewInvalidArgument("flags", "--hooks-only cannot be combined with --print-path")
+				}
+
+				if err := service.RunHooks(id, workspaces.HookPhasePostCreate, false); err != nil {
+					return err
+				}
+
+				fmt.Printf("Ran post_create hooks for workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+				return nil
+			}
 
 			// Resolve repos
 			var resolvedRepos []domain.Repo
@@ -190,9 +216,14 @@ var (
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			jsonOutput, _ := cmd.Flags().GetBool("json")
 			noHooks, _ := cmd.Flags().GetBool("no-hooks")
+			hooksOnly, _ := cmd.Flags().GetBool("hooks-only")
 
 			if keepFlag && deleteFlag {
 				return cerrors.NewInvalidArgument("flags", "cannot use --keep and --delete together")
+			}
+
+			if hooksOnly && noHooks {
+				return cerrors.NewInvalidArgument("flags", "cannot use --hooks-only with --no-hooks")
 			}
 
 			app, err := getApp(cmd)
@@ -206,6 +237,27 @@ var (
 
 			closeOpts := workspaces.CloseOptions{
 				SkipHooks: noHooks,
+			}
+
+			if hooksOnly {
+				if keepFlag || deleteFlag {
+					return cerrors.NewInvalidArgument("flags", "--hooks-only cannot be combined with --keep or --delete")
+				}
+
+				if dryRun {
+					return cerrors.NewInvalidArgument("flags", "--hooks-only cannot be combined with --dry-run")
+				}
+
+				if jsonOutput {
+					return cerrors.NewInvalidArgument("flags", "--hooks-only cannot be combined with --json")
+				}
+
+				if err := service.RunHooks(id, workspaces.HookPhasePreClose, false); err != nil {
+					return err
+				}
+
+				fmt.Printf("Ran pre_close hooks for workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+				return nil
 			}
 
 			// Determine keepMetadata based on flags and config
@@ -749,6 +801,7 @@ func init() {
 	workspaceNewCmd.Flags().String("branch", "", "Custom branch name (optional)")
 	workspaceNewCmd.Flags().Bool("print-path", false, "Print the created workspace path to stdout")
 	workspaceNewCmd.Flags().Bool("no-hooks", false, "Skip post_create hooks")
+	workspaceNewCmd.Flags().Bool("hooks-only", false, "Run post_create hooks without creating the workspace")
 
 	workspaceListCmd.Flags().Bool("json", false, "Output in JSON format")
 	workspaceListCmd.Flags().Bool("closed", false, "List closed workspaces")
@@ -762,6 +815,7 @@ func init() {
 	workspaceCloseCmd.Flags().Bool("dry-run", false, "Preview what would be deleted without actually deleting")
 	workspaceCloseCmd.Flags().Bool("json", false, "Output in JSON format (use with --dry-run)")
 	workspaceCloseCmd.Flags().Bool("no-hooks", false, "Skip pre_close hooks")
+	workspaceCloseCmd.Flags().Bool("hooks-only", false, "Run pre_close hooks without closing the workspace")
 	workspaceReopenCmd.Flags().Bool("force", false, "Overwrite existing workspace if one already exists")
 
 	workspaceBranchCmd.Flags().Bool("create", false, "Create branch if it doesn't exist")

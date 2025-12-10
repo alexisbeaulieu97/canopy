@@ -324,6 +324,40 @@ func TestValidateValues(t *testing.T) {
 			errSubstr: "pre_close hook[1] command cannot be empty",
 		},
 		{
+			name: "hook command with only whitespace",
+			cfg: &Config{
+				ProjectsRoot:       "/tmp/projects",
+				WorkspacesRoot:     "/tmp/workspaces",
+				ClosedRoot:         "/tmp/closed",
+				CloseDefault:       "delete",
+				StaleThresholdDays: 14,
+				Hooks: Hooks{
+					PostCreate: []Hook{
+						{Command: "   \t"},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "post_create hook[0] command cannot be empty",
+		},
+		{
+			name: "hook command with newline",
+			cfg: &Config{
+				ProjectsRoot:       "/tmp/projects",
+				WorkspacesRoot:     "/tmp/workspaces",
+				ClosedRoot:         "/tmp/closed",
+				CloseDefault:       "delete",
+				StaleThresholdDays: 14,
+				Hooks: Hooks{
+					PreClose: []Hook{
+						{Command: "echo first\nrm -rf /"},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "pre_close hook[0] command cannot contain newlines",
+		},
+		{
 			name: "hook with negative timeout",
 			cfg: &Config{
 				ProjectsRoot:       "/tmp/projects",
