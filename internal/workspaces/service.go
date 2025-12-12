@@ -943,6 +943,15 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, act
 
 		isDirty, _, _, _, err := s.gitEngine.Status(worktreePath)
 		if err != nil {
+			// Log the error but continue checking other repos.
+			// Status failures are non-fatal here as we're checking for uncommitted changes.
+			if s.logger != nil {
+				s.logger.Debug("Failed to check repo status",
+					"repo", repo.Name,
+					"path", worktreePath,
+					"error", err)
+			}
+
 			continue
 		}
 

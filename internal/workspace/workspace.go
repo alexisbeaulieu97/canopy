@@ -341,12 +341,12 @@ func (e *Engine) DeleteClosed(path string) error {
 		return fmt.Errorf("closed path is required")
 	}
 
-	if e.ClosedRoot != "" {
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			return fmt.Errorf("failed to resolve closed path: %w", err)
-		}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve closed path: %w", err)
+	}
 
+	if e.ClosedRoot != "" {
 		root := filepath.Clean(e.ClosedRoot)
 
 		if !strings.HasPrefix(absPath, root+string(os.PathSeparator)) && absPath != root {
@@ -354,7 +354,8 @@ func (e *Engine) DeleteClosed(path string) error {
 		}
 	}
 
-	return os.RemoveAll(path)
+	// Use the validated absolute path to prevent TOCTOU race conditions
+	return os.RemoveAll(absPath)
 }
 
 func sanitizeDirName(name string) (string, error) {

@@ -321,9 +321,22 @@ func (g *GitEngine) List() ([]string, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		// Verify it's a git repo? For now, just assume directories are repos.
-		// Or maybe check for HEAD/config if bare?
-		// Let's keep it simple for MVP.
+
+		// Verify it's a bare git repo by checking for HEAD file.
+		// The projects root contains only canonical bare repos (not regular .git repos),
+		// so we only check for HEAD at the root level, not .git/HEAD.
+		headPath := filepath.Join(g.ProjectsRoot, entry.Name(), "HEAD")
+
+		_, err := os.Stat(headPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// Not a bare git repo, skip silently
+				continue
+			}
+			// Other stat errors (permission denied, etc.) - skip but could log in debug mode
+			continue
+		}
+
 		repos = append(repos, entry.Name())
 	}
 
