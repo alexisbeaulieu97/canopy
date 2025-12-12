@@ -58,6 +58,28 @@ type Model struct {
 ### Decision 3: Preserve Backward Compatibility
 Keep the same public API (`NewModel`, `Init`, `Update`, `View`) to avoid breaking changes.
 
+## Alternatives Considered
+
+### Alternative 1: Enum/State-Flag Based State Machine
+Use integer or string constants with a switch statement to track current view mode.
+
+**Rejected because:** Implicit transitions are harder to trace; adding new states requires modifying multiple switch statements; state-specific data must be managed separately with validity checks.
+
+### Alternative 2: Keep Boolean Flags (Status Quo)
+Maintain current `detailView`, `confirming`, `pushing` boolean fields.
+
+**Rejected because:** Boolean combinations create implicit state machine (2^n possible states); easy to reach invalid states; hard to reason about transitions; adding new views compounds complexity.
+
+### Alternative 3: Interface-Based View Behavior (Pure Strategy)
+Define `ViewBehavior` interface with all methods, create implementations for each view.
+
+**Rejected because:** State pattern is more appropriate here since views share significant common behavior; strategy pattern better suits interchangeable algorithms with same interface; state pattern explicitly models transitions.
+
+### Alternative 4: Embedding/Inheritance for WorkspaceModel
+Embed `WorkspaceModel` fields directly in `Model` or use interface-based composition.
+
+**Rejected because:** Direct embedding doesn't improve encapsulation; interface-based composition adds indirection without benefit for this use case; pure composition (struct field) provides clarity and testability while keeping implementation simple.
+
 ## Risks / Trade-offs
 - **Risk**: Increased number of files/types
   - **Mitigation**: Group related types in same file; document relationships

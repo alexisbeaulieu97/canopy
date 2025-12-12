@@ -1,22 +1,21 @@
 ## ADDED Requirements
 
 ### Requirement: Direct Workspace Lookup
-The workspace storage SHALL support direct lookup by workspace ID without listing all workspaces.
+The workspace storage SHALL support direct lookup by workspace ID without listing all workspaces. The method signature SHALL be `LoadByID(id string) (*domain.Workspace, string, error)` returning the workspace metadata, directory name, and any error.
 
 #### Scenario: Direct lookup by ID
 - **WHEN** `LoadByID(id)` is called with a valid workspace ID
 - **THEN** the storage SHALL attempt direct path access
-- **AND** the workspace metadata SHALL be returned if found
-- **AND** the directory name SHALL be returned
+- **AND** the method SHALL return `(workspace, dirName, nil)` where `workspace` is the metadata and `dirName` is the directory name
 
 #### Scenario: Direct lookup fallback
 - **WHEN** direct path access fails (ID differs from directory name)
 - **THEN** the storage SHALL fall back to scanning all workspaces
-- **AND** the correct workspace SHALL be returned if it exists
+- **AND** the method SHALL return `(workspace, dirName, nil)` if the workspace exists
 
 #### Scenario: Workspace not found
 - **WHEN** `LoadByID(id)` is called with a non-existent workspace ID
-- **THEN** a `WorkspaceNotFound` error SHALL be returned
+- **THEN** the method SHALL return `(nil, "", WorkspaceNotFound)` error
 
 ### Requirement: Workspace Metadata Caching
 The service layer SHALL cache workspace metadata to reduce filesystem I/O.
