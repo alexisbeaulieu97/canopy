@@ -125,52 +125,76 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 		_ = os.RemoveAll(path)
 	}
 
-	// 3. Clone repositories (if any)
+	// Clone repositories (if any)
+	if err := s.cloneWorkspaceRepos(ctx, repos, dirName, branchName); err != nil {
+		cleanup()
+		return "", err
+	}
+
+	// Run post_create hooks
+	//nolint:contextcheck // Hooks manage their own timeout context per-hook
+	if err := s.runPostCreateHooks(id, dirName, branchName, repos, opts); err != nil {
+		// Hook failures don't rollback the workspace (per design.md)
+		// But we return the error if not continuing on hook errors
+		return dirName, err
+	}
+
+	return dirName, nil
+}
+
+// cloneWorkspaceRepos clones all repositories for a workspace, checking for context cancellation.
+func (s *Service) cloneWorkspaceRepos(ctx context.Context, repos []domain.Repo, dirName, branchName string) error {
 	for _, repo := range repos {
 		// Check for context cancellation before each operation
 		if ctx.Err() != nil {
-			cleanup()
-			return "", cerrors.NewOperationCanceled("create workspace", id)
+			return cerrors.NewOperationCanceledWithTarget("create workspace", dirName)
 		}
 
 		// Ensure canonical exists
 		_, err := s.gitEngine.EnsureCanonical(ctx, repo.URL, repo.Name)
 		if err != nil {
-			cleanup()
-			return "", cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
+			return cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
 		}
 
 		// Create worktree
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		if err := s.gitEngine.CreateWorktree(repo.Name, worktreePath, branchName); err != nil {
-			cleanup()
-			return "", cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
+			return cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
 		}
 	}
 
-	// Run post_create hooks
-	if !opts.SkipHooks {
-		hooksConfig := s.config.GetHooks()
-		if len(hooksConfig.PostCreate) > 0 {
-			hookCtx := hooks.HookContext{
-				WorkspaceID:   id,
-				WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
-				BranchName:    branchName,
-				Repos:         repos,
-			}
+	return nil
+}
 
-			if err := s.hookExecutor.ExecuteHooks(hooksConfig.PostCreate, hookCtx, opts.ContinueOnHookErr); err != nil {
-				s.logger.Error("post_create hooks failed", "error", err)
-				// Hook failures don't rollback the workspace (per design.md)
-				// But we log the error and can optionally fail the operation
-				if !opts.ContinueOnHookErr {
-					return dirName, err
-				}
-			}
+// runPostCreateHooks runs post_create hooks if configured and not skipped.
+// Returns nil if hooks are skipped or succeed, error otherwise.
+func (s *Service) runPostCreateHooks(id, dirName, branchName string, repos []domain.Repo, opts CreateOptions) error {
+	if opts.SkipHooks {
+		return nil
+	}
+
+	hooksConfig := s.config.GetHooks()
+	if len(hooksConfig.PostCreate) == 0 {
+		return nil
+	}
+
+	hookCtx := hooks.HookContext{
+		WorkspaceID:   id,
+		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
+		BranchName:    branchName,
+		Repos:         repos,
+	}
+
+	//nolint:contextcheck // Hooks manage their own timeout context per-hook
+	if err := s.hookExecutor.ExecuteHooks(hooksConfig.PostCreate, hookCtx, opts.ContinueOnHookErr); err != nil {
+		s.logger.Error("post_create hooks failed", "error", err)
+
+		if !opts.ContinueOnHookErr {
+			return err
 		}
 	}
 
-	return dirName, nil
+	return nil
 }
 
 // WorkspacePath returns the absolute path for a workspace ID.
@@ -288,6 +312,7 @@ type CloseOptions struct {
 
 // CloseWorkspace removes a workspace with safety checks
 func (s *Service) CloseWorkspace(_ context.Context, workspaceID string, force bool) error {
+	//nolint:contextcheck // Wrapper delegates to WithOptions which handles hooks with own timeout
 	return s.CloseWorkspaceWithOptions(workspaceID, force, CloseOptions{})
 }
 
@@ -315,6 +340,7 @@ func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts
 				Repos:         targetWorkspace.Repos,
 			}
 
+			//nolint:contextcheck // Hooks manage their own timeout context per-hook
 			if err := s.hookExecutor.ExecuteHooks(hooksConfig.PreClose, hookCtx, opts.ContinueOnHookErr); err != nil {
 				s.logger.Error("pre_close hooks failed", "error", err)
 				// Per design.md: pre_close failure aborts close operation
@@ -331,6 +357,7 @@ func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts
 
 // CloseWorkspaceKeepMetadata moves workspace metadata to the closed store and removes the active worktree.
 func (s *Service) CloseWorkspaceKeepMetadata(_ context.Context, workspaceID string, force bool) (*domain.ClosedWorkspace, error) {
+	//nolint:contextcheck // Wrapper delegates to WithOptions which handles hooks with own timeout
 	return s.CloseWorkspaceKeepMetadataWithOptions(workspaceID, force, CloseOptions{})
 }
 
@@ -358,6 +385,7 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, forc
 				Repos:         targetWorkspace.Repos,
 			}
 
+			//nolint:contextcheck // Hooks manage their own timeout context per-hook
 			if err := s.hookExecutor.ExecuteHooks(hooksConfig.PreClose, hookCtx, opts.ContinueOnHookErr); err != nil {
 				s.logger.Error("pre_close hooks failed", "error", err)
 				// Per design.md: pre_close failure aborts close operation
@@ -576,7 +604,7 @@ func (s *Service) PushWorkspace(ctx context.Context, workspaceID string) error {
 	for _, repo := range targetWorkspace.Repos {
 		// Check for context cancellation before each push
 		if ctx.Err() != nil {
-			return cerrors.NewOperationCanceled("push workspace", workspaceID)
+			return cerrors.NewOperationCanceledWithTarget("push workspace", workspaceID)
 		}
 
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
@@ -635,7 +663,7 @@ func (s *Service) runGitSequential(ctx context.Context, workspace *domain.Worksp
 	for _, repo := range workspace.Repos {
 		// Check for context cancellation between iterations
 		if ctx.Err() != nil {
-			return results, cerrors.NewOperationCanceled("git command", "sequential execution cancelled")
+			return results, cerrors.NewOperationCanceledWithTarget("git command", "sequential execution cancelled")
 		}
 
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
@@ -695,8 +723,9 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 			case <-cancelCtx.Done():
 				results[idx] = RepoGitResult{
 					RepoName: r.Name,
-					Error:    cerrors.NewOperationCanceled("git command", r.Name),
+					Error:    cerrors.NewOperationCanceledWithTarget("git command", r.Name),
 				}
+
 				return
 			case sem <- struct{}{}:
 			}

@@ -78,7 +78,8 @@ func (g *GitEngine) EnsureCanonical(ctx context.Context, repoURL, repoName strin
 	}
 
 	// Apply default timeout if context has no deadline
-	ctx = g.withDefaultTimeout(ctx)
+	ctx, cancel := g.withDefaultTimeout(ctx)
+	defer cancel()
 
 	// Clone if not exists
 	r, err = git.PlainCloneContext(ctx, path, true, &git.CloneOptions{
@@ -86,11 +87,13 @@ func (g *GitEngine) EnsureCanonical(ctx context.Context, repoURL, repoName strin
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			return nil, cerrors.NewOperationCanceled("clone", repoURL)
+			return nil, cerrors.NewOperationCanceledWithTarget("clone", repoURL)
 		}
+
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, cerrors.NewOperationTimeout("clone", repoURL)
 		}
+
 		return nil, cerrors.WrapGitError(err, fmt.Sprintf("clone %s", repoURL))
 	}
 
@@ -196,7 +199,8 @@ func (g *GitEngine) Clone(ctx context.Context, url, name string) error {
 	}
 
 	// Apply default timeout if context has no deadline
-	ctx = g.withDefaultTimeout(ctx)
+	ctx, cancel := g.withDefaultTimeout(ctx)
+	defer cancel()
 
 	// Clone as bare using go-git
 	_, err := git.PlainCloneContext(ctx, path, true, &git.CloneOptions{
@@ -204,11 +208,13 @@ func (g *GitEngine) Clone(ctx context.Context, url, name string) error {
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			return cerrors.NewOperationCanceled("clone", url)
+			return cerrors.NewOperationCanceledWithTarget("clone", url)
 		}
+
 		if errors.Is(err, context.DeadlineExceeded) {
 			return cerrors.NewOperationTimeout("clone", url)
 		}
+
 		return cerrors.WrapGitError(err, "clone")
 	}
 
@@ -231,7 +237,8 @@ func (g *GitEngine) Fetch(ctx context.Context, name string) error {
 	}
 
 	// Apply default timeout if context has no deadline
-	ctx = g.withDefaultTimeout(ctx)
+	ctx, cancel := g.withDefaultTimeout(ctx)
+	defer cancel()
 
 	// Fetch from all remotes
 	remotes, err := r.Remotes()
@@ -250,11 +257,13 @@ func (g *GitEngine) Fetch(ctx context.Context, name string) error {
 		})
 		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 			if errors.Is(err, context.Canceled) {
-				return cerrors.NewOperationCanceled("fetch", name)
+				return cerrors.NewOperationCanceledWithTarget("fetch", name)
 			}
+
 			if errors.Is(err, context.DeadlineExceeded) {
 				return cerrors.NewOperationTimeout("fetch", name)
 			}
+
 			return cerrors.WrapGitError(err, "fetch")
 		}
 	}
@@ -277,7 +286,8 @@ func (g *GitEngine) Pull(ctx context.Context, path string) error {
 	}
 
 	// Apply default timeout if context has no deadline
-	ctx = g.withDefaultTimeout(ctx)
+	ctx, cancel := g.withDefaultTimeout(ctx)
+	defer cancel()
 
 	// Pull changes
 	err = w.PullContext(ctx, &git.PullOptions{
@@ -285,11 +295,13 @@ func (g *GitEngine) Pull(ctx context.Context, path string) error {
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		if errors.Is(err, context.Canceled) {
-			return cerrors.NewOperationCanceled("pull", path)
+			return cerrors.NewOperationCanceledWithTarget("pull", path)
 		}
+
 		if errors.Is(err, context.DeadlineExceeded) {
 			return cerrors.NewOperationTimeout("pull", path)
 		}
+
 		return cerrors.WrapGitError(err, "pull")
 	}
 
@@ -337,17 +349,20 @@ func (g *GitEngine) Push(ctx context.Context, path, branch string) error {
 	}
 
 	// Apply default timeout if context has no deadline
-	ctx = g.withDefaultTimeout(ctx)
+	ctx, cancel := g.withDefaultTimeout(ctx)
+	defer cancel()
 
 	// Push changes
 	err = r.PushContext(ctx, pushOpts)
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		if errors.Is(err, context.Canceled) {
-			return cerrors.NewOperationCanceled("push", path)
+			return cerrors.NewOperationCanceledWithTarget("push", path)
 		}
+
 		if errors.Is(err, context.DeadlineExceeded) {
 			return cerrors.NewOperationTimeout("push", path)
 		}
+
 		return cerrors.WrapGitError(err, "push")
 	}
 
@@ -545,11 +560,13 @@ func (g *GitEngine) RunCommand(ctx context.Context, repoPath string, args ...str
 
 	if err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return nil, cerrors.NewOperationCanceled("git command", strings.Join(args, " "))
+			return nil, cerrors.NewOperationCanceledWithTarget("git command", strings.Join(args, " "))
 		}
+
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return nil, cerrors.NewOperationTimeout("git command", strings.Join(args, " "))
 		}
+
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
 		} else {
@@ -561,11 +578,13 @@ func (g *GitEngine) RunCommand(ctx context.Context, repoPath string, args ...str
 }
 
 // withDefaultTimeout returns a context with the default network timeout applied
-// if the provided context has no deadline set.
-func (g *GitEngine) withDefaultTimeout(ctx context.Context) context.Context {
+// if the provided context has no deadline set. The returned cancel function
+// must be called to release resources (use defer cancel()).
+func (g *GitEngine) withDefaultTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	if _, ok := ctx.Deadline(); ok {
-		return ctx
+		// Context already has a deadline, return no-op cancel
+		return ctx, func() {}
 	}
-	ctx, _ = context.WithTimeout(ctx, DefaultNetworkTimeout)
-	return ctx
+
+	return context.WithTimeout(ctx, DefaultNetworkTimeout)
 }

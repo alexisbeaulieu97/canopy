@@ -213,13 +213,21 @@ func NewOperationCancelled(operation string) *CanopyError {
 	}
 }
 
-// NewOperationCanceled creates an error for context-cancelled operations with a target.
-func NewOperationCanceled(operation, target string) *CanopyError {
+// NewOperationCanceledWithTarget creates an error for context-cancelled operations
+// that includes what was being operated on (e.g., "clone", "https://github.com/...").
+func NewOperationCanceledWithTarget(operation, target string) *CanopyError {
 	return &CanopyError{
 		Code:    ErrOperationCancelled,
 		Message: fmt.Sprintf("operation cancelled: %s (%s)", operation, target),
 		Context: map[string]string{"operation": operation, "target": target},
 	}
+}
+
+// NewOperationCanceled is an alias for NewOperationCanceledWithTarget.
+//
+// Deprecated: Use NewOperationCanceledWithTarget for clarity.
+func NewOperationCanceled(operation, target string) *CanopyError {
+	return NewOperationCanceledWithTarget(operation, target)
 }
 
 // NewOperationTimeout creates an error for operations that timed out.

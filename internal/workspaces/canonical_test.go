@@ -75,7 +75,7 @@ func TestCanonicalRepoService_Add(t *testing.T) {
 		var clonedURL, clonedName string
 
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.CloneFunc = func(ctx context.Context, url, name string) error {
+		mockGit.CloneFunc = func(_ context.Context, url, name string) error {
 			clonedURL = url
 			clonedName = name
 
@@ -248,7 +248,7 @@ func TestCanonicalRepoService_Sync(t *testing.T) {
 		var fetchedName string
 
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.FetchFunc = func(ctx context.Context, name string) error {
+		mockGit.FetchFunc = func(_ context.Context, name string) error {
 			fetchedName = name
 
 			return nil
