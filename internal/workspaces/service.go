@@ -147,7 +147,7 @@ func (s *Service) cloneWorkspaceRepos(ctx context.Context, repos []domain.Repo, 
 	for _, repo := range repos {
 		// Check for context cancellation before each operation
 		if ctx.Err() != nil {
-			return cerrors.NewOperationCanceledWithTarget("create workspace", dirName)
+			return cerrors.NewContextError(ctx, "create workspace", dirName)
 		}
 
 		// Ensure canonical exists
@@ -604,7 +604,7 @@ func (s *Service) PushWorkspace(ctx context.Context, workspaceID string) error {
 	for _, repo := range targetWorkspace.Repos {
 		// Check for context cancellation before each push
 		if ctx.Err() != nil {
-			return cerrors.NewOperationCanceledWithTarget("push workspace", workspaceID)
+			return cerrors.NewContextError(ctx, "push workspace", workspaceID)
 		}
 
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
@@ -663,7 +663,7 @@ func (s *Service) runGitSequential(ctx context.Context, workspace *domain.Worksp
 	for _, repo := range workspace.Repos {
 		// Check for context cancellation between iterations
 		if ctx.Err() != nil {
-			return results, cerrors.NewOperationCanceledWithTarget("git command", "sequential execution cancelled")
+			return results, cerrors.NewContextError(ctx, "git command", "sequential execution")
 		}
 
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
@@ -723,7 +723,7 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 			case <-cancelCtx.Done():
 				results[idx] = RepoGitResult{
 					RepoName: r.Name,
-					Error:    cerrors.NewOperationCanceledWithTarget("git command", r.Name),
+					Error:    cerrors.NewContextError(cancelCtx, "git command", r.Name),
 				}
 
 				return

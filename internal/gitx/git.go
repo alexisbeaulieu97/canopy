@@ -194,16 +194,25 @@ func (g *GitEngine) Clone(ctx context.Context, url, name string) error {
 	path := filepath.Join(g.ProjectsRoot, name)
 
 	// Check if exists
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	_, err := os.Stat(path)
+	if err == nil {
+		// Path exists
 		return cerrors.NewRepoAlreadyExists(name, "projects root")
 	}
+
+	if !os.IsNotExist(err) {
+		// Some other error (permission, I/O, etc.)
+		return cerrors.NewIOFailed(fmt.Sprintf("check path %s", path), err)
+	}
+
+	// Path does not exist - proceed with clone
 
 	// Apply default timeout if context has no deadline
 	ctx, cancel := g.withDefaultTimeout(ctx)
 	defer cancel()
 
 	// Clone as bare using go-git
-	_, err := git.PlainCloneContext(ctx, path, true, &git.CloneOptions{
+	_, err = git.PlainCloneContext(ctx, path, true, &git.CloneOptions{
 		URL: url,
 	})
 	if err != nil {
@@ -226,8 +235,14 @@ func (g *GitEngine) Fetch(ctx context.Context, name string) error {
 	path := filepath.Join(g.ProjectsRoot, name)
 
 	// Check if exists
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
 		return cerrors.NewRepoNotFound(name)
+	}
+
+	if err != nil {
+		// Some other error (permission, I/O, etc.)
+		return cerrors.NewIOFailed(fmt.Sprintf("check path %s", path), err)
 	}
 
 	// Open the repository
