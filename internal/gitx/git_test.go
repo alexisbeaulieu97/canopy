@@ -402,9 +402,13 @@ func TestGitEngine_List(t *testing.T) {
 
 		projectsRoot := t.TempDir()
 
-		// Create some repo dirs
-		_ = os.MkdirAll(filepath.Join(projectsRoot, "repo-a"), 0o755)
-		_ = os.MkdirAll(filepath.Join(projectsRoot, "repo-b"), 0o755)
+		// Create some bare repo dirs with HEAD files (simulating bare git repos)
+		repoA := filepath.Join(projectsRoot, "repo-a")
+		repoB := filepath.Join(projectsRoot, "repo-b")
+		_ = os.MkdirAll(repoA, 0o755)
+		_ = os.MkdirAll(repoB, 0o755)
+		_ = os.WriteFile(filepath.Join(repoA, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(repoB, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644)
 
 		engine := New(projectsRoot)
 
@@ -415,6 +419,35 @@ func TestGitEngine_List(t *testing.T) {
 
 		if len(repos) != 2 {
 			t.Errorf("expected 2 repos, got %d", len(repos))
+		}
+	})
+
+	t.Run("ignores non-git directories", func(t *testing.T) {
+		t.Parallel()
+
+		projectsRoot := t.TempDir()
+
+		// Create a mix of git repos and regular dirs
+		repoA := filepath.Join(projectsRoot, "repo-a")
+		notRepo := filepath.Join(projectsRoot, "not-a-repo")
+		_ = os.MkdirAll(repoA, 0o755)
+		_ = os.MkdirAll(notRepo, 0o755)
+		_ = os.WriteFile(filepath.Join(repoA, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644)
+		// notRepo has no HEAD file
+
+		engine := New(projectsRoot)
+
+		repos, err := engine.List()
+		if err != nil {
+			t.Fatalf("List failed: %v", err)
+		}
+
+		if len(repos) != 1 {
+			t.Errorf("expected 1 repo, got %d", len(repos))
+		}
+
+		if len(repos) > 0 && repos[0] != "repo-a" {
+			t.Errorf("expected repo-a, got %s", repos[0])
 		}
 	})
 

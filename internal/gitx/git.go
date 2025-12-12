@@ -321,9 +321,14 @@ func (g *GitEngine) List() ([]string, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		// Verify it's a git repo? For now, just assume directories are repos.
-		// Or maybe check for HEAD/config if bare?
-		// Let's keep it simple for MVP.
+
+		// Verify it's a bare git repo by checking for HEAD file
+		headPath := filepath.Join(g.ProjectsRoot, entry.Name(), "HEAD")
+		if _, err := os.Stat(headPath); os.IsNotExist(err) {
+			// Not a git repo, skip
+			continue
+		}
+
 		repos = append(repos, entry.Name())
 	}
 
