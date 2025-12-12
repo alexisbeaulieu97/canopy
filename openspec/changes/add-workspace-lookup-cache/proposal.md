@@ -1,7 +1,7 @@
 # Change: Add Efficient Workspace Lookup with Caching
 
 ## Why
-The current `findWorkspace()` method performs O(n) lookup by listing all workspaces and iterating to find a match. This is called multiple times per CLI command (e.g., `GetStatus`, `CloseWorkspace`, `AddRepoToWorkspace` all call `findWorkspace`). With many workspaces, this becomes inefficient and causes unnecessary filesystem I/O.
+The current `findWorkspace()` performs O(n) lookups by listing all workspaces, causing inefficient filesystem I/O when called repeatedly across CLI commands.
 
 ## What Changes
 - **BREAKING**: Add `LoadByID(id string) (*Workspace, string, error)` method to `WorkspaceStorage` interface

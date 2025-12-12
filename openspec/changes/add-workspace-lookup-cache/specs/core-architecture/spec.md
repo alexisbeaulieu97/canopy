@@ -6,12 +6,12 @@ The workspace storage SHALL support direct lookup by workspace ID without listin
 #### Scenario: Direct lookup by ID
 - **WHEN** `LoadByID(id)` is called with a valid workspace ID
 - **THEN** the storage SHALL attempt direct path access
-- **AND** the method SHALL return `(workspace, dirName, nil)` where `workspace` is the metadata and `dirName` is the directory name
+- **THEN** the method SHALL return `(workspace, dirName, nil)` where `workspace` is the metadata and `dirName` is the directory name
 
 #### Scenario: Direct lookup fallback
-- **WHEN** direct path access fails (ID differs from directory name)
+- **WHEN** direct path access fails because the ID differs from the directory name
 - **THEN** the storage SHALL fall back to scanning all workspaces
-- **AND** the method SHALL return `(workspace, dirName, nil)` if the workspace exists
+- **THEN** the method SHALL return `(workspace, dirName, nil)` if the workspace exists
 
 #### Scenario: Workspace not found
 - **WHEN** `LoadByID(id)` is called with a non-existent workspace ID
@@ -21,17 +21,16 @@ The workspace storage SHALL support direct lookup by workspace ID without listin
 The service layer SHALL cache workspace metadata to reduce filesystem I/O.
 
 #### Scenario: Cache hit
-- **WHEN** looking up a workspace that was recently accessed
-- **AND** the cache entry has not expired
+- **WHEN** looking up a workspace that was recently accessed and the cache entry has not expired
 - **THEN** the cached workspace SHALL be returned
-- **AND** no filesystem I/O SHALL occur
+- **THEN** no filesystem I/O SHALL occur
 
 #### Scenario: Cache miss
 - **WHEN** looking up a workspace not in cache
 - **THEN** the workspace SHALL be loaded from storage
-- **AND** the result SHALL be added to the cache
+- **THEN** the result SHALL be added to the cache
 
 #### Scenario: Cache invalidation on write
 - **WHEN** a workspace is created, updated, or deleted
 - **THEN** the cache entry for that workspace SHALL be invalidated
-- **AND** subsequent lookups SHALL reload from storage
+- **THEN** subsequent lookups SHALL reload from storage
