@@ -326,8 +326,8 @@ func (g *GitEngine) List() ([]string, error) {
 		// The projects root contains only canonical bare repos (not regular .git repos),
 		// so we only check for HEAD at the root level, not .git/HEAD.
 		headPath := filepath.Join(g.ProjectsRoot, entry.Name(), "HEAD")
-		_, err := os.Stat(headPath)
 
+		_, err := os.Stat(headPath)
 		if err != nil {
 			if os.IsNotExist(err) {
 				// Not a bare git repo, skip silently
