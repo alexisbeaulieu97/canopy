@@ -99,7 +99,7 @@ var (
 				SkipHooks: noHooks,
 			}
 
-			dirName, err := service.CreateWorkspaceWithOptions(id, branch, resolvedRepos, opts)
+			dirName, err := service.CreateWorkspaceWithOptions(cmd.Context(), id, branch, resolvedRepos, opts)
 			if err != nil {
 				return err
 			}
@@ -127,7 +127,7 @@ var (
 				return err
 			}
 
-			if err := app.Service.RestoreWorkspace(id, force); err != nil {
+			if err := app.Service.RestoreWorkspace(cmd.Context(), id, force); err != nil {
 				return err
 			}
 
@@ -357,7 +357,7 @@ var (
 
 			service := app.Service
 
-			if err := service.AddRepoToWorkspace(workspaceID, repoName); err != nil {
+			if err := service.AddRepoToWorkspace(cmd.Context(), workspaceID, repoName); err != nil {
 				return err
 			}
 
@@ -381,7 +381,7 @@ var (
 
 			service := app.Service
 
-			if err := service.RemoveRepoFromWorkspace(workspaceID, repoName); err != nil {
+			if err := service.RemoveRepoFromWorkspace(cmd.Context(), workspaceID, repoName); err != nil {
 				return err
 			}
 
@@ -478,7 +478,7 @@ var (
 
 			service := app.Service
 
-			if err := service.SwitchBranch(id, branchName, create); err != nil {
+			if err := service.SwitchBranch(cmd.Context(), id, branchName, create); err != nil {
 				return err
 			}
 
@@ -517,7 +517,7 @@ Examples:
 				ContinueOnError: continueOnError,
 			}
 
-			results, err := app.Service.RunGitInWorkspace(workspaceID, gitArgs, opts)
+			results, err := app.Service.RunGitInWorkspace(cmd.Context(), workspaceID, gitArgs, opts)
 			if err != nil && !continueOnError {
 				// Print any results we got before the error
 				printGitResults(results)
@@ -583,7 +583,7 @@ Examples:
 				return err
 			}
 
-			export, err := app.Service.ExportWorkspace(id)
+			export, err := app.Service.ExportWorkspace(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -664,7 +664,7 @@ Examples:
 				return cerrors.NewInvalidArgument("id", "export has no workspace ID and --id was not provided")
 			}
 
-			dirName, err := app.Service.ImportWorkspace(&export, idOverride, branchOverride, force)
+			dirName, err := app.Service.ImportWorkspace(cmd.Context(), &export, idOverride, branchOverride, force)
 			if err != nil {
 				return err
 			}

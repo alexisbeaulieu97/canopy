@@ -79,7 +79,7 @@ var repoAddCmd = &cobra.Command{
 
 		svc := app.Service
 
-		name, err := svc.AddCanonicalRepo(url)
+		name, err := svc.AddCanonicalRepo(cmd.Context(), url)
 		if err != nil {
 			return err
 		}
@@ -99,7 +99,7 @@ var repoAddCmd = &cobra.Command{
 			entry := config.RegistryEntry{URL: url}
 			realAlias, err := registerWithPrompt(cmd, app.Config.GetRegistry(), alias, entry)
 			if err != nil {
-				if rmErr := svc.RemoveCanonicalRepo(name, true); rmErr != nil {
+				if rmErr := svc.RemoveCanonicalRepo(cmd.Context(), name, true); rmErr != nil {
 					app.Logger.Errorf("Failed to rollback repo removal: %v", rmErr)
 				}
 
@@ -148,7 +148,7 @@ var repoRemoveCmd = &cobra.Command{
 			return nil
 		}
 
-		if err := svc.RemoveCanonicalRepo(name, force); err != nil {
+		if err := svc.RemoveCanonicalRepo(cmd.Context(), name, force); err != nil {
 			return err
 		}
 
@@ -171,7 +171,7 @@ var repoSyncCmd = &cobra.Command{
 
 		svc := app.Service
 
-		if err := svc.SyncCanonicalRepo(name); err != nil {
+		if err := svc.SyncCanonicalRepo(cmd.Context(), name); err != nil {
 			return err
 		}
 

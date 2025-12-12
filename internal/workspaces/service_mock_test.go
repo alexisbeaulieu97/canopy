@@ -1,6 +1,7 @@
 package workspaces
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -113,7 +114,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 
 		callCount := 0
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.RunCommandFunc = func(_ string, _ ...string) (*ports.CommandResult, error) {
+		mockGit.RunCommandFunc = func(_ context.Context, _ string, _ ...string) (*ports.CommandResult, error) {
 			callCount++
 
 			return &ports.CommandResult{
@@ -125,7 +126,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 
 		svc := NewService(mockConfig, mockGit, mockStorage, nil)
 
-		results, err := svc.RunGitInWorkspace("test-ws", []string{"status"}, GitRunOptions{})
+		results, err := svc.RunGitInWorkspace(context.Background(), "test-ws", []string{"status"}, GitRunOptions{})
 		if err != nil {
 			t.Fatalf("RunGitInWorkspace failed: %v", err)
 		}
@@ -167,7 +168,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 		mockConfig.WorkspacesRoot = "/workspaces"
 
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.RunCommandFunc = func(_ string, _ ...string) (*ports.CommandResult, error) {
+		mockGit.RunCommandFunc = func(_ context.Context, _ string, _ ...string) (*ports.CommandResult, error) {
 			return &ports.CommandResult{
 				Stdout:   "parallel-output",
 				Stderr:   "",
@@ -177,7 +178,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 
 		svc := NewService(mockConfig, mockGit, mockStorage, nil)
 
-		results, err := svc.RunGitInWorkspace("test-ws", []string{"fetch", "--all"}, GitRunOptions{
+		results, err := svc.RunGitInWorkspace(context.Background(), "test-ws", []string{"fetch", "--all"}, GitRunOptions{
 			Parallel: true,
 		})
 		if err != nil {
@@ -213,7 +214,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 
 		callCount := 0
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.RunCommandFunc = func(_ string, _ ...string) (*ports.CommandResult, error) {
+		mockGit.RunCommandFunc = func(_ context.Context, _ string, _ ...string) (*ports.CommandResult, error) {
 			callCount++
 			// First call fails
 			if callCount == 1 {
@@ -232,7 +233,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 
 		svc := NewService(mockConfig, mockGit, mockStorage, nil)
 
-		results, err := svc.RunGitInWorkspace("test-ws", []string{"push"}, GitRunOptions{
+		results, err := svc.RunGitInWorkspace(context.Background(), "test-ws", []string{"push"}, GitRunOptions{
 			ContinueOnError: false,
 		})
 		if err == nil {
@@ -263,7 +264,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 
 		callCount := 0
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.RunCommandFunc = func(_ string, _ ...string) (*ports.CommandResult, error) {
+		mockGit.RunCommandFunc = func(_ context.Context, _ string, _ ...string) (*ports.CommandResult, error) {
 			callCount++
 			// First call fails
 			if callCount == 1 {
@@ -282,7 +283,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 
 		svc := NewService(mockConfig, mockGit, mockStorage, nil)
 
-		results, err := svc.RunGitInWorkspace("test-ws", []string{"push"}, GitRunOptions{
+		results, err := svc.RunGitInWorkspace(context.Background(), "test-ws", []string{"push"}, GitRunOptions{
 			ContinueOnError: true,
 		})
 		// Should not return error with ContinueOnError
@@ -315,7 +316,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 
 		svc := NewService(mockConfig, mockGit, mockStorage, nil)
 
-		_, err := svc.RunGitInWorkspace("non-existent", []string{"status"}, GitRunOptions{})
+		_, err := svc.RunGitInWorkspace(context.Background(), "non-existent", []string{"status"}, GitRunOptions{})
 		if err == nil {
 			t.Fatal("expected error for non-existent workspace")
 		}

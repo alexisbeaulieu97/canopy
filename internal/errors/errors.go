@@ -25,6 +25,7 @@ const (
 	ErrCommandFailed       ErrorCode = "COMMAND_FAILED"
 	ErrInvalidArgument     ErrorCode = "INVALID_ARGUMENT"
 	ErrOperationCancelled  ErrorCode = "OPERATION_CANCELLED"
+	ErrOperationTimeout    ErrorCode = "OPERATION_TIMEOUT"
 	ErrIOFailed            ErrorCode = "IO_FAILED"
 	ErrRegistryError       ErrorCode = "REGISTRY_ERROR"
 	ErrInternalError       ErrorCode = "INTERNAL_ERROR"
@@ -212,6 +213,24 @@ func NewOperationCancelled(operation string) *CanopyError {
 	}
 }
 
+// NewOperationCanceled creates an error for context-cancelled operations with a target.
+func NewOperationCanceled(operation, target string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrOperationCancelled,
+		Message: fmt.Sprintf("operation cancelled: %s (%s)", operation, target),
+		Context: map[string]string{"operation": operation, "target": target},
+	}
+}
+
+// NewOperationTimeout creates an error for operations that timed out.
+func NewOperationTimeout(operation, target string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrOperationTimeout,
+		Message: fmt.Sprintf("operation timed out: %s (%s)", operation, target),
+		Context: map[string]string{"operation": operation, "target": target},
+	}
+}
+
 // NewIOFailed creates an error for IO operation failures.
 func NewIOFailed(operation string, cause error) *CanopyError {
 	return &CanopyError{
@@ -334,6 +353,7 @@ var (
 	CommandFailed       = &CanopyError{Code: ErrCommandFailed}
 	InvalidArgument     = &CanopyError{Code: ErrInvalidArgument}
 	OperationCancelled  = &CanopyError{Code: ErrOperationCancelled}
+	OperationTimeout    = &CanopyError{Code: ErrOperationTimeout}
 	IOFailed            = &CanopyError{Code: ErrIOFailed}
 	RegistryError       = &CanopyError{Code: ErrRegistryError}
 	InternalError       = &CanopyError{Code: ErrInternalError}

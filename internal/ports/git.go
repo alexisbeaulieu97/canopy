@@ -2,6 +2,8 @@
 package ports
 
 import (
+	"context"
+
 	"github.com/go-git/go-git/v5"
 )
 
@@ -15,7 +17,7 @@ type CommandResult struct {
 // GitOperations defines the interface for git operations.
 type GitOperations interface {
 	// EnsureCanonical ensures the repo is cloned in ProjectsRoot (bare).
-	EnsureCanonical(repoURL, repoName string) (*git.Repository, error)
+	EnsureCanonical(ctx context.Context, repoURL, repoName string) (*git.Repository, error)
 
 	// CreateWorktree creates a worktree for a workspace branch.
 	CreateWorktree(repoName, worktreePath, branchName string) error
@@ -24,16 +26,16 @@ type GitOperations interface {
 	Status(path string) (isDirty bool, unpushed, behind int, branch string, err error)
 
 	// Clone clones a repository to the projects root (bare).
-	Clone(url, name string) error
+	Clone(ctx context.Context, url, name string) error
 
 	// Fetch fetches updates for a canonical repository.
-	Fetch(name string) error
+	Fetch(ctx context.Context, name string) error
 
 	// Pull pulls updates for a repository worktree.
-	Pull(path string) error
+	Pull(ctx context.Context, path string) error
 
 	// Push pushes the current branch to its upstream.
-	Push(path, branch string) error
+	Push(ctx context.Context, path, branch string) error
 
 	// List returns a list of repository names in the projects root.
 	List() ([]string, error)
@@ -42,5 +44,5 @@ type GitOperations interface {
 	Checkout(path, branchName string, create bool) error
 
 	// RunCommand executes an arbitrary git command in the specified repository path.
-	RunCommand(repoPath string, args ...string) (*CommandResult, error)
+	RunCommand(ctx context.Context, repoPath string, args ...string) (*CommandResult, error)
 }

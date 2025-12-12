@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -90,7 +91,7 @@ func (m Model) pushWorkspace(id string) tea.Cmd {
 	return func() tea.Msg {
 		return pushResultMsg{
 			id:  id,
-			err: m.svc.PushWorkspace(id),
+			err: m.svc.PushWorkspace(context.Background(), id),
 		}
 	}
 }
@@ -98,7 +99,7 @@ func (m Model) pushWorkspace(id string) tea.Cmd {
 // closeWorkspace creates a command to close/delete a workspace.
 func (m Model) closeWorkspace(id string) tea.Cmd {
 	return func() tea.Msg {
-		err := m.svc.CloseWorkspace(id, false)
+		err := m.svc.CloseWorkspace(context.Background(), id, false)
 		if err != nil {
 			return closeWorkspaceErrMsg{id: id, err: err}
 		}

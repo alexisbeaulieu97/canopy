@@ -1,6 +1,7 @@
 package workspaces
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,7 +75,7 @@ func TestCanonicalRepoService_Add(t *testing.T) {
 		var clonedURL, clonedName string
 
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.CloneFunc = func(url, name string) error {
+		mockGit.CloneFunc = func(ctx context.Context, url, name string) error {
 			clonedURL = url
 			clonedName = name
 
@@ -85,7 +86,7 @@ func TestCanonicalRepoService_Add(t *testing.T) {
 
 		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
 
-		name, err := svc.Add("https://github.com/org/my-repo.git")
+		name, err := svc.Add(context.Background(), "https://github.com/org/my-repo.git")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -111,7 +112,7 @@ func TestCanonicalRepoService_Add(t *testing.T) {
 
 		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
 
-		_, err := svc.Add("")
+		_, err := svc.Add(context.Background(), "")
 		if err == nil {
 			t.Fatal("expected error for empty URL")
 		}
@@ -121,7 +122,7 @@ func TestCanonicalRepoService_Add(t *testing.T) {
 		t.Parallel()
 
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.CloneFunc = func(_, _ string) error {
+		mockGit.CloneFunc = func(context.Context, string, string) error {
 			return os.ErrPermission
 		}
 
@@ -129,7 +130,7 @@ func TestCanonicalRepoService_Add(t *testing.T) {
 
 		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
 
-		name, err := svc.Add("https://github.com/org/my-repo.git")
+		name, err := svc.Add(context.Background(), "https://github.com/org/my-repo.git")
 		if err == nil {
 			t.Fatal("expected error from clone")
 		}
@@ -247,7 +248,7 @@ func TestCanonicalRepoService_Sync(t *testing.T) {
 		var fetchedName string
 
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.FetchFunc = func(name string) error {
+		mockGit.FetchFunc = func(ctx context.Context, name string) error {
 			fetchedName = name
 
 			return nil
@@ -257,7 +258,7 @@ func TestCanonicalRepoService_Sync(t *testing.T) {
 
 		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
 
-		err := svc.Sync("my-repo")
+		err := svc.Sync(context.Background(), "my-repo")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

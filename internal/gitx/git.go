@@ -28,12 +28,14 @@
 package gitx
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
@@ -44,6 +46,9 @@ import (
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
+
+// DefaultNetworkTimeout is the default timeout for network operations (clone, fetch, push, pull).
+const DefaultNetworkTimeout = 5 * time.Minute
 
 // errStopIteration is a sentinel error used to break out of commit iteration loops.
 var errStopIteration = errors.New("stop iteration")
@@ -63,7 +68,7 @@ func New(projectsRoot string) *GitEngine {
 }
 
 // EnsureCanonical ensures the repo is cloned in ProjectsRoot (bare)
-func (g *GitEngine) EnsureCanonical(repoURL, repoName string) (*git.Repository, error) {
+func (g *GitEngine) EnsureCanonical(ctx context.Context, repoURL, repoName string) (*git.Repository, error) {
 	path := filepath.Join(g.ProjectsRoot, repoName)
 
 	// Check if exists
@@ -72,11 +77,20 @@ func (g *GitEngine) EnsureCanonical(repoURL, repoName string) (*git.Repository, 
 		return r, nil
 	}
 
+	// Apply default timeout if context has no deadline
+	ctx = g.withDefaultTimeout(ctx)
+
 	// Clone if not exists
-	r, err = git.PlainClone(path, true, &git.CloneOptions{
+	r, err = git.PlainCloneContext(ctx, path, true, &git.CloneOptions{
 		URL: repoURL,
 	})
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil, cerrors.NewOperationCanceled("clone", repoURL)
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, cerrors.NewOperationTimeout("clone", repoURL)
+		}
 		return nil, cerrors.WrapGitError(err, fmt.Sprintf("clone %s", repoURL))
 	}
 
@@ -173,7 +187,7 @@ func (g *GitEngine) Status(path string) (bool, int, int, string, error) {
 }
 
 // Clone clones a repository to the projects root (bare)
-func (g *GitEngine) Clone(url, name string) error {
+func (g *GitEngine) Clone(ctx context.Context, url, name string) error {
 	path := filepath.Join(g.ProjectsRoot, name)
 
 	// Check if exists
@@ -181,11 +195,20 @@ func (g *GitEngine) Clone(url, name string) error {
 		return cerrors.NewRepoAlreadyExists(name, "projects root")
 	}
 
+	// Apply default timeout if context has no deadline
+	ctx = g.withDefaultTimeout(ctx)
+
 	// Clone as bare using go-git
-	_, err := git.PlainClone(path, true, &git.CloneOptions{
+	_, err := git.PlainCloneContext(ctx, path, true, &git.CloneOptions{
 		URL: url,
 	})
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return cerrors.NewOperationCanceled("clone", url)
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return cerrors.NewOperationTimeout("clone", url)
+		}
 		return cerrors.WrapGitError(err, "clone")
 	}
 
@@ -193,7 +216,7 @@ func (g *GitEngine) Clone(url, name string) error {
 }
 
 // Fetch fetches updates for a canonical repository
-func (g *GitEngine) Fetch(name string) error {
+func (g *GitEngine) Fetch(ctx context.Context, name string) error {
 	path := filepath.Join(g.ProjectsRoot, name)
 
 	// Check if exists
@@ -207,6 +230,9 @@ func (g *GitEngine) Fetch(name string) error {
 		return cerrors.WrapGitError(err, "open repo")
 	}
 
+	// Apply default timeout if context has no deadline
+	ctx = g.withDefaultTimeout(ctx)
+
 	// Fetch from all remotes
 	remotes, err := r.Remotes()
 	if err != nil {
@@ -219,10 +245,16 @@ func (g *GitEngine) Fetch(name string) error {
 		remoteName := remote.Config().Name
 		refSpec := config.RefSpec(fmt.Sprintf("+refs/heads/*:refs/remotes/%s/*", remoteName))
 
-		err := remote.Fetch(&git.FetchOptions{
+		err := remote.FetchContext(ctx, &git.FetchOptions{
 			RefSpecs: []config.RefSpec{refSpec},
 		})
 		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			if errors.Is(err, context.Canceled) {
+				return cerrors.NewOperationCanceled("fetch", name)
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				return cerrors.NewOperationTimeout("fetch", name)
+			}
 			return cerrors.WrapGitError(err, "fetch")
 		}
 	}
@@ -231,7 +263,7 @@ func (g *GitEngine) Fetch(name string) error {
 }
 
 // Pull pulls updates for a repository worktree
-func (g *GitEngine) Pull(path string) error {
+func (g *GitEngine) Pull(ctx context.Context, path string) error {
 	// Open the repository
 	r, err := git.PlainOpen(path)
 	if err != nil {
@@ -244,11 +276,20 @@ func (g *GitEngine) Pull(path string) error {
 		return cerrors.WrapGitError(err, "get worktree")
 	}
 
+	// Apply default timeout if context has no deadline
+	ctx = g.withDefaultTimeout(ctx)
+
 	// Pull changes
-	err = w.Pull(&git.PullOptions{
+	err = w.PullContext(ctx, &git.PullOptions{
 		RemoteName: "origin",
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		if errors.Is(err, context.Canceled) {
+			return cerrors.NewOperationCanceled("pull", path)
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return cerrors.NewOperationTimeout("pull", path)
+		}
 		return cerrors.WrapGitError(err, "pull")
 	}
 
@@ -256,7 +297,7 @@ func (g *GitEngine) Pull(path string) error {
 }
 
 // Push pushes the current branch to its upstream.
-func (g *GitEngine) Push(path, branch string) error {
+func (g *GitEngine) Push(ctx context.Context, path, branch string) error {
 	// Open the repository
 	r, err := git.PlainOpen(path)
 	if err != nil {
@@ -295,9 +336,18 @@ func (g *GitEngine) Push(path, branch string) error {
 		}
 	}
 
+	// Apply default timeout if context has no deadline
+	ctx = g.withDefaultTimeout(ctx)
+
 	// Push changes
-	err = r.Push(pushOpts)
+	err = r.PushContext(ctx, pushOpts)
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		if errors.Is(err, context.Canceled) {
+			return cerrors.NewOperationCanceled("push", path)
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return cerrors.NewOperationTimeout("push", path)
+		}
 		return cerrors.WrapGitError(err, "push")
 	}
 
@@ -472,13 +522,13 @@ func (g *GitEngine) countCommitsTo(r *git.Repository, from, to plumbing.Hash) (i
 //
 // Security note: The git binary path is hardcoded and arguments are passed
 // as separate parameters to prevent shell injection.
-func (g *GitEngine) RunCommand(repoPath string, args ...string) (*ports.CommandResult, error) {
+func (g *GitEngine) RunCommand(ctx context.Context, repoPath string, args ...string) (*ports.CommandResult, error) {
 	if len(args) == 0 {
 		return nil, cerrors.NewInvalidArgument("args", "git command requires at least one argument")
 	}
 
 	cmdArgs := append([]string{"-C", repoPath}, args...)
-	cmd := exec.Command("git", cmdArgs...) //nolint:gosec // git binary is hardcoded, args passed safely as separate parameters
+	cmd := exec.CommandContext(ctx, "git", cmdArgs...) //nolint:gosec // git binary is hardcoded, args passed safely as separate parameters
 
 	var stdout, stderr strings.Builder
 
@@ -494,6 +544,12 @@ func (g *GitEngine) RunCommand(repoPath string, args ...string) (*ports.CommandR
 	}
 
 	if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return nil, cerrors.NewOperationCanceled("git command", strings.Join(args, " "))
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, cerrors.NewOperationTimeout("git command", strings.Join(args, " "))
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
 		} else {
@@ -502,4 +558,14 @@ func (g *GitEngine) RunCommand(repoPath string, args ...string) (*ports.CommandR
 	}
 
 	return result, nil
+}
+
+// withDefaultTimeout returns a context with the default network timeout applied
+// if the provided context has no deadline set.
+func (g *GitEngine) withDefaultTimeout(ctx context.Context) context.Context {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx
+	}
+	ctx, _ = context.WithTimeout(ctx, DefaultNetworkTimeout)
+	return ctx
 }

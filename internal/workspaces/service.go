@@ -2,6 +2,7 @@
 package workspaces
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -101,12 +102,12 @@ type CreateOptions struct {
 }
 
 // CreateWorkspace creates a new workspace directory and returns the directory name
-func (s *Service) CreateWorkspace(id, branchName string, repos []domain.Repo) (string, error) {
-	return s.CreateWorkspaceWithOptions(id, branchName, repos, CreateOptions{})
+func (s *Service) CreateWorkspace(ctx context.Context, id, branchName string, repos []domain.Repo) (string, error) {
+	return s.CreateWorkspaceWithOptions(ctx, id, branchName, repos, CreateOptions{})
 }
 
 // CreateWorkspaceWithOptions creates a new workspace with configurable options.
-func (s *Service) CreateWorkspaceWithOptions(id, branchName string, repos []domain.Repo, opts CreateOptions) (string, error) {
+func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName string, repos []domain.Repo, opts CreateOptions) (string, error) {
 	dirName := id
 
 	// Default branch name is the workspace ID
@@ -126,8 +127,14 @@ func (s *Service) CreateWorkspaceWithOptions(id, branchName string, repos []doma
 
 	// 3. Clone repositories (if any)
 	for _, repo := range repos {
+		// Check for context cancellation before each operation
+		if ctx.Err() != nil {
+			cleanup()
+			return "", cerrors.NewOperationCanceled("create workspace", id)
+		}
+
 		// Ensure canonical exists
-		_, err := s.gitEngine.EnsureCanonical(repo.URL, repo.Name)
+		_, err := s.gitEngine.EnsureCanonical(ctx, repo.URL, repo.Name)
 		if err != nil {
 			cleanup()
 			return "", cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
@@ -183,7 +190,7 @@ func (s *Service) WorkspacePath(workspaceID string) (string, error) {
 }
 
 // AddRepoToWorkspace adds a repository to an existing workspace
-func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
+func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName string) error {
 	workspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return err
@@ -212,7 +219,7 @@ func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
 
 	// 4. Clone repo
 	// Ensure canonical exists
-	_, err = s.gitEngine.EnsureCanonical(repo.URL, repo.Name)
+	_, err = s.gitEngine.EnsureCanonical(ctx, repo.URL, repo.Name)
 	if err != nil {
 		return cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
 	}
@@ -238,7 +245,7 @@ func (s *Service) AddRepoToWorkspace(workspaceID, repoName string) error {
 }
 
 // RemoveRepoFromWorkspace removes a repository from an existing workspace
-func (s *Service) RemoveRepoFromWorkspace(workspaceID, repoName string) error {
+func (s *Service) RemoveRepoFromWorkspace(_ context.Context, workspaceID, repoName string) error {
 	workspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return err
@@ -280,7 +287,7 @@ type CloseOptions struct {
 }
 
 // CloseWorkspace removes a workspace with safety checks
-func (s *Service) CloseWorkspace(workspaceID string, force bool) error {
+func (s *Service) CloseWorkspace(_ context.Context, workspaceID string, force bool) error {
 	return s.CloseWorkspaceWithOptions(workspaceID, force, CloseOptions{})
 }
 
@@ -323,7 +330,7 @@ func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts
 }
 
 // CloseWorkspaceKeepMetadata moves workspace metadata to the closed store and removes the active worktree.
-func (s *Service) CloseWorkspaceKeepMetadata(workspaceID string, force bool) (*domain.ClosedWorkspace, error) {
+func (s *Service) CloseWorkspaceKeepMetadata(_ context.Context, workspaceID string, force bool) (*domain.ClosedWorkspace, error) {
 	return s.CloseWorkspaceKeepMetadataWithOptions(workspaceID, force, CloseOptions{})
 }
 
@@ -540,12 +547,12 @@ func (s *Service) ListCanonicalRepos() ([]string, error) {
 }
 
 // AddCanonicalRepo adds a new repository to the cache and returns the canonical name.
-func (s *Service) AddCanonicalRepo(url string) (string, error) {
-	return s.canonical.Add(url)
+func (s *Service) AddCanonicalRepo(ctx context.Context, url string) (string, error) {
+	return s.canonical.Add(ctx, url)
 }
 
 // RemoveCanonicalRepo removes a repository from the cache
-func (s *Service) RemoveCanonicalRepo(name string, force bool) error {
+func (s *Service) RemoveCanonicalRepo(_ context.Context, name string, force bool) error {
 	return s.canonical.Remove(name, force)
 }
 
@@ -555,18 +562,23 @@ func (s *Service) PreviewRemoveCanonicalRepo(name string) (*domain.RepoRemovePre
 }
 
 // SyncCanonicalRepo fetches updates for a cached repository
-func (s *Service) SyncCanonicalRepo(name string) error {
-	return s.canonical.Sync(name)
+func (s *Service) SyncCanonicalRepo(ctx context.Context, name string) error {
+	return s.canonical.Sync(ctx, name)
 }
 
 // PushWorkspace pushes all repos for a workspace.
-func (s *Service) PushWorkspace(workspaceID string) error {
+func (s *Service) PushWorkspace(ctx context.Context, workspaceID string) error {
 	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return err
 	}
 
 	for _, repo := range targetWorkspace.Repos {
+		// Check for context cancellation before each push
+		if ctx.Err() != nil {
+			return cerrors.NewOperationCanceled("push workspace", workspaceID)
+		}
+
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		branchName := targetWorkspace.BranchName
 
@@ -576,7 +588,7 @@ func (s *Service) PushWorkspace(workspaceID string) error {
 			}
 		}
 
-		if err := s.gitEngine.Push(worktreePath, branchName); err != nil {
+		if err := s.gitEngine.Push(ctx, worktreePath, branchName); err != nil {
 			return cerrors.WrapGitError(err, fmt.Sprintf("push repo %s", repo.Name))
 		}
 	}
@@ -600,7 +612,7 @@ type RepoGitResult struct {
 }
 
 // RunGitInWorkspace executes an arbitrary git command across all repos in a workspace.
-func (s *Service) RunGitInWorkspace(workspaceID string, args []string, opts GitRunOptions) ([]RepoGitResult, error) {
+func (s *Service) RunGitInWorkspace(ctx context.Context, workspaceID string, args []string, opts GitRunOptions) ([]RepoGitResult, error) {
 	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
@@ -611,19 +623,24 @@ func (s *Service) RunGitInWorkspace(workspaceID string, args []string, opts GitR
 	}
 
 	if opts.Parallel {
-		return s.runGitParallel(targetWorkspace, dirName, args, opts.ContinueOnError)
+		return s.runGitParallel(ctx, targetWorkspace, dirName, args, opts.ContinueOnError)
 	}
 
-	return s.runGitSequential(targetWorkspace, dirName, args, opts.ContinueOnError)
+	return s.runGitSequential(ctx, targetWorkspace, dirName, args, opts.ContinueOnError)
 }
 
-func (s *Service) runGitSequential(workspace *domain.Workspace, dirName string, args []string, continueOnError bool) ([]RepoGitResult, error) {
+func (s *Service) runGitSequential(ctx context.Context, workspace *domain.Workspace, dirName string, args []string, continueOnError bool) ([]RepoGitResult, error) {
 	var results []RepoGitResult
 
 	for _, repo := range workspace.Repos {
+		// Check for context cancellation between iterations
+		if ctx.Err() != nil {
+			return results, cerrors.NewOperationCanceled("git command", "sequential execution cancelled")
+		}
+
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
-		cmdResult, err := s.gitEngine.RunCommand(worktreePath, args...)
+		cmdResult, err := s.gitEngine.RunCommand(ctx, worktreePath, args...)
 
 		result := RepoGitResult{
 			RepoName: repo.Name,
@@ -655,7 +672,7 @@ func (s *Service) runGitSequential(workspace *domain.Workspace, dirName string, 
 
 const defaultMaxParallel = 10
 
-func (s *Service) runGitParallel(workspace *domain.Workspace, dirName string, args []string, continueOnError bool) ([]RepoGitResult, error) {
+func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspace, dirName string, args []string, continueOnError bool) ([]RepoGitResult, error) {
 	results := make([]RepoGitResult, len(workspace.Repos))
 
 	var wg sync.WaitGroup
@@ -663,14 +680,26 @@ func (s *Service) runGitParallel(workspace *domain.Workspace, dirName string, ar
 	// Bounded worker pool to avoid exhausting resources for large workspaces
 	sem := make(chan struct{}, defaultMaxParallel)
 
+	// Create a cancellable context for goroutines
+	cancelCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	for i, repo := range workspace.Repos {
 		wg.Add(1)
 
 		go func(idx int, r domain.Repo) {
 			defer wg.Done()
 
-			// Acquire semaphore
-			sem <- struct{}{}
+			// Check if context is cancelled before acquiring semaphore
+			select {
+			case <-cancelCtx.Done():
+				results[idx] = RepoGitResult{
+					RepoName: r.Name,
+					Error:    cerrors.NewOperationCanceled("git command", r.Name),
+				}
+				return
+			case sem <- struct{}{}:
+			}
 
 			defer func() { <-sem }()
 
@@ -680,7 +709,7 @@ func (s *Service) runGitParallel(workspace *domain.Workspace, dirName string, ar
 				RepoName: r.Name,
 			}
 
-			cmdResult, err := s.gitEngine.RunCommand(worktreePath, args...)
+			cmdResult, err := s.gitEngine.RunCommand(cancelCtx, worktreePath, args...)
 			if err != nil {
 				result.Error = err
 				results[idx] = result
@@ -714,7 +743,7 @@ func (s *Service) runGitParallel(workspace *domain.Workspace, dirName string, ar
 }
 
 // SwitchBranch switches the branch for all repos in a workspace
-func (s *Service) SwitchBranch(workspaceID, branchName string, create bool) error {
+func (s *Service) SwitchBranch(_ context.Context, workspaceID, branchName string, create bool) error {
 	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return err
@@ -740,7 +769,7 @@ func (s *Service) SwitchBranch(workspaceID, branchName string, create bool) erro
 }
 
 // RestoreWorkspace recreates a workspace from the newest closed entry.
-func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
+func (s *Service) RestoreWorkspace(ctx context.Context, workspaceID string, force bool) error {
 	archive, err := s.wsEngine.LatestClosed(workspaceID)
 	if err != nil {
 		return err
@@ -751,7 +780,7 @@ func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
 			return cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to replace or choose a different ID")
 		}
 
-		if err := s.CloseWorkspace(workspaceID, true); err != nil {
+		if err := s.CloseWorkspace(ctx, workspaceID, true); err != nil {
 			return cerrors.NewIOFailed("remove existing workspace", err)
 		}
 	}
@@ -759,7 +788,7 @@ func (s *Service) RestoreWorkspace(workspaceID string, force bool) error {
 	ws := archive.Metadata
 	ws.ClosedAt = nil
 
-	if _, err := s.CreateWorkspace(ws.ID, ws.BranchName, ws.Repos); err != nil {
+	if _, err := s.CreateWorkspace(ctx, ws.ID, ws.BranchName, ws.Repos); err != nil {
 		// Preserve original error type if it's already typed
 		var canopyErr *cerrors.CanopyError
 		if errors.As(err, &canopyErr) {
@@ -964,7 +993,7 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, act
 }
 
 // ExportWorkspace creates a portable export of a workspace definition.
-func (s *Service) ExportWorkspace(workspaceID string) (*domain.WorkspaceExport, error) {
+func (s *Service) ExportWorkspace(_ context.Context, workspaceID string) (*domain.WorkspaceExport, error) {
 	workspace, _, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
@@ -998,7 +1027,7 @@ func (s *Service) ExportWorkspace(workspaceID string) (*domain.WorkspaceExport, 
 }
 
 // ImportWorkspace creates a workspace from an exported definition.
-func (s *Service) ImportWorkspace(export *domain.WorkspaceExport, idOverride, branchOverride string, force bool) (string, error) {
+func (s *Service) ImportWorkspace(ctx context.Context, export *domain.WorkspaceExport, idOverride, branchOverride string, force bool) (string, error) {
 	if export == nil {
 		return "", cerrors.NewInvalidArgument("export", "export definition is nil")
 	}
@@ -1012,7 +1041,7 @@ func (s *Service) ImportWorkspace(export *domain.WorkspaceExport, idOverride, br
 	workspaceID, branchName := s.resolveImportOverrides(export, idOverride, branchOverride)
 
 	// Handle existing workspace
-	if err := s.prepareForImport(workspaceID, force); err != nil {
+	if err := s.prepareForImport(ctx, workspaceID, force); err != nil {
 		return "", err
 	}
 
@@ -1023,7 +1052,7 @@ func (s *Service) ImportWorkspace(export *domain.WorkspaceExport, idOverride, br
 	}
 
 	// Create the workspace
-	return s.CreateWorkspace(workspaceID, branchName, repos)
+	return s.CreateWorkspace(ctx, workspaceID, branchName, repos)
 }
 
 // resolveImportOverrides determines the final workspace ID and branch name for import.
@@ -1047,7 +1076,7 @@ func (s *Service) resolveImportOverrides(export *domain.WorkspaceExport, idOverr
 }
 
 // prepareForImport checks for existing workspace and removes it if force is set.
-func (s *Service) prepareForImport(workspaceID string, force bool) error {
+func (s *Service) prepareForImport(ctx context.Context, workspaceID string, force bool) error {
 	_, _, findErr := s.findWorkspace(workspaceID)
 	if findErr == nil {
 		// Workspace exists
@@ -1055,7 +1084,7 @@ func (s *Service) prepareForImport(workspaceID string, force bool) error {
 			return cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to overwrite or --id to specify a different ID")
 		}
 		// Force mode: delete existing workspace
-		if err := s.CloseWorkspace(workspaceID, true); err != nil {
+		if err := s.CloseWorkspace(ctx, workspaceID, true); err != nil {
 			return cerrors.NewIOFailed("remove existing workspace", err)
 		}
 
