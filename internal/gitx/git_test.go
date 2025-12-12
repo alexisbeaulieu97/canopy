@@ -1,6 +1,7 @@
 package gitx
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -100,7 +101,7 @@ func TestGitEngine_Clone(t *testing.T) {
 		engine := New(projectsRoot)
 
 		// Clone
-		err := engine.Clone(sourcePath, "test-repo")
+		err := engine.Clone(context.Background(), sourcePath, "test-repo")
 		if err != nil {
 			t.Fatalf("Clone failed: %v", err)
 		}
@@ -142,7 +143,7 @@ func TestGitEngine_Clone(t *testing.T) {
 		engine := New(projectsRoot)
 
 		// Clone should fail
-		err := engine.Clone(sourcePath, "test-repo")
+		err := engine.Clone(context.Background(), sourcePath, "test-repo")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -370,7 +371,7 @@ func TestGitEngine_Fetch(t *testing.T) {
 		engine := New(projectsRoot)
 
 		// Fetch
-		err := engine.Fetch("test-repo")
+		err := engine.Fetch(context.Background(), "test-repo")
 		if err != nil {
 			t.Fatalf("Fetch failed: %v", err)
 		}
@@ -382,7 +383,7 @@ func TestGitEngine_Fetch(t *testing.T) {
 		projectsRoot := t.TempDir()
 		engine := New(projectsRoot)
 
-		err := engine.Fetch("non-existent")
+		err := engine.Fetch(context.Background(), "non-existent")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -483,7 +484,7 @@ func TestGitEngine_RunCommand(t *testing.T) {
 
 		engine := New("")
 
-		result, err := engine.RunCommand(repoPath, "status", "--short")
+		result, err := engine.RunCommand(context.Background(), repoPath, "status", "--short")
 		if err != nil {
 			t.Fatalf("RunCommand failed: %v", err)
 		}
@@ -498,7 +499,7 @@ func TestGitEngine_RunCommand(t *testing.T) {
 
 		engine := New("")
 
-		_, err := engine.RunCommand("/tmp")
+		_, err := engine.RunCommand(context.Background(), "/tmp")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -605,7 +606,7 @@ func TestGitEngine_EnsureCanonical(t *testing.T) {
 		projectsRoot := t.TempDir()
 		engine := New(projectsRoot)
 
-		repo, err := engine.EnsureCanonical(sourcePath, "test-repo")
+		repo, err := engine.EnsureCanonical(context.Background(), sourcePath, "test-repo")
 		if err != nil {
 			t.Fatalf("EnsureCanonical failed: %v", err)
 		}
@@ -630,7 +631,7 @@ func TestGitEngine_EnsureCanonical(t *testing.T) {
 
 		engine := New(projectsRoot)
 
-		repo, err := engine.EnsureCanonical(sourcePath, "test-repo")
+		repo, err := engine.EnsureCanonical(context.Background(), sourcePath, "test-repo")
 		if err != nil {
 			t.Fatalf("EnsureCanonical failed: %v", err)
 		}

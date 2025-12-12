@@ -2,6 +2,7 @@
 package workspaces
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -53,13 +54,13 @@ func (c *CanonicalRepoService) List() ([]string, error) {
 }
 
 // Add clones a new repository to the canonical store and returns the canonical name.
-func (c *CanonicalRepoService) Add(url string) (string, error) {
+func (c *CanonicalRepoService) Add(ctx context.Context, url string) (string, error) {
 	name := repoNameFromURL(url)
 	if name == "" {
 		return "", cerrors.NewInvalidArgument("url", fmt.Sprintf("could not determine repo name from URL: %s", url))
 	}
 
-	if err := c.gitEngine.Clone(url, name); err != nil {
+	if err := c.gitEngine.Clone(ctx, url, name); err != nil {
 		return "", err
 	}
 
@@ -136,8 +137,8 @@ func (c *CanonicalRepoService) PreviewRemove(name string) (*domain.RepoRemovePre
 }
 
 // Sync fetches updates for a canonical repository.
-func (c *CanonicalRepoService) Sync(name string) error {
-	return c.gitEngine.Fetch(name)
+func (c *CanonicalRepoService) Sync(ctx context.Context, name string) error {
+	return c.gitEngine.Fetch(ctx, name)
 }
 
 // GetWorkspacesUsingRepo returns the IDs of workspaces that use the given canonical repo.

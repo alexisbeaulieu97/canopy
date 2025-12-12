@@ -2,6 +2,7 @@
 package errors
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -25,6 +26,7 @@ const (
 	ErrCommandFailed       ErrorCode = "COMMAND_FAILED"
 	ErrInvalidArgument     ErrorCode = "INVALID_ARGUMENT"
 	ErrOperationCancelled  ErrorCode = "OPERATION_CANCELLED"
+	ErrOperationTimeout    ErrorCode = "OPERATION_TIMEOUT"
 	ErrIOFailed            ErrorCode = "IO_FAILED"
 	ErrRegistryError       ErrorCode = "REGISTRY_ERROR"
 	ErrInternalError       ErrorCode = "INTERNAL_ERROR"
@@ -148,13 +150,33 @@ func NewUnknownRepository(identifier string, userRequested bool) *CanopyError {
 }
 
 // WrapGitError wraps a git operation error.
+// If the error is already an operation cancelled or timeout error, it returns
+// the original error to preserve the specific error type.
 func WrapGitError(err error, operation string) *CanopyError {
+	// Preserve cancellation/timeout errors
+	if IsOperationCanceled(err) || IsOperationTimeout(err) {
+		var cerr *CanopyError
+		if errors.As(err, &cerr) {
+			return cerr
+		}
+	}
+
 	return &CanopyError{
 		Code:    ErrGitOperationFailed,
 		Message: fmt.Sprintf("git %s failed", operation),
 		Cause:   err,
 		Context: map[string]string{"operation": operation},
 	}
+}
+
+// NewContextError creates the appropriate error based on the context error.
+// Returns NewOperationTimeout if ctx.Err() is DeadlineExceeded, otherwise NewOperationCanceledWithTarget.
+func NewContextError(ctx context.Context, operation, target string) *CanopyError {
+	if ctx.Err() == context.DeadlineExceeded {
+		return NewOperationTimeout(operation, target)
+	}
+
+	return NewOperationCanceledWithTarget(operation, target)
 }
 
 // NewConfigInvalid creates an error for invalid configuration.
@@ -210,6 +232,45 @@ func NewOperationCancelled(operation string) *CanopyError {
 		Message: fmt.Sprintf("operation cancelled: %s", operation),
 		Context: map[string]string{"operation": operation},
 	}
+}
+
+// NewOperationCanceledWithTarget creates an error for context-cancelled operations
+// that includes what was being operated on (e.g., "clone", "https://github.com/...").
+func NewOperationCanceledWithTarget(operation, target string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrOperationCancelled,
+		Message: fmt.Sprintf("operation cancelled: %s (%s)", operation, target),
+		Context: map[string]string{"operation": operation, "target": target},
+	}
+}
+
+// NewOperationTimeout creates an error for operations that timed out.
+func NewOperationTimeout(operation, target string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrOperationTimeout,
+		Message: fmt.Sprintf("operation timed out: %s (%s)", operation, target),
+		Context: map[string]string{"operation": operation, "target": target},
+	}
+}
+
+// IsOperationCanceled returns true if err is an operation cancelled error.
+func IsOperationCanceled(err error) bool {
+	var cerr *CanopyError
+	if errors.As(err, &cerr) {
+		return cerr.Code == ErrOperationCancelled
+	}
+
+	return false
+}
+
+// IsOperationTimeout returns true if err is an operation timeout error.
+func IsOperationTimeout(err error) bool {
+	var cerr *CanopyError
+	if errors.As(err, &cerr) {
+		return cerr.Code == ErrOperationTimeout
+	}
+
+	return false
 }
 
 // NewIOFailed creates an error for IO operation failures.
@@ -334,6 +395,7 @@ var (
 	CommandFailed       = &CanopyError{Code: ErrCommandFailed}
 	InvalidArgument     = &CanopyError{Code: ErrInvalidArgument}
 	OperationCancelled  = &CanopyError{Code: ErrOperationCancelled}
+	OperationTimeout    = &CanopyError{Code: ErrOperationTimeout}
 	IOFailed            = &CanopyError{Code: ErrIOFailed}
 	RegistryError       = &CanopyError{Code: ErrRegistryError}
 	InternalError       = &CanopyError{Code: ErrInternalError}

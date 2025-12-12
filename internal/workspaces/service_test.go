@@ -1,6 +1,7 @@
 package workspaces
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -159,7 +160,7 @@ func TestCreateWorkspace(t *testing.T) {
 	// CreateWorkspace requires repos? No, it iterates over them.
 
 	// Test creating a workspace with NO repos
-	dirName, err := svc.CreateWorkspace("TEST-EMPTY", "", []domain.Repo{})
+	dirName, err := svc.CreateWorkspace(context.Background(), "TEST-EMPTY", "", []domain.Repo{})
 	if err != nil {
 		t.Fatalf("CreateWorkspace failed: %v", err)
 	}
@@ -183,11 +184,11 @@ func TestCreateWorkspace(t *testing.T) {
 func TestCloseWorkspaceStoresMetadata(t *testing.T) {
 	deps := newTestService(t)
 
-	if _, err := deps.svc.CreateWorkspace("TEST-ARCHIVE", "", []domain.Repo{}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "TEST-ARCHIVE", "", []domain.Repo{}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
-	archived, err := deps.svc.CloseWorkspaceKeepMetadata("TEST-ARCHIVE", true)
+	archived, err := deps.svc.CloseWorkspaceKeepMetadata(context.Background(), "TEST-ARCHIVE", true)
 	if err != nil {
 		t.Fatalf("CloseWorkspaceKeepMetadata failed: %v", err)
 	}
@@ -217,7 +218,7 @@ func TestCloseWorkspaceStoresMetadata(t *testing.T) {
 func TestCloseWorkspaceNonexistent(t *testing.T) {
 	deps := newTestService(t)
 
-	if _, err := deps.svc.CloseWorkspaceKeepMetadata("MISSING", false); err == nil {
+	if _, err := deps.svc.CloseWorkspaceKeepMetadata(context.Background(), "MISSING", false); err == nil {
 		t.Fatalf("expected error when closing nonexistent workspace")
 	}
 }
@@ -225,7 +226,7 @@ func TestCloseWorkspaceNonexistent(t *testing.T) {
 func TestRestoreWorkspaceConflict(t *testing.T) {
 	deps := newTestService(t)
 
-	if _, err := deps.svc.CreateWorkspace("TEST-CONFLICT", "", []domain.Repo{}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "TEST-CONFLICT", "", []domain.Repo{}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
@@ -234,7 +235,7 @@ func TestRestoreWorkspaceConflict(t *testing.T) {
 		t.Fatalf("failed to seed closed entry: %v", err)
 	}
 
-	if err := deps.svc.RestoreWorkspace("TEST-CONFLICT", false); err == nil {
+	if err := deps.svc.RestoreWorkspace(context.Background(), "TEST-CONFLICT", false); err == nil {
 		t.Fatalf("expected restore conflict error")
 	}
 }
@@ -250,7 +251,7 @@ func TestCloseRestoreCycle(t *testing.T) {
 
 	repoURL := "file://" + sourceRepo
 
-	if _, err := deps.svc.CreateWorkspace("PROJ-1", "", []domain.Repo{{Name: "sample", URL: repoURL}}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "PROJ-1", "", []domain.Repo{{Name: "sample", URL: repoURL}}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
@@ -260,7 +261,7 @@ func TestCloseRestoreCycle(t *testing.T) {
 		t.Fatalf("expected worktree at %s: %v", worktreePath, err)
 	}
 
-	archived, err := deps.svc.CloseWorkspaceKeepMetadata("PROJ-1", false)
+	archived, err := deps.svc.CloseWorkspaceKeepMetadata(context.Background(), "PROJ-1", false)
 	if err != nil {
 		t.Fatalf("CloseWorkspaceKeepMetadata failed: %v", err)
 	}
@@ -273,7 +274,7 @@ func TestCloseRestoreCycle(t *testing.T) {
 		t.Fatalf("expected worktree to be removed when keeping metadata")
 	}
 
-	if err := deps.svc.RestoreWorkspace("PROJ-1", false); err != nil {
+	if err := deps.svc.RestoreWorkspace(context.Background(), "PROJ-1", false); err != nil {
 		t.Fatalf("RestoreWorkspace failed: %v", err)
 	}
 
@@ -302,7 +303,7 @@ func TestCloseWorkspaceDirtyFailsWithoutForce(t *testing.T) {
 
 	repoURL := "file://" + sourceRepo
 
-	if _, err := deps.svc.CreateWorkspace("PROJ-2", "", []domain.Repo{{Name: "sample-dirty", URL: repoURL}}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "PROJ-2", "", []domain.Repo{{Name: "sample-dirty", URL: repoURL}}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
@@ -311,7 +312,7 @@ func TestCloseWorkspaceDirtyFailsWithoutForce(t *testing.T) {
 		t.Fatalf("failed to write dirty file: %v", err)
 	}
 
-	if _, err := deps.svc.CloseWorkspaceKeepMetadata("PROJ-2", false); err == nil {
+	if _, err := deps.svc.CloseWorkspaceKeepMetadata(context.Background(), "PROJ-2", false); err == nil {
 		t.Fatalf("expected close keep-metadata to fail on dirty workspace")
 	}
 }
@@ -319,11 +320,11 @@ func TestCloseWorkspaceDirtyFailsWithoutForce(t *testing.T) {
 func TestRestoreWorkspaceForceDoesNotDeleteWithoutClosedEntry(t *testing.T) {
 	deps := newTestService(t)
 
-	if _, err := deps.svc.CreateWorkspace("PROJ-NO-ARCHIVE", "", []domain.Repo{}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "PROJ-NO-ARCHIVE", "", []domain.Repo{}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
-	if err := deps.svc.RestoreWorkspace("PROJ-NO-ARCHIVE", true); err == nil {
+	if err := deps.svc.RestoreWorkspace(context.Background(), "PROJ-NO-ARCHIVE", true); err == nil {
 		t.Fatalf("expected restore to fail without closed entry present")
 	}
 
@@ -534,7 +535,7 @@ func TestDetectOrphans_NoOrphans(t *testing.T) {
 
 	repoURL := "file://" + sourceRepo
 
-	if _, err := deps.svc.CreateWorkspace("CLEAN-WS", "", []domain.Repo{{Name: "clean-repo", URL: repoURL}}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "CLEAN-WS", "", []domain.Repo{{Name: "clean-repo", URL: repoURL}}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
@@ -561,16 +562,16 @@ func TestGetWorkspacesUsingRepo(t *testing.T) {
 	repoURL := "file://" + sourceRepo
 
 	// Create two workspaces using the same repo
-	if _, err := deps.svc.CreateWorkspace("WS-1", "", []domain.Repo{{Name: "shared-repo", URL: repoURL}}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "WS-1", "", []domain.Repo{{Name: "shared-repo", URL: repoURL}}); err != nil {
 		t.Fatalf("failed to create workspace WS-1: %v", err)
 	}
 
-	if _, err := deps.svc.CreateWorkspace("WS-2", "", []domain.Repo{{Name: "shared-repo", URL: repoURL}}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "WS-2", "", []domain.Repo{{Name: "shared-repo", URL: repoURL}}); err != nil {
 		t.Fatalf("failed to create workspace WS-2: %v", err)
 	}
 
 	// Create a workspace that doesn't use the repo
-	if _, err := deps.svc.CreateWorkspace("WS-3", "", []domain.Repo{}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "WS-3", "", []domain.Repo{}); err != nil {
 		t.Fatalf("failed to create workspace WS-3: %v", err)
 	}
 
@@ -605,7 +606,7 @@ func TestPreviewCloseWorkspace(t *testing.T) {
 	deps := newTestService(t)
 
 	// Create a workspace
-	if _, err := deps.svc.CreateWorkspace("TEST-PREVIEW", "", []domain.Repo{}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "TEST-PREVIEW", "", []domain.Repo{}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
@@ -664,7 +665,7 @@ func TestPreviewRemoveCanonicalRepo(t *testing.T) {
 	runGit(t, "", "clone", "--bare", sourceRepo, repoPath)
 
 	// Create a workspace that uses this repo (using file:// URL for local repo)
-	if _, err := deps.svc.CreateWorkspace("WS-USING-REPO", "", []domain.Repo{{Name: "test-repo", URL: "file://" + sourceRepo}}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "WS-USING-REPO", "", []domain.Repo{{Name: "test-repo", URL: "file://" + sourceRepo}}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
@@ -709,11 +710,11 @@ func TestExportWorkspace(t *testing.T) {
 	deps := newTestService(t)
 
 	// Create a workspace with no repos (simple case)
-	if _, err := deps.svc.CreateWorkspace("EXPORT-TEST", "feature/export", []domain.Repo{}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "EXPORT-TEST", "feature/export", []domain.Repo{}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
-	export, err := deps.svc.ExportWorkspace("EXPORT-TEST")
+	export, err := deps.svc.ExportWorkspace(context.Background(), "EXPORT-TEST")
 	if err != nil {
 		t.Fatalf("ExportWorkspace failed: %v", err)
 	}
@@ -746,11 +747,11 @@ func TestExportWorkspaceWithRepos(t *testing.T) {
 
 	repoURL := "file://" + sourceRepo
 
-	if _, err := deps.svc.CreateWorkspace("EXPORT-REPOS", "", []domain.Repo{{Name: "export-repo", URL: repoURL}}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "EXPORT-REPOS", "", []domain.Repo{{Name: "export-repo", URL: repoURL}}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
-	export, err := deps.svc.ExportWorkspace("EXPORT-REPOS")
+	export, err := deps.svc.ExportWorkspace(context.Background(), "EXPORT-REPOS")
 	if err != nil {
 		t.Fatalf("ExportWorkspace failed: %v", err)
 	}
@@ -771,7 +772,7 @@ func TestExportWorkspaceWithRepos(t *testing.T) {
 func TestExportWorkspaceNotFound(t *testing.T) {
 	deps := newTestService(t)
 
-	_, err := deps.svc.ExportWorkspace("NONEXISTENT")
+	_, err := deps.svc.ExportWorkspace(context.Background(), "NONEXISTENT")
 	if err == nil {
 		t.Fatalf("expected error when exporting nonexistent workspace")
 	}
@@ -787,7 +788,7 @@ func TestImportWorkspace(t *testing.T) {
 		Repos:   []domain.RepoExport{},
 	}
 
-	dirName, err := deps.svc.ImportWorkspace(export, "", "", false)
+	dirName, err := deps.svc.ImportWorkspace(context.Background(), export, "", "", false)
 	if err != nil {
 		t.Fatalf("ImportWorkspace failed: %v", err)
 	}
@@ -813,7 +814,7 @@ func TestImportWorkspaceWithIDOverride(t *testing.T) {
 		Repos:   []domain.RepoExport{},
 	}
 
-	dirName, err := deps.svc.ImportWorkspace(export, "OVERRIDDEN-ID", "", false)
+	dirName, err := deps.svc.ImportWorkspace(context.Background(), export, "OVERRIDDEN-ID", "", false)
 	if err != nil {
 		t.Fatalf("ImportWorkspace failed: %v", err)
 	}
@@ -843,7 +844,7 @@ func TestImportWorkspaceWithBranchOverride(t *testing.T) {
 		Repos:   []domain.RepoExport{},
 	}
 
-	_, err := deps.svc.ImportWorkspace(export, "", "overridden-branch", false)
+	_, err := deps.svc.ImportWorkspace(context.Background(), export, "", "overridden-branch", false)
 	if err != nil {
 		t.Fatalf("ImportWorkspace failed: %v", err)
 	}
@@ -869,7 +870,7 @@ func TestImportWorkspaceEmptyBranchDefaultsToID(t *testing.T) {
 		Repos:   []domain.RepoExport{},
 	}
 
-	_, err := deps.svc.ImportWorkspace(export, "", "", false)
+	_, err := deps.svc.ImportWorkspace(context.Background(), export, "", "", false)
 	if err != nil {
 		t.Fatalf("ImportWorkspace failed: %v", err)
 	}
@@ -889,7 +890,7 @@ func TestImportWorkspaceConflict(t *testing.T) {
 	deps := newTestService(t)
 
 	// Create existing workspace
-	if _, err := deps.svc.CreateWorkspace("CONFLICT-TEST", "", []domain.Repo{}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "CONFLICT-TEST", "", []domain.Repo{}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
@@ -900,7 +901,7 @@ func TestImportWorkspaceConflict(t *testing.T) {
 		Repos:   []domain.RepoExport{},
 	}
 
-	_, err := deps.svc.ImportWorkspace(export, "", "", false)
+	_, err := deps.svc.ImportWorkspace(context.Background(), export, "", "", false)
 	if err == nil {
 		t.Fatalf("expected error when importing workspace that already exists")
 	}
@@ -910,7 +911,7 @@ func TestImportWorkspaceForce(t *testing.T) {
 	deps := newTestService(t)
 
 	// Create existing workspace
-	if _, err := deps.svc.CreateWorkspace("FORCE-TEST", "old-branch", []domain.Repo{}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "FORCE-TEST", "old-branch", []domain.Repo{}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
@@ -921,7 +922,7 @@ func TestImportWorkspaceForce(t *testing.T) {
 		Repos:   []domain.RepoExport{},
 	}
 
-	_, err := deps.svc.ImportWorkspace(export, "", "", true)
+	_, err := deps.svc.ImportWorkspace(context.Background(), export, "", "", true)
 	if err != nil {
 		t.Fatalf("ImportWorkspace with force failed: %v", err)
 	}
@@ -947,7 +948,7 @@ func TestImportWorkspaceInvalidVersion(t *testing.T) {
 		Repos:   []domain.RepoExport{},
 	}
 
-	_, err := deps.svc.ImportWorkspace(export, "", "", false)
+	_, err := deps.svc.ImportWorkspace(context.Background(), export, "", "", false)
 	if err == nil {
 		t.Fatalf("expected error when importing with unsupported version")
 	}
@@ -956,7 +957,7 @@ func TestImportWorkspaceInvalidVersion(t *testing.T) {
 func TestImportWorkspaceNilExport(t *testing.T) {
 	deps := newTestService(t)
 
-	_, err := deps.svc.ImportWorkspace(nil, "", "", false)
+	_, err := deps.svc.ImportWorkspace(context.Background(), nil, "", "", false)
 	if err == nil {
 		t.Fatalf("expected error when importing nil export")
 	}
@@ -966,23 +967,23 @@ func TestExportImportRoundTrip(t *testing.T) {
 	deps := newTestService(t)
 
 	// Create a workspace
-	if _, err := deps.svc.CreateWorkspace("ROUNDTRIP", "feature/test", []domain.Repo{}); err != nil {
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "ROUNDTRIP", "feature/test", []domain.Repo{}); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
 	// Export it
-	export, err := deps.svc.ExportWorkspace("ROUNDTRIP")
+	export, err := deps.svc.ExportWorkspace(context.Background(), "ROUNDTRIP")
 	if err != nil {
 		t.Fatalf("ExportWorkspace failed: %v", err)
 	}
 
 	// Delete the original
-	if err := deps.svc.CloseWorkspace("ROUNDTRIP", true); err != nil {
+	if err := deps.svc.CloseWorkspace(context.Background(), "ROUNDTRIP", true); err != nil {
 		t.Fatalf("CloseWorkspace failed: %v", err)
 	}
 
 	// Import it back
-	_, err = deps.svc.ImportWorkspace(export, "", "", false)
+	_, err = deps.svc.ImportWorkspace(context.Background(), export, "", "", false)
 	if err != nil {
 		t.Fatalf("ImportWorkspace failed: %v", err)
 	}

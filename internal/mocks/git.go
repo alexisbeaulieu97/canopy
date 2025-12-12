@@ -2,6 +2,8 @@
 package mocks
 
 import (
+	"context"
+
 	"github.com/go-git/go-git/v5"
 
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
@@ -12,16 +14,16 @@ var _ ports.GitOperations = (*MockGitOperations)(nil)
 
 // MockGitOperations is a mock implementation of ports.GitOperations for testing.
 type MockGitOperations struct {
-	EnsureCanonicalFunc func(repoURL, repoName string) (*git.Repository, error)
+	EnsureCanonicalFunc func(ctx context.Context, repoURL, repoName string) (*git.Repository, error)
 	CreateWorktreeFunc  func(repoName, worktreePath, branchName string) error
 	StatusFunc          func(path string) (bool, int, int, string, error)
-	CloneFunc           func(url, name string) error
-	FetchFunc           func(name string) error
-	PullFunc            func(path string) error
-	PushFunc            func(path, branch string) error
+	CloneFunc           func(ctx context.Context, url, name string) error
+	FetchFunc           func(ctx context.Context, name string) error
+	PullFunc            func(ctx context.Context, path string) error
+	PushFunc            func(ctx context.Context, path, branch string) error
 	ListFunc            func() ([]string, error)
 	CheckoutFunc        func(path, branchName string, create bool) error
-	RunCommandFunc      func(repoPath string, args ...string) (*ports.CommandResult, error)
+	RunCommandFunc      func(ctx context.Context, repoPath string, args ...string) (*ports.CommandResult, error)
 }
 
 // NewMockGitOperations creates a new MockGitOperations with default no-op behavior.
@@ -30,9 +32,9 @@ func NewMockGitOperations() *MockGitOperations {
 }
 
 // EnsureCanonical calls the mock function if set, otherwise returns nil.
-func (m *MockGitOperations) EnsureCanonical(repoURL, repoName string) (*git.Repository, error) {
+func (m *MockGitOperations) EnsureCanonical(ctx context.Context, repoURL, repoName string) (*git.Repository, error) {
 	if m.EnsureCanonicalFunc != nil {
-		return m.EnsureCanonicalFunc(repoURL, repoName)
+		return m.EnsureCanonicalFunc(ctx, repoURL, repoName)
 	}
 
 	return nil, nil
@@ -57,36 +59,36 @@ func (m *MockGitOperations) Status(path string) (bool, int, int, string, error) 
 }
 
 // Clone calls the mock function if set, otherwise returns nil.
-func (m *MockGitOperations) Clone(url, name string) error {
+func (m *MockGitOperations) Clone(ctx context.Context, url, name string) error {
 	if m.CloneFunc != nil {
-		return m.CloneFunc(url, name)
+		return m.CloneFunc(ctx, url, name)
 	}
 
 	return nil
 }
 
 // Fetch calls the mock function if set, otherwise returns nil.
-func (m *MockGitOperations) Fetch(name string) error {
+func (m *MockGitOperations) Fetch(ctx context.Context, name string) error {
 	if m.FetchFunc != nil {
-		return m.FetchFunc(name)
+		return m.FetchFunc(ctx, name)
 	}
 
 	return nil
 }
 
 // Pull calls the mock function if set, otherwise returns nil.
-func (m *MockGitOperations) Pull(path string) error {
+func (m *MockGitOperations) Pull(ctx context.Context, path string) error {
 	if m.PullFunc != nil {
-		return m.PullFunc(path)
+		return m.PullFunc(ctx, path)
 	}
 
 	return nil
 }
 
 // Push calls the mock function if set, otherwise returns nil.
-func (m *MockGitOperations) Push(path, branch string) error {
+func (m *MockGitOperations) Push(ctx context.Context, path, branch string) error {
 	if m.PushFunc != nil {
-		return m.PushFunc(path, branch)
+		return m.PushFunc(ctx, path, branch)
 	}
 
 	return nil
@@ -111,9 +113,9 @@ func (m *MockGitOperations) Checkout(path, branchName string, create bool) error
 }
 
 // RunCommand calls the mock function if set, otherwise returns an empty result.
-func (m *MockGitOperations) RunCommand(repoPath string, args ...string) (*ports.CommandResult, error) {
+func (m *MockGitOperations) RunCommand(ctx context.Context, repoPath string, args ...string) (*ports.CommandResult, error) {
 	if m.RunCommandFunc != nil {
-		return m.RunCommandFunc(repoPath, args...)
+		return m.RunCommandFunc(ctx, repoPath, args...)
 	}
 
 	return &ports.CommandResult{}, nil
