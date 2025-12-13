@@ -1,44 +1,43 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
-	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
 // Model represents the TUI state.
+// It coordinates sub-components for views, workspace data, and UI elements.
 type Model struct {
-	list               list.Model
-	svc                *workspaces.Service
-	keybindings        config.Keybindings
-	err                error
-	infoMessage        string
-	printPath          bool
-	SelectedPath       string
-	loadingDetail      bool
-	pushing            bool
-	pushTarget         string
-	spinner            spinner.Model
-	detailView         bool
-	selectedWS         *domain.Workspace
-	wsStatus           *domain.WorkspaceStatus
-	wsOrphans          []domain.OrphanedWorktree
-	confirming         bool
-	actionToConfirm    string // "close" | "push"
-	confirmingID       string
-	allItems           []workspaceItem
-	statusCache        map[string]*domain.WorkspaceStatus
-	totalDiskUsage     int64
-	filterStale        bool
-	staleThresholdDays int
-	lastFilterValue    string
+	// viewState manages the current view mode (list, detail, confirm).
+	viewState ViewState
+	// workspaces manages workspace data and caches.
+	workspaces *WorkspaceModel
+	// ui groups UI components (list, spinner, keybindings).
+	ui UIComponents
+	// svc provides workspace operations.
+	svc *workspaces.Service
+	// err holds any error to display.
+	err error
+	// infoMessage holds an informational message to display.
+	infoMessage string
+	// printPath enables path-printing mode (exits after selecting).
+	printPath bool
+	// SelectedPath is set when printPath mode selects a workspace.
+	SelectedPath string
+	// pushing indicates a push operation is in progress.
+	pushing bool
+	// pushTarget is the ID of the workspace being pushed.
+	pushTarget string
+	// selectedWS holds the workspace shown in detail view.
+	selectedWS *domain.Workspace
+	// wsStatus holds the status of the workspace shown in detail view.
+	wsStatus *domain.WorkspaceStatus
+	// wsOrphans holds orphaned worktrees for the detail view.
+	wsOrphans []domain.OrphanedWorktree
+	// lastFilterValue tracks the last filter value for change detection.
+	lastFilterValue string
 }
 
 // NewModel creates a new TUI model.
@@ -46,48 +45,18 @@ func NewModel(svc *workspaces.Service, printPath bool) Model {
 	threshold := svc.StaleThresholdDays()
 	kb := svc.Keybindings()
 
-	delegate := newWorkspaceDelegate(threshold)
-	l := list.New([]list.Item{}, delegate, 0, 0)
-	l.Title = ""
-	l.SetShowTitle(false)
-	l.SetShowHelp(false)
-	l.SetFilteringEnabled(true)
-	l.SetShowStatusBar(false)
-	l.Styles.NoItems = components.SubtleTextStyle
-
-	// Build keybinding help based on configured keys
-	searchKey := firstKey(kb.Search)
-	toggleStaleKey := firstKey(kb.ToggleStale)
-	pushKey := firstKey(kb.Push)
-	openKey := firstKey(kb.OpenEditor)
-
-	l.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{
-			key.NewBinding(key.WithKeys(searchKey), key.WithHelp(searchKey, "search")),
-			key.NewBinding(key.WithKeys(toggleStaleKey), key.WithHelp(toggleStaleKey, "toggle stale")),
-			key.NewBinding(key.WithKeys(pushKey), key.WithHelp(pushKey, "push selected")),
-			key.NewBinding(key.WithKeys(openKey), key.WithHelp(openKey, "open in editor")),
-		}
-	}
-
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(components.ColorPrimary)
-
 	return Model{
-		list:               l,
-		svc:                svc,
-		keybindings:        kb,
-		printPath:          printPath,
-		spinner:            s,
-		statusCache:        make(map[string]*domain.WorkspaceStatus),
-		staleThresholdDays: threshold,
+		viewState:  &ListViewState{},
+		workspaces: NewWorkspaceModel(threshold),
+		ui:         NewUIComponents(kb, threshold),
+		svc:        svc,
+		printPath:  printPath,
 	}
 }
 
 // Init configures initial commands.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadWorkspaces, m.spinner.Tick)
+	return tea.Batch(m.loadWorkspaces, m.ui.Spinner.Tick)
 }
 
 // matchesKey checks if the pressed key matches any of the configured keybindings.
@@ -112,7 +81,7 @@ func firstKey(bindings []string) string {
 
 // selectedWorkspaceItem returns the currently selected workspace item.
 func (m Model) selectedWorkspaceItem() (workspaceItem, bool) {
-	if selected, ok := m.list.SelectedItem().(workspaceItem); ok {
+	if selected, ok := m.ui.List.SelectedItem().(workspaceItem); ok {
 		return selected, true
 	}
 
@@ -121,11 +90,33 @@ func (m Model) selectedWorkspaceItem() (workspaceItem, bool) {
 
 // workspaceItemByID finds a workspace item by its ID.
 func (m Model) workspaceItemByID(id string) (workspaceItem, bool) {
-	for _, it := range m.allItems {
-		if it.Workspace.ID == id {
-			return it, true
-		}
-	}
+	return m.workspaces.FindItemByID(id)
+}
 
-	return workspaceItem{}, false
+// isDetailView returns whether the model is in detail view.
+func (m Model) isDetailView() bool {
+	_, ok := m.viewState.(*DetailViewState)
+	return ok
+}
+
+// isConfirming returns whether the model is showing a confirmation dialog.
+func (m Model) isConfirming() bool {
+	_, ok := m.viewState.(*ConfirmViewState)
+	return ok
+}
+
+// getConfirmState returns the confirmation state if active, nil otherwise.
+func (m Model) getConfirmState() *ConfirmViewState {
+	if cs, ok := m.viewState.(*ConfirmViewState); ok {
+		return cs
+	}
+	return nil
+}
+
+// getDetailState returns the detail state if active, nil otherwise.
+func (m Model) getDetailState() *DetailViewState {
+	if ds, ok := m.viewState.(*DetailViewState); ok {
+		return ds
+	}
+	return nil
 }

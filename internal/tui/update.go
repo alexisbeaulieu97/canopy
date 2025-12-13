@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -13,21 +11,22 @@ import (
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // message-driven switch covers multiple event types
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if updated, cmd, handled := m.handleKey(msg.String()); handled {
-			return updated, cmd
+		newState, cmd, handled := m.viewState.HandleKey(&m, msg.String())
+		if handled {
+			m.viewState = newState
+			return m, cmd
 		}
 	case tea.WindowSizeMsg:
-		m.list.SetWidth(msg.Width)
+		m.ui.List.SetWidth(msg.Width)
 
 		height := msg.Height - 6 // Account for header/footer
 		if height < 8 {
 			height = msg.Height
 		}
 
-		m.list.SetHeight(height)
+		m.ui.List.SetHeight(height)
 	case workspaceListMsg:
-		m.totalDiskUsage = msg.totalUsage
-		m.allItems = msg.items
+		m.workspaces.SetItems(msg.items, msg.totalUsage)
 
 		m.applyFilters()
 
@@ -40,10 +39,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 	case loadWorkspacesErrMsg:
 		m.err = msg.err
 	case workspaceStatusMsg:
-		m.statusCache[msg.id] = msg.status
+		m.workspaces.CacheStatus(msg.id, msg.status)
 		m.updateWorkspaceSummary(msg.id, msg.status, nil)
 
-		if m.detailView && m.selectedWS != nil && m.selectedWS.ID == msg.id {
+		if m.isDetailView() && m.selectedWS != nil && m.selectedWS.ID == msg.id {
 			m.wsStatus = msg.status
 		}
 	case workspaceStatusErrMsg:
@@ -63,10 +62,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 		m.selectedWS = msg.workspace
 		m.wsStatus = msg.status
 		m.wsOrphans = msg.orphans
-		m.loadingDetail = false
+		if ds := m.getDetailState(); ds != nil {
+			ds.Loading = false
+		}
 	case workspaceDetailsErrMsg:
 		m.err = msg.err
-		m.loadingDetail = false
+		if ds := m.getDetailState(); ds != nil {
+			ds.Loading = false
+		}
 	case closeWorkspaceErrMsg:
 		m.err = msg.err
 	case openEditorResultMsg:
@@ -78,50 +81,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 		}
 	case error:
 		m.err = msg
-		m.loadingDetail = false
+		if ds := m.getDetailState(); ds != nil {
+			ds.Loading = false
+		}
 
 		return m, nil
 	}
 
 	var cmd tea.Cmd
 
-	if !m.detailView {
-		m.list, cmd = m.list.Update(msg)
+	if !m.isDetailView() {
+		m.ui.List, cmd = m.ui.List.Update(msg)
 
-		if m.list.FilterValue() != m.lastFilterValue {
-			m.lastFilterValue = m.list.FilterValue()
+		if m.ui.List.FilterValue() != m.lastFilterValue {
+			m.lastFilterValue = m.ui.List.FilterValue()
 			m.applyFilters()
 		}
 	}
 
 	var sCmd tea.Cmd
 
-	m.spinner, sCmd = m.spinner.Update(msg)
+	m.ui.Spinner, sCmd = m.ui.Spinner.Update(msg)
 
 	return m, tea.Batch(cmd, sCmd)
 }
 
 // updateWorkspaceSummary updates the summary for a workspace in both allItems and list.
 func (m *Model) updateWorkspaceSummary(id string, status *domain.WorkspaceStatus, err error) {
-	for idx, it := range m.allItems {
-		if it.Workspace.ID != id {
-			continue
-		}
+	m.workspaces.UpdateItemSummary(id, status, err)
 
-		if status != nil {
-			it.Loaded = true
-			it.Err = nil
-			it.Summary = summarizeStatus(status)
-		}
-
-		if err != nil {
-			it.Err = err
-		}
-
-		m.allItems[idx] = it
-	}
-
-	for idx, listItem := range m.list.Items() {
+	for idx, listItem := range m.ui.List.Items() {
 		ws, ok := listItem.(workspaceItem)
 		if !ok || ws.Workspace.ID != id {
 			continue
@@ -137,206 +126,162 @@ func (m *Model) updateWorkspaceSummary(id string, status *domain.WorkspaceStatus
 			ws.Err = err
 		}
 
-		m.list.SetItem(idx, ws)
+		m.ui.List.SetItem(idx, ws)
 	}
 }
 
 // applyFilters applies current filters to the workspace list.
 func (m *Model) applyFilters() {
-	var items []list.Item
-
-	search := strings.ToLower(strings.TrimSpace(m.list.FilterValue()))
-
-	for _, it := range m.allItems {
-		if m.filterStale && !it.Workspace.IsStale(m.staleThresholdDays) {
-			continue
-		}
-
-		if search != "" && !strings.Contains(strings.ToLower(it.Workspace.ID), search) {
-			continue
-		}
-
-		items = append(items, it)
-	}
-
-	m.list.SetItems(items)
+	items := m.workspaces.ApplyFilters(m.ui.List.FilterValue())
+	m.ui.List.SetItems(items)
 }
 
-// handleKey dispatches key events to the appropriate handler.
-func (m Model) handleKey(key string) (Model, tea.Cmd, bool) {
-	if m.detailView {
-		return m.handleDetailKey(key)
-	}
-
-	if m.confirming {
-		return m.handleConfirmKey(key)
-	}
-
+// handleListKeyWithState handles key events in the main list view using ViewState pattern.
+func (m *Model) handleListKeyWithState(state *ListViewState, key string) (ViewState, tea.Cmd, bool) {
 	if m.pushing {
-		if matchesKey(key, m.keybindings.Quit) {
-			return m, tea.Quit, true
+		if matchesKey(key, m.ui.Keybindings.Quit) {
+			return state, tea.Quit, true
 		}
 
-		return m, nil, true
+		return state, nil, true
 	}
 
-	return m.handleListKey(key)
+	if m.ui.List.FilterState() == list.Filtering {
+		// Allow the list's filter input to consume keys (including our shortcuts).
+		return state, nil, false
+	}
+
+	switch {
+	case matchesKey(key, m.ui.Keybindings.Quit):
+		return state, tea.Quit, true
+	case matchesKey(key, m.ui.Keybindings.Details):
+		return m.handleEnterWithState()
+	case matchesKey(key, m.ui.Keybindings.Search):
+		m.ui.List.SetFilterState(list.Filtering)
+		return state, nil, true
+	case matchesKey(key, m.ui.Keybindings.ToggleStale):
+		m.workspaces.ToggleStaleFilter()
+		m.applyFilters()
+
+		return state, nil, true
+	case matchesKey(key, m.ui.Keybindings.Push):
+		return m.handlePushConfirmWithState()
+	case matchesKey(key, m.ui.Keybindings.OpenEditor):
+		return m.handleOpenEditorWithState(state)
+	case matchesKey(key, m.ui.Keybindings.Close):
+		return m.handleCloseConfirmWithState()
+	}
+
+	return state, nil, false
 }
 
-// handleDetailKey handles key events in the detail view.
-func (m Model) handleDetailKey(key string) (Model, tea.Cmd, bool) {
+// handleDetailKeyWithState handles key events in the detail view using ViewState pattern.
+func (m *Model) handleDetailKeyWithState(state *DetailViewState, key string) (ViewState, tea.Cmd, bool) {
 	// Only cancel or quit keys exit detail view
-	if matchesKey(key, m.keybindings.Cancel) || matchesKey(key, m.keybindings.Quit) {
-		m.detailView = false
-		m.loadingDetail = false
+	if matchesKey(key, m.ui.Keybindings.Cancel) || matchesKey(key, m.ui.Keybindings.Quit) {
 		m.selectedWS = nil
 		m.wsStatus = nil
 		m.wsOrphans = nil
 
-		return m, nil, true
+		return &ListViewState{}, nil, true
 	}
 
-	return m, nil, false
+	return state, nil, false
 }
 
-// handleConfirmKey handles key events during confirmation dialogs.
-func (m Model) handleConfirmKey(key string) (Model, tea.Cmd, bool) {
-	if matchesKey(key, m.keybindings.Confirm) {
-		m.confirming = false
-
-		switch m.actionToConfirm {
+// handleConfirmKeyWithState handles key events during confirmation dialogs using ViewState pattern.
+func (m *Model) handleConfirmKeyWithState(state *ConfirmViewState, key string) (ViewState, tea.Cmd, bool) {
+	if matchesKey(key, m.ui.Keybindings.Confirm) {
+		switch state.Action {
 		case actionClose:
-			targetID := m.confirmingID
-			m.confirmingID = ""
-
-			if targetID != "" {
-				return m, m.closeWorkspace(targetID), true
+			if state.TargetID != "" {
+				return &ListViewState{}, m.closeWorkspace(state.TargetID), true
 			}
 		case actionPush:
-			targetID := m.confirmingID
-
-			m.confirmingID = ""
-			if targetID != "" {
+			if state.TargetID != "" {
 				m.pushing = true
-				m.pushTarget = targetID
+				m.pushTarget = state.TargetID
 				m.infoMessage = ""
 
-				return m, m.pushWorkspace(targetID), true
+				return &ListViewState{}, m.pushWorkspace(state.TargetID), true
 			}
 		}
 
-		return m, nil, true
+		return &ListViewState{}, nil, true
 	}
 
-	if matchesKey(key, m.keybindings.Cancel) {
-		m.confirming = false
-		m.actionToConfirm = ""
-		m.confirmingID = ""
-
-		return m, nil, true
+	if matchesKey(key, m.ui.Keybindings.Cancel) {
+		return &ListViewState{}, nil, true
 	}
 
-	return m, nil, true
+	return state, nil, true
 }
 
-// handleListKey handles key events in the main list view.
-func (m Model) handleListKey(key string) (Model, tea.Cmd, bool) {
-	if m.list.FilterState() == list.Filtering {
-		// Allow the list's filter input to consume keys (including our shortcuts).
-		return m, nil, false
-	}
-
-	switch {
-	case matchesKey(key, m.keybindings.Quit):
-		return m, tea.Quit, true
-	case matchesKey(key, m.keybindings.Details):
-		return m.handleEnter()
-	case matchesKey(key, m.keybindings.Search):
-		m.list.SetFilterState(list.Filtering)
-		return m, nil, true
-	case matchesKey(key, m.keybindings.ToggleStale):
-		m.filterStale = !m.filterStale
-		m.applyFilters()
-
-		return m, nil, true
-	case matchesKey(key, m.keybindings.Push):
-		return m.handlePushConfirm()
-	case matchesKey(key, m.keybindings.OpenEditor):
-		return m.handleOpenEditor()
-	case matchesKey(key, m.keybindings.Close):
-		return m.handleCloseConfirm()
-	}
-
-	return m, nil, false
-}
-
-// handleEnter handles the enter key to view workspace details.
-func (m Model) handleEnter() (Model, tea.Cmd, bool) {
+// handleEnterWithState handles the enter key to view workspace details.
+func (m *Model) handleEnterWithState() (ViewState, tea.Cmd, bool) {
 	selected, ok := m.selectedWorkspaceItem()
 	if !ok {
-		return m, nil, true
+		return &ListViewState{}, nil, true
 	}
 
 	if m.printPath {
 		path, err := m.svc.WorkspacePath(selected.Workspace.ID)
 		if err != nil {
 			m.err = err
-			return m, nil, true
+			return &ListViewState{}, nil, true
 		}
 
 		m.SelectedPath = path
 
-		return m, tea.Quit, true
+		return &ListViewState{}, tea.Quit, true
 	}
 
-	m.detailView = true
-	m.loadingDetail = true
+	detailState := &DetailViewState{Loading: true}
 
 	wsCopy := selected.Workspace
-	if cached, ok := m.statusCache[selected.Workspace.ID]; ok {
-		return m, func() tea.Msg {
+	if cached, ok := m.workspaces.GetCachedStatus(selected.Workspace.ID); ok {
+		return detailState, func() tea.Msg {
 			return workspaceDetailsMsg{workspace: &wsCopy, status: cached}
 		}, true
 	}
 
-	return m, m.loadWorkspaceDetails(selected.Workspace.ID), true
+	return detailState, m.loadWorkspaceDetails(selected.Workspace.ID), true
 }
 
-// handlePushConfirm initiates push confirmation.
-func (m Model) handlePushConfirm() (Model, tea.Cmd, bool) {
+// handlePushConfirmWithState initiates push confirmation using ViewState pattern.
+func (m *Model) handlePushConfirmWithState() (ViewState, tea.Cmd, bool) {
 	selected, ok := m.selectedWorkspaceItem()
 	if !ok {
-		return m, nil, true
+		return &ListViewState{}, nil, true
 	}
 
-	m.confirming = true
-	m.confirmingID = selected.Workspace.ID
-	m.actionToConfirm = actionPush
 	m.infoMessage = ""
 
-	return m, nil, true
+	return &ConfirmViewState{
+		Action:   actionPush,
+		TargetID: selected.Workspace.ID,
+	}, nil, true
 }
 
-// handleOpenEditor opens the selected workspace in an editor.
-func (m Model) handleOpenEditor() (Model, tea.Cmd, bool) {
+// handleOpenEditorWithState opens the selected workspace in an editor.
+func (m *Model) handleOpenEditorWithState(state *ListViewState) (ViewState, tea.Cmd, bool) {
 	selected, ok := m.selectedWorkspaceItem()
 	if !ok {
-		return m, nil, true
+		return state, nil, true
 	}
 
-	return m, m.openWorkspace(selected.Workspace.ID), true
+	return state, m.openWorkspace(selected.Workspace.ID), true
 }
 
-// handleCloseConfirm initiates close confirmation.
-func (m Model) handleCloseConfirm() (Model, tea.Cmd, bool) {
+// handleCloseConfirmWithState initiates close confirmation using ViewState pattern.
+func (m *Model) handleCloseConfirmWithState() (ViewState, tea.Cmd, bool) {
 	selected, ok := m.selectedWorkspaceItem()
 	if !ok {
-		return m, nil, true
+		return &ListViewState{}, nil, true
 	}
 
-	m.confirming = true
-	m.actionToConfirm = actionClose
-	m.confirmingID = selected.Workspace.ID
-
-	return m, nil, true
+	return &ConfirmViewState{
+		Action:   actionClose,
+		TargetID: selected.Workspace.ID,
+	}, nil, true
 }
