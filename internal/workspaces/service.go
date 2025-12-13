@@ -220,73 +220,121 @@ func (s *Service) WorkspacePath(workspaceID string) (string, error) {
 	return "", cerrors.NewWorkspaceNotFound(workspaceID)
 }
 
+// validateRenameInputs validates the inputs for renaming a workspace.
+func (s *Service) validateRenameInputs(newID string) error {
+	if newID == "" {
+		return cerrors.NewInvalidArgument("new-id", "cannot be empty")
+	}
+
+	return nil
+}
+
+// ensureNewIDAvailable checks that the new workspace ID doesn't already exist.
+func (s *Service) ensureNewIDAvailable(newID string) error {
+	_, _, err := s.wsEngine.LoadByID(newID)
+	if err == nil {
+		return cerrors.NewWorkspaceExists(newID)
+	}
+
+	return nil
+}
+
+// renameBranchesInRepos renames branches in all repos and returns the list of repos that were renamed.
+func (s *Service) renameBranchesInRepos(ctx context.Context, workspace domain.Workspace, dirName, oldID, newID string) error {
+	for _, repo := range workspace.Repos {
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+
+		if err := s.gitEngine.RenameBranch(ctx, worktreePath, oldID, newID); err != nil {
+			return cerrors.WrapGitError(err, fmt.Sprintf("rename branch in repo %s", repo.Name))
+		}
+	}
+
+	return nil
+}
+
+// rollbackBranchRenames attempts to rollback branch renames on failure.
+func (s *Service) rollbackBranchRenames(ctx context.Context, workspace domain.Workspace, dirName, oldID, newID string) {
+	for _, repo := range workspace.Repos {
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		_ = s.gitEngine.RenameBranch(ctx, worktreePath, newID, oldID) // best effort rollback
+	}
+}
+
+// updateBranchMetadata loads the workspace and updates the branch name metadata.
+func (s *Service) updateBranchMetadata(dirName, newID string) error {
+	ws, err := s.wsEngine.Load(dirName)
+	if err != nil {
+		return cerrors.NewWorkspaceMetadataError(newID, "load", err)
+	}
+
+	ws.BranchName = newID
+	if err := s.wsEngine.Save(dirName, *ws); err != nil {
+		return cerrors.NewWorkspaceMetadataError(newID, "save", err)
+	}
+
+	return nil
+}
+
+// RenameWorkspace renames a workspace to a new ID.
+// If renameBranch is true and the branch name matches the old ID, it will also rename branches.
+// renameWorkspaceDir renames the workspace directory and handles rollback on failure.
+func (s *Service) renameWorkspaceDir(ctx context.Context, workspace domain.Workspace, oldDirName, newDirName, oldID, newID string, shouldRenameBranch bool) error {
+	if err := s.wsEngine.Rename(oldDirName, newDirName, newID); err != nil {
+		if shouldRenameBranch {
+			s.rollbackBranchRenames(ctx, workspace, oldDirName, oldID, newID)
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+// invalidateWorkspaceCache invalidates cache entries for the given workspace IDs.
+func (s *Service) invalidateWorkspaceCache(ids ...string) {
+	if s.cache != nil {
+		for _, id := range ids {
+			s.cache.Invalidate(id)
+		}
+	}
+}
+
 // RenameWorkspace renames a workspace to a new ID.
 // If renameBranch is true and the branch name matches the old ID, it will also rename branches.
 func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, renameBranch bool) error {
-	// Check if old workspace exists
 	workspace, oldDirName, err := s.findWorkspace(oldID)
 	if err != nil {
 		return err
 	}
 
-	// Validate newID is not empty
-	if newID == "" {
-		return cerrors.NewInvalidArgument("new-id", "cannot be empty")
-	}
-
-	// Check if new workspace already exists
-	_, _, err = s.wsEngine.LoadByID(newID)
-	if err == nil {
-		return cerrors.NewWorkspaceExists(newID)
-	}
-
-	// Determine if we should rename branches
-	shouldRenameBranch := renameBranch && workspace.BranchName == oldID
-
-	// Rename branches in all repos first (if requested)
-	if shouldRenameBranch {
-		for _, repo := range workspace.Repos {
-			worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), oldDirName, repo.Name)
-
-			if err := s.gitEngine.RenameBranch(ctx, worktreePath, oldID, newID); err != nil {
-				return cerrors.WrapGitError(err, fmt.Sprintf("rename branch in repo %s", repo.Name))
-			}
-		}
-	}
-
-	// Rename the workspace directory
-	newDirName := newID // Use new ID as directory name
-	if err := s.wsEngine.Rename(oldDirName, newDirName, newID); err != nil {
-		// Attempt to rollback branch renames on failure
-		// Use oldDirName since the directory rename failed and repos are still in the old location
-		if shouldRenameBranch {
-			for _, repo := range workspace.Repos {
-				worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), oldDirName, repo.Name)
-				_ = s.gitEngine.RenameBranch(ctx, worktreePath, newID, oldID) // best effort rollback
-			}
-		}
-
+	if err := s.validateRenameInputs(newID); err != nil {
 		return err
 	}
 
-	// Update branch name in metadata if renamed
+	if err := s.ensureNewIDAvailable(newID); err != nil {
+		return err
+	}
+
+	shouldRenameBranch := renameBranch && workspace.BranchName == oldID
+	newDirName := newID
+
 	if shouldRenameBranch {
-		ws, err := s.wsEngine.Load(newDirName)
-		if err != nil {
-			return cerrors.NewWorkspaceMetadataError(newID, "load", err)
-		}
-
-		ws.BranchName = newID
-		if err := s.wsEngine.Save(newDirName, *ws); err != nil {
-			return cerrors.NewWorkspaceMetadataError(newID, "save", err)
+		if err := s.renameBranchesInRepos(ctx, *workspace, oldDirName, oldID, newID); err != nil {
+			return err
 		}
 	}
 
-	// Invalidate cache for both old and new IDs
-	if s.cache != nil {
-		s.cache.Invalidate(oldID)
-		s.cache.Invalidate(newID)
+	if err := s.renameWorkspaceDir(ctx, *workspace, oldDirName, newDirName, oldID, newID, shouldRenameBranch); err != nil {
+		return err
 	}
+
+	if shouldRenameBranch {
+		if err := s.updateBranchMetadata(newDirName, newID); err != nil {
+			return err
+		}
+	}
+
+	s.invalidateWorkspaceCache(oldID, newID)
 
 	return nil
 }

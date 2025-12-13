@@ -144,6 +144,12 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			oldID := args[0]
 			newID := args[1]
+
+			// Fast-fail if IDs are the same
+			if oldID == newID {
+				return fmt.Errorf("old and new workspace IDs are the same")
+			}
+
 			renameBranch, _ := cmd.Flags().GetBool("rename-branch")
 
 			app, err := getApp(cmd)

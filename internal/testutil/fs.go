@@ -20,7 +20,7 @@ func MustMkdir(t *testing.T, path string) {
 func MustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // test helper
 		t.Fatalf("failed to write file %s: %v", path, err)
 	}
 }
@@ -30,7 +30,7 @@ func MustWriteFile(t *testing.T, path, content string) {
 func MustReadFile(t *testing.T, path string) string {
 	t.Helper()
 
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(path) //nolint:gosec // test helper
 	if err != nil {
 		t.Fatalf("failed to read file %s: %v", path, err)
 	}
@@ -59,7 +59,7 @@ func MustTempDir(t *testing.T, pattern string) string {
 	}
 
 	t.Cleanup(func() {
-		os.RemoveAll(dir) //nolint:errcheck // cleanup best effort
+		os.RemoveAll(dir) //nolint:errcheck,gosec // cleanup best effort
 	})
 
 	return dir

@@ -61,8 +61,7 @@ func init() {
 	versionCmd.Flags().Bool("json", false, "Output version information as JSON")
 }
 
-// printVersion prints a short version string and returns true if the version flag was set.
-func printVersion() bool {
+// printVersion prints a short version string.
+func printVersion() {
 	fmt.Printf("canopy version %s\n", version) //nolint:forbidigo // version output
-	return true
 }

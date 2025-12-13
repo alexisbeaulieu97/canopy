@@ -33,12 +33,14 @@ all: build
 
 # Build binary with version information
 build:
+	@mkdir -p $(BUILD_DIR)
 	@echo "Building $(BINARY)..."
 	$(GOBUILD) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY) $(CMD_PATH)
 	@echo "Built $(BUILD_DIR)/$(BINARY) ($(VERSION))"
 
 # Build release binary with optimizations
 build-release:
+	@mkdir -p $(BUILD_DIR)
 	@echo "Building release $(BINARY)..."
 	CGO_ENABLED=0 $(GOBUILD) -ldflags "$(LDFLAGS) -s -w" -trimpath -o $(BUILD_DIR)/$(BINARY) $(CMD_PATH)
 	@echo "Built $(BUILD_DIR)/$(BINARY) ($(VERSION))"

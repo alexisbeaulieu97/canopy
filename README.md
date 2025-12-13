@@ -148,7 +148,7 @@ See [Configuration](docs/configuration.md#tui-keybindings) to customize keybindi
 
 **Version output example:**
 
-```
+```text
 canopy version v1.0.0
 commit: abc1234
 built: 2025-01-15T10:30:00Z

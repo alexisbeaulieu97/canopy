@@ -1,7 +1,7 @@
 # Change: Split Service Layer into Focused Sub-Services
 
 ## Why
-The `internal/workspaces/service.go` file is 1211 lines with 45 methods, making it difficult to understand, test, and maintain. It violates the Single Responsibility Principle by handling workspace lifecycle, repo management, git operations, orphan detection, export/import, hooks, and configuration access all in one struct. Breaking it into focused sub-services will improve maintainability and testability.
+The `internal/workspaces/service.go` file is 1211 lines with 45 methods, violating Single Responsibility Principle. Breaking it into focused sub-services will improve maintainability and testability.
 
 ## What Changes
 - Extract `WorkspaceGitService` for git command coordination (Push, RunGit, Switch)

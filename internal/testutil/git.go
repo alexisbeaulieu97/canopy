@@ -23,7 +23,7 @@ func CreateRepoWithCommit(t *testing.T, path string) {
 	RunGit(t, path, "config", "credential.helper", "")
 
 	filePath := filepath.Join(path, "README.md")
-	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil { //nolint:gosec // test helper
 		t.Fatalf("failed to write file: %v", err)
 	}
 

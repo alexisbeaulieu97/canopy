@@ -8,8 +8,8 @@ The current specs structure has redundant specifications:
 This creates maintenance burden and confusion about which spec is authoritative.
 
 ## What Changes
-- Merge `tui-interface` spec into `tui` spec
-- Remove `tui-interface` directory after merge
+- BREAKING: Merge `tui-interface` spec into `tui` spec
+- BREAKING: Remove `tui-interface` directory after merge
 - Add clear distinction between `core` (business rules) and `core-architecture` (patterns)
 - Update spec purpose sections to clarify scope
 

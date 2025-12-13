@@ -1,7 +1,7 @@
 # Change: Add Comprehensive Documentation
 
 ## Why
-Documentation is incomplete for a v1.0 release. Users need clear guides, API documentation, and error code references to effectively use Canopy. Developers need architecture documentation and contributing guides.
+Documentation is incomplete for v1.0 release. Users and developers need clear guides, API documentation, and error code references.
 
 ## What Changes
 - Add godoc comments to all exported functions in key packages
