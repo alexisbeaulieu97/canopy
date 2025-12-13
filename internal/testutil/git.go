@@ -34,14 +34,15 @@ func CreateRepoWithCommit(t *testing.T, path string) {
 // RunGit executes a git command in the specified directory.
 // It fails the test immediately if the command fails.
 //
-// The function sets GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM to /dev/null
+// The function sets GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM to os.DevNull
 // to ensure consistent behavior regardless of user git configuration.
 func RunGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 
 	cmd := exec.Command("git", args...) //nolint:gosec // test helper
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_SYSTEM="+os.DevNull)
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v failed: %s (%v)", args, strings.TrimSpace(string(output)), err)
@@ -57,7 +58,8 @@ func RunGitOutput(t *testing.T, dir string, args ...string) string {
 
 	cmd := exec.Command("git", args...) //nolint:gosec // test helper
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_SYSTEM="+os.DevNull)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -74,4 +76,3 @@ func CloneToBare(t *testing.T, sourceRepo, destPath string) {
 
 	RunGit(t, filepath.Dir(destPath), "clone", "--bare", sourceRepo, destPath)
 }
-

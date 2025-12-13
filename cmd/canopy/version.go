@@ -47,10 +47,10 @@ var versionCmd = &cobra.Command{
 			return nil
 		}
 
-		fmt.Printf("canopy version %s\n", info.Version)   //nolint:forbidigo // version output
-		fmt.Printf("commit: %s\n", info.Commit)           //nolint:forbidigo // version output
-		fmt.Printf("built: %s\n", info.BuildDate)         //nolint:forbidigo // version output
-		fmt.Printf("go: %s\n", info.GoVersion)            //nolint:forbidigo // version output
+		fmt.Printf("canopy version %s\n", info.Version) //nolint:forbidigo // version output
+		fmt.Printf("commit: %s\n", info.Commit)         //nolint:forbidigo // version output
+		fmt.Printf("built: %s\n", info.BuildDate)       //nolint:forbidigo // version output
+		fmt.Printf("go: %s\n", info.GoVersion)          //nolint:forbidigo // version output
 
 		return nil
 	},
@@ -66,4 +66,3 @@ func printVersion() bool {
 	fmt.Printf("canopy version %s\n", version) //nolint:forbidigo // version output
 	return true
 }
-

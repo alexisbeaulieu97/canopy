@@ -146,6 +146,7 @@ func (m *MockWorkspaceStorage) Rename(oldDirName, newDirName, newID string) erro
 	}
 
 	delete(m.Workspaces, oldDirName)
+
 	ws.ID = newID
 	m.Workspaces[newDirName] = ws
 

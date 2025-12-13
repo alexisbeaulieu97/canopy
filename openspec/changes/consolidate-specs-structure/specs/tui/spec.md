@@ -14,3 +14,8 @@ The TUI specification SHALL serve as the single source of truth for all TUI func
 **Reason**: Consolidated into `tui/spec.md` to eliminate duplication.
 **Migration**: All requirements from `tui-interface` have been merged into the main `tui` spec.
 
+#### Scenario: Spec consolidation complete
+- **WHEN** the consolidation change is archived
+- **THEN** the `tui-interface/spec.md` file SHALL be deleted
+- **AND** all its requirements SHALL exist in `tui/spec.md`
+

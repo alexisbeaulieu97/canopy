@@ -24,7 +24,7 @@ BUILD_DIR := ./build
 # Source paths
 CMD_PATH := ./cmd/canopy
 
-.PHONY: all build build-release clean test test-race lint vet install help
+.PHONY: all build build-release clean test test-race test-short lint vet check install deps version help
 
 # Default target
 all: build
@@ -46,8 +46,8 @@ build-release:
 # Install to GOPATH/bin
 install:
 	@echo "Installing $(BINARY)..."
-	$(GOBUILD) -ldflags "$(LDFLAGS)" -o $(GOPATH)/bin/$(BINARY) $(CMD_PATH)
-	@echo "Installed to $(GOPATH)/bin/$(BINARY)"
+	$(GOBUILD) -ldflags "$(LDFLAGS)" -o $(shell go env GOPATH)/bin/$(BINARY) $(CMD_PATH)
+	@echo "Installed to $(shell go env GOPATH)/bin/$(BINARY)"
 
 ## Test targets
 

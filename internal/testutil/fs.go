@@ -64,4 +64,3 @@ func MustTempDir(t *testing.T, pattern string) string {
 
 	return dir
 }
-

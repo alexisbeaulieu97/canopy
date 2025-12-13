@@ -27,4 +27,3 @@
 // attribution. Functions prefixed with "Must" will fail the test immediately
 // on error using t.Fatalf().
 package testutil
-

@@ -258,12 +258,14 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 	newDirName := newID // Use new ID as directory name
 	if err := s.wsEngine.Rename(oldDirName, newDirName, newID); err != nil {
 		// Attempt to rollback branch renames on failure
+		// Use oldDirName since the directory rename failed and repos are still in the old location
 		if shouldRenameBranch {
 			for _, repo := range workspace.Repos {
-				worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), newDirName, repo.Name)
+				worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), oldDirName, repo.Name)
 				_ = s.gitEngine.RenameBranch(ctx, worktreePath, newID, oldID) // best effort rollback
 			}
 		}
+
 		return err
 	}
 
@@ -273,6 +275,7 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 		if err != nil {
 			return cerrors.NewWorkspaceMetadataError(newID, "load", err)
 		}
+
 		ws.BranchName = newID
 		if err := s.wsEngine.Save(newDirName, *ws); err != nil {
 			return cerrors.NewWorkspaceMetadataError(newID, "save", err)
@@ -818,9 +821,17 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 			// Check if context is cancelled before acquiring semaphore
 			select {
 			case <-cancelCtx.Done():
+				ctxErr := cerrors.NewContextError(cancelCtx, "git command", r.Name)
 				results[idx] = RepoGitResult{
 					RepoName: r.Name,
-					Error:    cerrors.NewContextError(cancelCtx, "git command", r.Name),
+					Error:    ctxErr,
+				}
+
+				// Propagate cancellation error to caller if not continuing on error
+				if !continueOnError {
+					firstErrOnce.Do(func() {
+						firstErr = ctxErr
+					})
 				}
 
 				return
@@ -844,6 +855,7 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 				if !continueOnError {
 					firstErrOnce.Do(func() {
 						firstErr = err
+
 						cancel()
 					})
 				}
@@ -860,6 +872,7 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 			if result.ExitCode != 0 && !continueOnError {
 				firstErrOnce.Do(func() {
 					firstErr = cerrors.NewCommandFailed(fmt.Sprintf("git in repo %s", r.Name), fmt.Errorf("exit code %d", result.ExitCode))
+
 					cancel()
 				})
 			}

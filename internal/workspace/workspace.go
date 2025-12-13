@@ -332,6 +332,7 @@ func (e *Engine) Rename(oldDirName, newDirName, newID string) error {
 		if os.IsNotExist(err) {
 			return cerrors.NewWorkspaceNotFound(oldDirName)
 		}
+
 		return fmt.Errorf("failed to stat old workspace: %w", err)
 	}
 

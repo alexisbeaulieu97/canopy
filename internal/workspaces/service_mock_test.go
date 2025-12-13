@@ -3,6 +3,7 @@ package workspaces
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -341,6 +342,7 @@ func TestRunGitInWorkspace(t *testing.T) {
 		mockConfig.WorkspacesRoot = "/workspaces"
 
 		var completedCount int32
+
 		mockGit := mocks.NewMockGitOperations()
 		mockGit.RunCommandFunc = func(ctx context.Context, _ string, _ ...string) (*ports.CommandResult, error) {
 			// Check if context was cancelled (from another goroutine's error)
@@ -348,9 +350,10 @@ func TestRunGitInWorkspace(t *testing.T) {
 				return nil, ctx.Err()
 			}
 
-			completedCount++
+			// Use atomic to avoid race condition in concurrent goroutines
+			count := atomic.AddInt32(&completedCount, 1)
 			// Return error for first call
-			if completedCount == 1 {
+			if count == 1 {
 				return nil, errors.New("git error")
 			}
 
@@ -366,7 +369,6 @@ func TestRunGitInWorkspace(t *testing.T) {
 			Parallel:        true,
 			ContinueOnError: false,
 		})
-
 		if err == nil {
 			t.Fatal("expected error in parallel execution")
 		}
@@ -408,7 +410,6 @@ func TestRunGitInWorkspace(t *testing.T) {
 			Parallel:        true,
 			ContinueOnError: true,
 		})
-
 		// Should not return error with ContinueOnError
 		if err != nil {
 			t.Fatalf("unexpected error with ContinueOnError: %v", err)
@@ -466,7 +467,6 @@ func TestRunGitInWorkspace(t *testing.T) {
 			Parallel:        true,
 			ContinueOnError: false,
 		})
-
 		if err == nil {
 			t.Fatal("expected error on non-zero exit code")
 		}
