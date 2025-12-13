@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -57,6 +58,50 @@ type TUIConfig struct {
 	Keybindings Keybindings `mapstructure:"keybindings"`
 }
 
+// RetryConfig holds retry configuration for network operations.
+type RetryConfig struct {
+	MaxAttempts  int     `mapstructure:"max_attempts"`
+	InitialDelay string  `mapstructure:"initial_delay"` // Duration string, e.g. "1s"
+	MaxDelay     string  `mapstructure:"max_delay"`     // Duration string, e.g. "30s"
+	Multiplier   float64 `mapstructure:"multiplier"`
+	JitterFactor float64 `mapstructure:"jitter_factor"`
+}
+
+// ParsedRetryConfig holds the parsed retry configuration with proper Go types.
+type ParsedRetryConfig struct {
+	MaxAttempts  int
+	InitialDelay time.Duration
+	MaxDelay     time.Duration
+	Multiplier   float64
+	JitterFactor float64
+}
+
+// Parse converts the string-based RetryConfig to ParsedRetryConfig with proper duration types.
+func (r RetryConfig) Parse() (ParsedRetryConfig, error) {
+	initialDelay, err := time.ParseDuration(r.InitialDelay)
+	if err != nil {
+		return ParsedRetryConfig{}, fmt.Errorf("invalid initial_delay %q: %w", r.InitialDelay, err)
+	}
+
+	maxDelay, err := time.ParseDuration(r.MaxDelay)
+	if err != nil {
+		return ParsedRetryConfig{}, fmt.Errorf("invalid max_delay %q: %w", r.MaxDelay, err)
+	}
+
+	return ParsedRetryConfig{
+		MaxAttempts:  r.MaxAttempts,
+		InitialDelay: initialDelay,
+		MaxDelay:     maxDelay,
+		Multiplier:   r.Multiplier,
+		JitterFactor: r.JitterFactor,
+	}, nil
+}
+
+// GitConfig holds git-related configuration.
+type GitConfig struct {
+	Retry RetryConfig `mapstructure:"retry"`
+}
+
 // Config holds the global configuration
 type Config struct {
 	ProjectsRoot       string        `mapstructure:"projects_root"`
@@ -68,6 +113,7 @@ type Config struct {
 	Defaults           Defaults      `mapstructure:"defaults"`
 	Hooks              Hooks         `mapstructure:"hooks"`
 	TUI                TUIConfig     `mapstructure:"tui"`
+	Git                GitConfig     `mapstructure:"git"`
 	Registry           *RepoRegistry `mapstructure:"-"`
 }
 
@@ -101,6 +147,13 @@ func Load() (*Config, error) {
 	viper.SetDefault("workspace_close_default", "delete")
 	viper.SetDefault("workspace_naming", "{{.ID}}")
 	viper.SetDefault("stale_threshold_days", 14)
+
+	// Git retry defaults
+	viper.SetDefault("git.retry.max_attempts", 3)
+	viper.SetDefault("git.retry.initial_delay", "1s")
+	viper.SetDefault("git.retry.max_delay", "30s")
+	viper.SetDefault("git.retry.multiplier", 2.0)
+	viper.SetDefault("git.retry.jitter_factor", 0.25)
 
 	viper.SetEnvPrefix("CANOPY")
 	viper.AutomaticEnv()
@@ -193,6 +246,10 @@ func (c *Config) ValidateValues() error {
 		return err
 	}
 
+	if err := c.validateGitRetry(); err != nil {
+		return err
+	}
+
 	return c.validateKeybindings()
 }
 
@@ -244,6 +301,33 @@ func (c *Config) validatePatterns() error {
 func (c *Config) validateStaleThreshold() error {
 	if c.StaleThresholdDays < 0 {
 		return fmt.Errorf("stale_threshold_days must be zero or positive, got %d", c.StaleThresholdDays)
+	}
+
+	return nil
+}
+
+// validateGitRetry validates the git retry configuration.
+func (c *Config) validateGitRetry() error {
+	retry := c.Git.Retry
+
+	if retry.MaxAttempts < 1 {
+		return fmt.Errorf("git.retry.max_attempts must be at least 1, got %d", retry.MaxAttempts)
+	}
+
+	if _, err := time.ParseDuration(retry.InitialDelay); err != nil {
+		return fmt.Errorf("git.retry.initial_delay is invalid: %w", err)
+	}
+
+	if _, err := time.ParseDuration(retry.MaxDelay); err != nil {
+		return fmt.Errorf("git.retry.max_delay is invalid: %w", err)
+	}
+
+	if retry.Multiplier < 1.0 {
+		return fmt.Errorf("git.retry.multiplier must be at least 1.0, got %f", retry.Multiplier)
+	}
+
+	if retry.JitterFactor < 0 || retry.JitterFactor > 1 {
+		return fmt.Errorf("git.retry.jitter_factor must be between 0 and 1, got %f", retry.JitterFactor)
 	}
 
 	return nil
