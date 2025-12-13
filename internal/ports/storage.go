@@ -27,6 +27,11 @@ type WorkspaceStorage interface {
 	// Load reads the metadata for a specific workspace.
 	Load(dirName string) (*domain.Workspace, error)
 
+	// LoadByID looks up a workspace by its ID and returns the workspace metadata
+	// and directory name. It attempts direct path access first (assuming ID == dirName),
+	// then falls back to scanning all workspaces if the direct lookup fails.
+	LoadByID(id string) (*domain.Workspace, string, error)
+
 	// Delete removes a workspace.
 	Delete(workspaceID string) error
 

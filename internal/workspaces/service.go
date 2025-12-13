@@ -30,6 +30,9 @@ type Service struct {
 	resolver  *RepoResolver
 	diskUsage *DiskUsageCalculator
 	canonical *CanonicalRepoService
+
+	// cache provides in-memory caching of workspace metadata
+	cache *WorkspaceCache
 }
 
 // ErrNoReposConfigured indicates no repos were specified and none matched configuration.
@@ -58,6 +61,7 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 		resolver:     NewRepoResolver(cfg.GetRegistry()),
 		diskUsage:    diskUsage,
 		canonical:    NewCanonicalRepoService(gitEngine, wsEngine, cfg.GetProjectsRoot(), logger, diskUsage),
+		cache:        NewWorkspaceCache(DefaultCacheTTL),
 	}
 }
 
@@ -118,6 +122,9 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 	if err := s.wsEngine.Create(dirName, id, branchName, repos); err != nil {
 		return "", err
 	}
+
+	// Invalidate cache for this workspace ID
+	s.cache.Invalidate(id)
 
 	// Manual cleanup helper
 	cleanup := func() {
@@ -265,6 +272,9 @@ func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName 
 		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
 
+	// Invalidate cache after metadata update
+	s.cache.Invalidate(workspaceID)
+
 	return nil
 }
 
@@ -300,6 +310,9 @@ func (s *Service) RemoveRepoFromWorkspace(_ context.Context, workspaceID, repoNa
 	if err := s.wsEngine.Save(dirName, *workspace); err != nil {
 		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
+
+	// Invalidate cache after metadata update
+	s.cache.Invalidate(workspaceID)
 
 	return nil
 }
@@ -352,7 +365,14 @@ func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts
 	}
 
 	// Delete workspace
-	return s.wsEngine.Delete(dirName)
+	if err := s.wsEngine.Delete(dirName); err != nil {
+		return err
+	}
+
+	// Invalidate cache after workspace deletion
+	s.cache.Invalidate(workspaceID)
+
+	return nil
 }
 
 // CloseWorkspaceKeepMetadata moves workspace metadata to the closed store and removes the active worktree.
@@ -405,6 +425,9 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, forc
 		_ = s.wsEngine.DeleteClosed(archived.Path)
 		return nil, cerrors.NewIOFailed("remove workspace directory", err)
 	}
+
+	// Invalidate cache after workspace deletion
+	s.cache.Invalidate(workspaceID)
 
 	return archived, nil
 }
@@ -794,6 +817,9 @@ func (s *Service) SwitchBranch(_ context.Context, workspaceID, branchName string
 		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
 
+	// Invalidate cache after metadata update
+	s.cache.Invalidate(workspaceID)
+
 	return nil
 }
 
@@ -977,18 +1003,21 @@ func (s *Service) DetectOrphansForWorkspace(workspaceID string) ([]domain.Orphan
 }
 
 func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, error) {
-	workspaces, err := s.wsEngine.List()
+	// Check cache first
+	if ws, dirName, ok := s.cache.Get(workspaceID); ok {
+		return ws, dirName, nil
+	}
+
+	// Cache miss: use direct lookup via LoadByID
+	ws, dirName, err := s.wsEngine.LoadByID(workspaceID)
 	if err != nil {
-		return nil, "", cerrors.NewIOFailed("list workspaces", err)
+		return nil, "", err
 	}
 
-	for dir, w := range workspaces {
-		if w.ID == workspaceID {
-			return &w, dir, nil
-		}
-	}
+	// Populate cache with the result
+	s.cache.Set(workspaceID, ws, dirName)
 
-	return nil, "", cerrors.NewWorkspaceNotFound(workspaceID)
+	return ws, dirName, nil
 }
 
 func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, action string) error {
