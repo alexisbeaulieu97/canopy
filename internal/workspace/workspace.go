@@ -272,6 +272,34 @@ func (e *Engine) Load(dirName string) (*domain.Workspace, error) {
 	return &w, nil
 }
 
+// LoadByID looks up a workspace by its ID and returns the workspace metadata
+// and directory name. It attempts direct path access first (assuming ID == dirName),
+// then falls back to scanning all workspaces if the direct lookup fails.
+func (e *Engine) LoadByID(id string) (*domain.Workspace, string, error) {
+	// First, try direct path access assuming ID == dirName
+	safeID, err := sanitizeDirName(id)
+	if err == nil {
+		ws, err := e.Load(safeID)
+		if err == nil && ws.ID == id {
+			return ws, safeID, nil
+		}
+	}
+
+	// Fallback: scan all workspaces to find the one with matching ID
+	workspaces, err := e.List()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to list workspaces: %w", err)
+	}
+
+	for dirName, ws := range workspaces {
+		if ws.ID == id {
+			return &ws, dirName, nil
+		}
+	}
+
+	return nil, "", cerrors.NewWorkspaceNotFound(id)
+}
+
 // Delete removes a workspace.
 func (e *Engine) Delete(workspaceID string) error {
 	safeDir, err := sanitizeDirName(workspaceID)

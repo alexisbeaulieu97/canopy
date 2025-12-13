@@ -20,6 +20,7 @@ type MockWorkspaceStorage struct {
 	ListFunc         func() (map[string]domain.Workspace, error)
 	ListClosedFunc   func() ([]domain.ClosedWorkspace, error)
 	LoadFunc         func(dirName string) (*domain.Workspace, error)
+	LoadByIDFunc     func(id string) (*domain.Workspace, string, error)
 	DeleteFunc       func(workspaceID string) error
 	LatestClosedFunc func(workspaceID string) (*domain.ClosedWorkspace, error)
 	DeleteClosedFunc func(path string) error
@@ -103,6 +104,22 @@ func (m *MockWorkspaceStorage) Load(dirName string) (*domain.Workspace, error) {
 	}
 
 	return nil, fmt.Errorf("failed to open workspace metadata: workspace %s not found", dirName)
+}
+
+// LoadByID calls the mock function if set, otherwise searches Workspaces by ID.
+func (m *MockWorkspaceStorage) LoadByID(id string) (*domain.Workspace, string, error) {
+	if m.LoadByIDFunc != nil {
+		return m.LoadByIDFunc(id)
+	}
+
+	// Default implementation: search workspaces by ID
+	for dirName, ws := range m.Workspaces {
+		if ws.ID == id {
+			return &ws, dirName, nil
+		}
+	}
+
+	return nil, "", fmt.Errorf("workspace %s not found", id)
 }
 
 // Delete calls the mock function if set, otherwise removes from Workspaces.
