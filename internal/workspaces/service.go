@@ -127,6 +127,10 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 	// Default branch name is the workspace ID
 	if branchName == "" {
 		branchName = id
+		// Validate the derived branch name (workspace IDs may contain chars invalid for git refs)
+		if err := validation.ValidateBranchName(branchName); err != nil {
+			return "", cerrors.NewInvalidArgument("workspace-id", "cannot be used as default branch name: "+err.Error())
+		}
 	}
 
 	if err := s.wsEngine.Create(dirName, id, branchName, repos); err != nil {

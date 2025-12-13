@@ -24,25 +24,25 @@ const (
 
 // Git ref reserved names that cannot be used as branch names.
 var gitReservedNames = map[string]bool{
-	"HEAD":   true,
-	"head":   true,
-	"FETCH_HEAD": true,
-	"ORIG_HEAD":  true,
-	"MERGE_HEAD": true,
+	"HEAD":             true,
+	"head":             true,
+	"FETCH_HEAD":       true,
+	"ORIG_HEAD":        true,
+	"MERGE_HEAD":       true,
 	"CHERRY_PICK_HEAD": true,
 }
 
 // gitRefInvalidPatterns contains patterns that are invalid in git ref names.
 // Based on git-check-ref-format rules.
 var gitRefInvalidPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`\.\.`),           // double dots
-	regexp.MustCompile(`^\.`),            // starts with dot
-	regexp.MustCompile(`\.$`),            // ends with dot
-	regexp.MustCompile(`\.lock$`),        // ends with .lock
-	regexp.MustCompile(`@\{`),            // @{ sequence
+	regexp.MustCompile(`\.\.`),            // double dots
+	regexp.MustCompile(`^\.`),             // starts with dot
+	regexp.MustCompile(`\.$`),             // ends with dot
+	regexp.MustCompile(`\.lock$`),         // ends with .lock
+	regexp.MustCompile(`@\{`),             // @{ sequence
 	regexp.MustCompile(`[\x00-\x1f\x7f]`), // control characters
-	regexp.MustCompile(`[~^:?*\[\\]`),    // special characters
-	regexp.MustCompile(`\s`),             // whitespace
+	regexp.MustCompile(`[~^:?*\[\\]`),     // special characters
+	regexp.MustCompile(`\s`),              // whitespace
 }
 
 // ValidateWorkspaceID validates a workspace ID string.
@@ -127,6 +127,11 @@ func ValidateRepoName(name string) error {
 	// Check for empty
 	if name == "" {
 		return cerrors.NewInvalidArgument("repo-name", "cannot be empty")
+	}
+
+	// Check for leading/trailing whitespace
+	if strings.TrimSpace(name) != name {
+		return cerrors.NewInvalidArgument("repo-name", "cannot have leading or trailing whitespace")
 	}
 
 	// Check length

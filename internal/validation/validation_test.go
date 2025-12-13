@@ -153,6 +153,8 @@ func TestValidateRepoName(t *testing.T) {
 
 		// Invalid cases
 		{name: "empty", repoName: "", wantErr: true, errCode: cerrors.ErrInvalidArgument},
+		{name: "leading whitespace", repoName: " repo", wantErr: true, errCode: cerrors.ErrInvalidArgument},
+		{name: "trailing whitespace", repoName: "repo ", wantErr: true, errCode: cerrors.ErrInvalidArgument},
 		{name: "exceeds max length", repoName: strings.Repeat("a", 256), wantErr: true, errCode: cerrors.ErrInvalidArgument},
 		{name: "contains forward slash", repoName: "my/repo", wantErr: true, errCode: cerrors.ErrInvalidArgument},
 		{name: "contains backslash", repoName: "my\\repo", wantErr: true, errCode: cerrors.ErrInvalidArgument},
@@ -260,15 +262,19 @@ func FuzzValidateWorkspaceID(f *testing.F) {
 			if id == "" {
 				t.Error("empty ID should be invalid")
 			}
+
 			if strings.Contains(id, "/") || strings.Contains(id, "\\") {
 				t.Error("ID with path separators should be invalid")
 			}
+
 			if strings.Contains(id, "..") {
 				t.Error("ID with .. should be invalid")
 			}
+
 			if len(id) > 255 {
 				t.Error("ID exceeding 255 chars should be invalid")
 			}
+
 			if strings.TrimSpace(id) != id {
 				t.Error("ID with leading/trailing whitespace should be invalid")
 			}
@@ -288,7 +294,7 @@ func FuzzValidateBranchName(f *testing.F) {
 	f.Add("branch\x00name")
 	f.Add(strings.Repeat("a", 300))
 
-	f.Fuzz(func(t *testing.T, name string) {
+	f.Fuzz(func(_ *testing.T, name string) {
 		// Should never panic
 		_ = validation.ValidateBranchName(name)
 	})
@@ -302,6 +308,8 @@ func FuzzValidateRepoName(f *testing.F) {
 	f.Add("repo\x00name")
 	f.Add(strings.Repeat("a", 300))
 	f.Add("with/slash")
+	f.Add(" leading")
+	f.Add("trailing ")
 
 	f.Fuzz(func(t *testing.T, name string) {
 		// Should never panic
@@ -312,12 +320,19 @@ func FuzzValidateRepoName(f *testing.F) {
 			if name == "" {
 				t.Error("empty repo name should be invalid")
 			}
+
+			if strings.TrimSpace(name) != name {
+				t.Error("repo name with leading/trailing whitespace should be invalid")
+			}
+
 			if strings.Contains(name, "/") || strings.Contains(name, "\\") {
 				t.Error("repo name with path separators should be invalid")
 			}
+
 			if strings.Contains(name, "..") {
 				t.Error("repo name with .. should be invalid")
 			}
+
 			if len(name) > 255 {
 				t.Error("repo name exceeding 255 chars should be invalid")
 			}
@@ -344,9 +359,11 @@ func FuzzValidatePath(f *testing.F) {
 			if path == "" {
 				t.Error("empty path should be invalid")
 			}
+
 			if strings.HasPrefix(path, "/") || strings.HasPrefix(path, "\\") {
 				t.Error("absolute path should be invalid")
 			}
+
 			if strings.Contains(path, "..") {
 				t.Error("path with .. should be invalid")
 			}
