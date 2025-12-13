@@ -58,8 +58,9 @@ type TUIConfig struct {
 	Keybindings Keybindings `mapstructure:"keybindings"`
 }
 
-// RetryConfig holds retry configuration for network operations.
-type RetryConfig struct {
+// GitRetrySettings holds YAML configuration for git network operation retry behavior.
+// This is the config-file representation; use ParsedRetryConfig for runtime use.
+type GitRetrySettings struct {
 	MaxAttempts  int     `mapstructure:"max_attempts"`
 	InitialDelay string  `mapstructure:"initial_delay"` // Duration string, e.g. "1s"
 	MaxDelay     string  `mapstructure:"max_delay"`     // Duration string, e.g. "30s"
@@ -76,8 +77,8 @@ type ParsedRetryConfig struct {
 	JitterFactor float64
 }
 
-// Parse converts the string-based RetryConfig to ParsedRetryConfig with proper duration types.
-func (r RetryConfig) Parse() (ParsedRetryConfig, error) {
+// Parse converts the string-based GitRetrySettings to ParsedRetryConfig with proper duration types.
+func (r GitRetrySettings) Parse() (ParsedRetryConfig, error) {
 	initialDelay, err := time.ParseDuration(r.InitialDelay)
 	if err != nil {
 		return ParsedRetryConfig{}, fmt.Errorf("invalid initial_delay %q: %w", r.InitialDelay, err)
@@ -99,7 +100,7 @@ func (r RetryConfig) Parse() (ParsedRetryConfig, error) {
 
 // GitConfig holds git-related configuration.
 type GitConfig struct {
-	Retry RetryConfig `mapstructure:"retry"`
+	Retry GitRetrySettings `mapstructure:"retry"`
 }
 
 // Config holds the global configuration
@@ -306,7 +307,12 @@ func (c *Config) validateStaleThreshold() error {
 	return nil
 }
 
+// maxRetryAttempts is the maximum allowed value for retry attempts to prevent misconfiguration.
+const maxRetryAttempts = 10
+
 // validateGitRetry validates the git retry configuration.
+//
+//nolint:gocyclo // Sequential validation checks are simpler to read than refactoring for lower complexity
 func (c *Config) validateGitRetry() error {
 	retry := c.Git.Retry
 
@@ -314,12 +320,30 @@ func (c *Config) validateGitRetry() error {
 		return fmt.Errorf("git.retry.max_attempts must be at least 1, got %d", retry.MaxAttempts)
 	}
 
-	if _, err := time.ParseDuration(retry.InitialDelay); err != nil {
+	if retry.MaxAttempts > maxRetryAttempts {
+		return fmt.Errorf("git.retry.max_attempts must not exceed %d, got %d", maxRetryAttempts, retry.MaxAttempts)
+	}
+
+	initialDelay, err := time.ParseDuration(retry.InitialDelay)
+	if err != nil {
 		return fmt.Errorf("git.retry.initial_delay is invalid: %w", err)
 	}
 
-	if _, err := time.ParseDuration(retry.MaxDelay); err != nil {
+	if initialDelay <= 0 {
+		return fmt.Errorf("git.retry.initial_delay must be positive, got %s", retry.InitialDelay)
+	}
+
+	maxDelay, err := time.ParseDuration(retry.MaxDelay)
+	if err != nil {
 		return fmt.Errorf("git.retry.max_delay is invalid: %w", err)
+	}
+
+	if maxDelay <= 0 {
+		return fmt.Errorf("git.retry.max_delay must be positive, got %s", retry.MaxDelay)
+	}
+
+	if initialDelay > maxDelay {
+		return fmt.Errorf("git.retry.initial_delay (%s) must not exceed max_delay (%s)", retry.InitialDelay, retry.MaxDelay)
 	}
 
 	if retry.Multiplier < 1.0 {
@@ -471,6 +495,13 @@ func (c *Config) GetTUI() TUIConfig {
 // GetKeybindings returns the TUI keybindings with defaults applied.
 func (c *Config) GetKeybindings() Keybindings {
 	return c.TUI.Keybindings.WithDefaults()
+}
+
+// GetGitRetryConfig returns the parsed git retry configuration.
+// Since validation has already run, we can safely ignore the error.
+func (c *Config) GetGitRetryConfig() ParsedRetryConfig {
+	parsed, _ := c.Git.Retry.Parse()
+	return parsed
 }
 
 // copyKeys creates a copy of a string slice to avoid sharing references.

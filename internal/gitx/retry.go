@@ -187,6 +187,7 @@ func isRetryableError(err error) bool {
 // WithRetry executes the operation with retry logic based on the configuration.
 // It returns the result of the first successful attempt or the final error after
 // all retries are exhausted. Context cancellation is respected between attempts.
+// If MaxAttempts is <= 0, the operation is executed exactly once.
 //
 //nolint:gocyclo // Complexity is expected for retry logic with context handling
 func WithRetry[T any](ctx context.Context, cfg RetryConfig, op func() (T, error)) (T, error) {
@@ -195,7 +196,13 @@ func WithRetry[T any](ctx context.Context, cfg RetryConfig, op func() (T, error)
 		lastErr error
 	)
 
-	for attempt := 0; attempt < cfg.MaxAttempts; attempt++ {
+	// Ensure at least one attempt is made
+	maxAttempts := cfg.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = 1
+	}
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		// Check context before attempting
 		if err := ctx.Err(); err != nil {
 			if lastErr != nil {
@@ -210,7 +217,7 @@ func WithRetry[T any](ctx context.Context, cfg RetryConfig, op func() (T, error)
 			delay := cfg.calculateBackoff(attempt)
 			log.Info("retrying operation",
 				"attempt", attempt+1,
-				"max_attempts", cfg.MaxAttempts,
+				"max_attempts", maxAttempts,
 				"delay", delay.Round(time.Millisecond))
 
 			select {
@@ -238,7 +245,7 @@ func WithRetry[T any](ctx context.Context, cfg RetryConfig, op func() (T, error)
 			return zero, err
 		}
 
-		if attempt < cfg.MaxAttempts-1 {
+		if attempt < maxAttempts-1 {
 			log.Warn("operation failed, will retry",
 				"attempt", attempt+1,
 				"error", err)
@@ -246,7 +253,7 @@ func WithRetry[T any](ctx context.Context, cfg RetryConfig, op func() (T, error)
 	}
 
 	log.Error("operation failed after all retries",
-		"attempts", cfg.MaxAttempts,
+		"attempts", maxAttempts,
 		"error", lastErr)
 
 	return zero, lastErr

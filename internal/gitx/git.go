@@ -100,7 +100,9 @@ func (g *GitEngine) EnsureCanonical(ctx context.Context, repoURL, repoName strin
 		})
 		if cloneErr != nil {
 			// Clean up partial clone on error before retry
-			_ = os.RemoveAll(path)
+			if cleanupErr := os.RemoveAll(path); cleanupErr != nil {
+				log.Warn("failed to cleanup partial clone", "path", path, "error", cleanupErr)
+			}
 		}
 
 		return repo, cloneErr
@@ -238,7 +240,9 @@ func (g *GitEngine) Clone(ctx context.Context, url, name string) error {
 		})
 		if cloneErr != nil {
 			// Clean up partial clone on error before retry
-			_ = os.RemoveAll(path)
+			if cleanupErr := os.RemoveAll(path); cleanupErr != nil {
+				log.Warn("failed to cleanup partial clone", "path", path, "error", cleanupErr)
+			}
 		}
 
 		return cloneErr

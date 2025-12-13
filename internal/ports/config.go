@@ -37,4 +37,7 @@ type ConfigProvider interface {
 
 	// GetKeybindings returns the TUI keybindings with defaults applied.
 	GetKeybindings() config.Keybindings
+
+	// GetGitRetryConfig returns the parsed git retry configuration.
+	GetGitRetryConfig() config.ParsedRetryConfig
 }

@@ -91,7 +91,14 @@ func New(debug bool, opts ...Option) (*App, error) {
 	// Use provided git operations or create default
 	gitEngine := options.gitOps
 	if gitEngine == nil {
-		gitEngine = gitx.New(cfg.GetProjectsRoot())
+		retryCfg := cfg.GetGitRetryConfig()
+		gitEngine = gitx.NewWithRetry(cfg.GetProjectsRoot(), gitx.RetryConfig{
+			MaxAttempts:  retryCfg.MaxAttempts,
+			InitialDelay: retryCfg.InitialDelay,
+			MaxDelay:     retryCfg.MaxDelay,
+			Multiplier:   retryCfg.Multiplier,
+			JitterFactor: retryCfg.JitterFactor,
+		})
 	}
 
 	// Use provided workspace storage or create default
