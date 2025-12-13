@@ -2,6 +2,7 @@
 package giturl
 
 import (
+	"net/url"
 	"strings"
 )
 
@@ -18,15 +19,38 @@ func IsURL(val string) bool {
 
 // ExtractRepoName extracts the repository name from a Git URL.
 // It handles various URL formats including scp-style URLs and strips .git suffixes.
-func ExtractRepoName(url string) string {
-	// Strip scp-like prefix if present (e.g., git@github.com:org/repo)
-	// Only match true scp-style URLs (user@host:path) by checking for ":" without "://"
-	if strings.Contains(url, ":") && !strings.Contains(url, "://") {
-		parts := strings.Split(url, ":")
-		url = parts[len(parts)-1]
+// Returns an empty string if no repository name can be extracted.
+func ExtractRepoName(rawURL string) string {
+	// Handle scp-style URLs (user@host:path) - they don't have "://"
+	if strings.Contains(rawURL, ":") && !strings.Contains(rawURL, "://") {
+		parts := strings.Split(rawURL, ":")
+		rawURL = parts[len(parts)-1]
+
+		return extractNameFromPath(rawURL)
 	}
 
-	parts := strings.Split(url, "/")
+	// For scheme-based URLs, use net/url to properly parse
+	if strings.Contains(rawURL, "://") {
+		parsed, err := url.Parse(rawURL)
+		if err != nil {
+			return extractNameFromPath(rawURL)
+		}
+
+		// If there's no meaningful path, return empty string
+		// (e.g., "git://host:9418" has no repo)
+		if parsed.Path == "" || parsed.Path == "/" {
+			return ""
+		}
+
+		return extractNameFromPath(parsed.Path)
+	}
+
+	return extractNameFromPath(rawURL)
+}
+
+// extractNameFromPath extracts the repository name from a URL path.
+func extractNameFromPath(path string) string {
+	parts := strings.Split(path, "/")
 
 	var name string
 

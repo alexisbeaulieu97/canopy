@@ -27,6 +27,8 @@ func TestIsURL(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
+
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -62,12 +64,14 @@ func TestExtractRepoName(t *testing.T) {
 		{name: "https with port", url: "https://github.com:443/org/repo.git", want: "repo"},
 		{name: "ssh with port", url: "ssh://git@github.com:22/org/repo.git", want: "repo"},
 		{name: "git with port", url: "git://github.com:9418/org/repo.git", want: "repo"},
-		// Edge cases: URLs with port but no path return the host:port (not typically valid Git URLs)
-		{name: "git with port no path", url: "git://host:9418", want: "host:9418"},
-		{name: "ssh with port no path", url: "ssh://host:22", want: "host:22"},
+		// Edge cases: URLs with port but no path should return empty (no repo to extract)
+		{name: "git with port no path", url: "git://host:9418", want: ""},
+		{name: "ssh with port no path", url: "ssh://host:22", want: ""},
 	}
 
 	for _, tt := range tests {
+		tt := tt
+
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -96,6 +100,8 @@ func TestDeriveAlias(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
+
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
