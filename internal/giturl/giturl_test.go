@@ -58,6 +58,13 @@ func TestExtractRepoName(t *testing.T) {
 		{name: "no .git suffix", url: "https://github.com/org/repo", want: "repo"},
 		{name: "git protocol", url: "git://github.com/org/repo.git", want: "repo"},
 		{name: "complex path", url: "https://gitlab.com/group/subgroup/project.git", want: "project"},
+		// Protocol-based URLs with explicit ports (should NOT be treated as scp-style)
+		{name: "https with port", url: "https://github.com:443/org/repo.git", want: "repo"},
+		{name: "ssh with port", url: "ssh://git@github.com:22/org/repo.git", want: "repo"},
+		{name: "git with port", url: "git://github.com:9418/org/repo.git", want: "repo"},
+		// Edge cases: URLs with port but no path return the host:port (not typically valid Git URLs)
+		{name: "git with port no path", url: "git://host:9418", want: "host:9418"},
+		{name: "ssh with port no path", url: "ssh://host:22", want: "host:22"},
 	}
 
 	for _, tt := range tests {

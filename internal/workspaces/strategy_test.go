@@ -20,6 +20,7 @@ func TestURLStrategy_Resolve(t *testing.T) {
 		t.Parallel()
 
 		s := NewURLStrategy(nil)
+
 		repo, ok := s.Resolve("https://github.com/org/my-repo.git")
 		if !ok {
 			t.Fatal("expected ok=true for URL")
@@ -38,6 +39,7 @@ func TestURLStrategy_Resolve(t *testing.T) {
 		t.Parallel()
 
 		s := NewURLStrategy(nil)
+
 		repo, ok := s.Resolve("git@github.com:org/my-repo.git")
 		if !ok {
 			t.Fatal("expected ok=true for scp URL")
@@ -55,10 +57,12 @@ func TestURLStrategy_Resolve(t *testing.T) {
 			if url == "https://github.com/org/repo.git" {
 				return "my-alias", "https://github.com/org/repo.git", true
 			}
+
 			return "", "", false
 		}
 
 		s := NewURLStrategy(lookup)
+
 		repo, ok := s.Resolve("https://github.com/org/repo.git")
 		if !ok {
 			t.Fatal("expected ok=true")
@@ -73,6 +77,7 @@ func TestURLStrategy_Resolve(t *testing.T) {
 		t.Parallel()
 
 		s := NewURLStrategy(nil)
+
 		_, ok := s.Resolve("org/repo")
 		if ok {
 			t.Error("expected ok=false for non-URL")
@@ -83,6 +88,7 @@ func TestURLStrategy_Resolve(t *testing.T) {
 		t.Parallel()
 
 		s := NewURLStrategy(nil)
+
 		_, ok := s.Resolve("myrepo")
 		if ok {
 			t.Error("expected ok=false for simple name")
@@ -109,10 +115,12 @@ func TestRegistryStrategy_Resolve(t *testing.T) {
 			if alias == "myrepo" {
 				return "myrepo", "https://github.com/org/myrepo.git", true
 			}
+
 			return "", "", false
 		}
 
 		s := NewRegistryStrategy(lookup)
+
 		repo, ok := s.Resolve("myrepo")
 		if !ok {
 			t.Fatal("expected ok=true for registered alias")
@@ -130,11 +138,12 @@ func TestRegistryStrategy_Resolve(t *testing.T) {
 	t.Run("not found in registry", func(t *testing.T) {
 		t.Parallel()
 
-		lookup := func(alias string) (string, string, bool) {
+		lookup := func(_ string) (string, string, bool) {
 			return "", "", false
 		}
 
 		s := NewRegistryStrategy(lookup)
+
 		_, ok := s.Resolve("unknown")
 		if ok {
 			t.Error("expected ok=false for unknown alias")
@@ -145,6 +154,7 @@ func TestRegistryStrategy_Resolve(t *testing.T) {
 		t.Parallel()
 
 		s := NewRegistryStrategy(nil)
+
 		_, ok := s.Resolve("myrepo")
 		if ok {
 			t.Error("expected ok=false with nil lookup")
@@ -168,6 +178,7 @@ func TestGitHubShorthandStrategy_Resolve(t *testing.T) {
 		t.Parallel()
 
 		s := NewGitHubShorthandStrategy()
+
 		repo, ok := s.Resolve("myorg/myrepo")
 		if !ok {
 			t.Fatal("expected ok=true for valid shorthand")
@@ -186,6 +197,7 @@ func TestGitHubShorthandStrategy_Resolve(t *testing.T) {
 		t.Parallel()
 
 		s := NewGitHubShorthandStrategy()
+
 		_, ok := s.Resolve("/myrepo")
 		if ok {
 			t.Error("expected ok=false for empty owner")
@@ -196,6 +208,7 @@ func TestGitHubShorthandStrategy_Resolve(t *testing.T) {
 		t.Parallel()
 
 		s := NewGitHubShorthandStrategy()
+
 		_, ok := s.Resolve("myorg/")
 		if ok {
 			t.Error("expected ok=false for empty repo")
@@ -206,6 +219,7 @@ func TestGitHubShorthandStrategy_Resolve(t *testing.T) {
 		t.Parallel()
 
 		s := NewGitHubShorthandStrategy()
+
 		_, ok := s.Resolve("myrepo")
 		if ok {
 			t.Error("expected ok=false for no slash")
@@ -216,6 +230,7 @@ func TestGitHubShorthandStrategy_Resolve(t *testing.T) {
 		t.Parallel()
 
 		s := NewGitHubShorthandStrategy()
+
 		_, ok := s.Resolve("org/group/repo")
 		if ok {
 			t.Error("expected ok=false for multiple slashes")
@@ -226,6 +241,7 @@ func TestGitHubShorthandStrategy_Resolve(t *testing.T) {
 		t.Parallel()
 
 		s := NewGitHubShorthandStrategy()
+
 		repo, ok := s.Resolve(" myorg / myrepo ")
 		if !ok {
 			t.Fatal("expected ok=true with whitespace")

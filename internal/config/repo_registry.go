@@ -8,8 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/alexisbeaulieu97/canopy/internal/giturl"
 	"gopkg.in/yaml.v3"
+
+	"github.com/alexisbeaulieu97/canopy/internal/giturl"
 )
 
 // RegistryEntry represents a single repository alias entry.
@@ -222,6 +223,7 @@ func (r *RepoRegistry) Path() string {
 }
 
 // DeriveAliasFromURL returns a sensible alias from a Git URL.
+//
 // Deprecated: Use giturl.DeriveAlias instead.
 func DeriveAliasFromURL(url string) string {
 	return giturl.DeriveAlias(url)

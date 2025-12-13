@@ -20,7 +20,8 @@ func IsURL(val string) bool {
 // It handles various URL formats including scp-style URLs and strips .git suffixes.
 func ExtractRepoName(url string) string {
 	// Strip scp-like prefix if present (e.g., git@github.com:org/repo)
-	if strings.Contains(url, ":") && !strings.HasPrefix(url, "http") {
+	// Only match true scp-style URLs (user@host:path) by checking for ":" without "://"
+	if strings.Contains(url, ":") && !strings.Contains(url, "://") {
 		parts := strings.Split(url, ":")
 		url = parts[len(parts)-1]
 	}

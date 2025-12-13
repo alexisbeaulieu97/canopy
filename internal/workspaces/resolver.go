@@ -34,6 +34,7 @@ func NewRepoResolverWithStrategies(strategies []ResolutionStrategy) *RepoResolve
 // Order: URL → Registry → GitHub Shorthand.
 func DefaultStrategies(registry *config.RepoRegistry) []ResolutionStrategy {
 	var urlLookup URLRegistryLookup
+
 	var registryLookup RegistryLookup
 
 	if registry != nil {
@@ -41,6 +42,7 @@ func DefaultStrategies(registry *config.RepoRegistry) []ResolutionStrategy {
 			if entry, ok := registry.ResolveByURL(url); ok {
 				return entry.Alias, entry.URL, true
 			}
+
 			return "", "", false
 		}
 
@@ -48,6 +50,7 @@ func DefaultStrategies(registry *config.RepoRegistry) []ResolutionStrategy {
 			if entry, ok := registry.Resolve(alias); ok {
 				return entry.Alias, entry.URL, true
 			}
+
 			return "", "", false
 		}
 	}
@@ -83,12 +86,14 @@ func (r *RepoResolver) Resolve(raw string, userRequested bool) (domain.Repo, boo
 }
 
 // isLikelyURL checks if the given string appears to be a URL.
+//
 // Deprecated: Use giturl.IsURL instead.
 func isLikelyURL(val string) bool {
 	return giturl.IsURL(val)
 }
 
 // repoNameFromURL extracts the repository name from a URL.
+//
 // Deprecated: Use giturl.ExtractRepoName instead.
 func repoNameFromURL(url string) string {
 	return giturl.ExtractRepoName(url)
