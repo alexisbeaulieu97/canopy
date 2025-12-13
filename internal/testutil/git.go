@@ -74,5 +74,5 @@ func RunGitOutput(t *testing.T, dir string, args ...string) string {
 func CloneToBare(t *testing.T, sourceRepo, destPath string) {
 	t.Helper()
 
-	RunGit(t, filepath.Dir(destPath), "clone", "--bare", sourceRepo, destPath)
+	RunGit(t, filepath.Dir(destPath), "clone", "--bare", sourceRepo, filepath.Base(destPath))
 }

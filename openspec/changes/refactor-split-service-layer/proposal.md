@@ -11,7 +11,7 @@ The `internal/workspaces/service.go` file is 1211 lines with 45 methods, violati
 - Already extracted services remain unchanged: `CanonicalRepoService`, `RepoResolver`, `DiskUsageCalculator`, `WorkspaceCache`
 
 **Proposed Structure:**
-```
+```text
 internal/workspaces/
 ├── service.go           # Coordinator (~300 lines) - lifecycle operations
 ├── git_service.go       # Git operations (~200 lines)

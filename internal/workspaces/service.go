@@ -236,7 +236,13 @@ func (s *Service) ensureNewIDAvailable(newID string) error {
 		return cerrors.NewWorkspaceExists(newID)
 	}
 
-	return nil
+	// If the error is "workspace not found", that's what we want - the ID is available
+	if errors.Is(err, cerrors.WorkspaceNotFound) {
+		return nil
+	}
+
+	// For any other error (IO failure, etc.), propagate it
+	return err
 }
 
 // renameBranchesInRepos renames branches in all repos and returns the list of repos that were renamed.
@@ -275,8 +281,6 @@ func (s *Service) updateBranchMetadata(dirName, newID string) error {
 	return nil
 }
 
-// RenameWorkspace renames a workspace to a new ID.
-// If renameBranch is true and the branch name matches the old ID, it will also rename branches.
 // renameWorkspaceDir renames the workspace directory and handles rollback on failure.
 func (s *Service) renameWorkspaceDir(ctx context.Context, workspace domain.Workspace, oldDirName, newDirName, oldID, newID string, shouldRenameBranch bool) error {
 	if err := s.wsEngine.Rename(oldDirName, newDirName, newID); err != nil {
