@@ -3,7 +3,6 @@ package workspaces
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/gitx"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/mocks"
+	"github.com/alexisbeaulieu97/canopy/internal/testutil"
 	"github.com/alexisbeaulieu97/canopy/internal/workspace"
 )
 
@@ -333,60 +333,13 @@ func TestRestoreWorkspaceForceDoesNotDeleteWithoutClosedEntry(t *testing.T) {
 	}
 }
 
-func mustMkdir(t *testing.T, path string) {
-	t.Helper()
-
-	if err := os.MkdirAll(path, 0o750); err != nil {
-		t.Fatalf("failed to create directory %s: %v", path, err)
-	}
-}
-
-func createRepoWithCommit(t *testing.T, path string) {
-	t.Helper()
-
-	mustMkdir(t, path)
-	runGit(t, path, "init")
-	runGit(t, path, "config", "user.email", "test@example.com")
-	runGit(t, path, "config", "user.name", "Test User")
-	runGit(t, path, "config", "credential.helper", "")
-
-	filePath := filepath.Join(path, "README.md")
-	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
-		t.Fatalf("failed to write file: %v", err)
-	}
-
-	runGit(t, path, "add", ".")
-	runGit(t, path, "commit", "-m", "init")
-}
-
-func runGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-
-	cmd := exec.Command("git", args...) //nolint:gosec // test helper
-	cmd.Dir = dir
-
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v failed: %s (%v)", args, strings.TrimSpace(string(output)), err)
-	}
-}
-
-func runGitOutput(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-
-	cmd := exec.Command("git", args...) //nolint:gosec // test helper
-	cmd.Dir = dir
-
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v failed: %s (%v)", args, strings.TrimSpace(string(output)), err)
-	}
-
-	return strings.TrimSpace(string(output))
-}
+// Helper aliases for testutil functions to maintain test readability
+var (
+	mustMkdir            = testutil.MustMkdir
+	createRepoWithCommit = testutil.CreateRepoWithCommit
+	runGit               = testutil.RunGit
+	runGitOutput         = testutil.RunGitOutput
+)
 
 func TestDetectOrphans_MissingCanonicalRepo(t *testing.T) {
 	deps := newTestService(t)

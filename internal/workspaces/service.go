@@ -220,6 +220,74 @@ func (s *Service) WorkspacePath(workspaceID string) (string, error) {
 	return "", cerrors.NewWorkspaceNotFound(workspaceID)
 }
 
+// RenameWorkspace renames a workspace to a new ID.
+// If renameBranch is true and the branch name matches the old ID, it will also rename branches.
+func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, renameBranch bool) error {
+	// Check if old workspace exists
+	workspace, oldDirName, err := s.findWorkspace(oldID)
+	if err != nil {
+		return err
+	}
+
+	// Validate newID is not empty
+	if newID == "" {
+		return cerrors.NewInvalidArgument("new-id", "cannot be empty")
+	}
+
+	// Check if new workspace already exists
+	_, _, err = s.wsEngine.LoadByID(newID)
+	if err == nil {
+		return cerrors.NewWorkspaceExists(newID)
+	}
+
+	// Determine if we should rename branches
+	shouldRenameBranch := renameBranch && workspace.BranchName == oldID
+
+	// Rename branches in all repos first (if requested)
+	if shouldRenameBranch {
+		for _, repo := range workspace.Repos {
+			worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), oldDirName, repo.Name)
+
+			if err := s.gitEngine.RenameBranch(ctx, worktreePath, oldID, newID); err != nil {
+				return cerrors.WrapGitError(err, fmt.Sprintf("rename branch in repo %s", repo.Name))
+			}
+		}
+	}
+
+	// Rename the workspace directory
+	newDirName := newID // Use new ID as directory name
+	if err := s.wsEngine.Rename(oldDirName, newDirName, newID); err != nil {
+		// Attempt to rollback branch renames on failure
+		if shouldRenameBranch {
+			for _, repo := range workspace.Repos {
+				worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), newDirName, repo.Name)
+				_ = s.gitEngine.RenameBranch(ctx, worktreePath, newID, oldID) // best effort rollback
+			}
+		}
+		return err
+	}
+
+	// Update branch name in metadata if renamed
+	if shouldRenameBranch {
+		ws, err := s.wsEngine.Load(newDirName)
+		if err != nil {
+			return cerrors.NewWorkspaceMetadataError(newID, "load", err)
+		}
+		ws.BranchName = newID
+		if err := s.wsEngine.Save(newDirName, *ws); err != nil {
+			return cerrors.NewWorkspaceMetadataError(newID, "save", err)
+		}
+	}
+
+	// Invalidate cache for both old and new IDs
+	if s.cache != nil {
+		s.cache.Invalidate(oldID)
+		s.cache.Invalidate(newID)
+	}
+
+	return nil
+}
+
 // AddRepoToWorkspace adds a repository to an existing workspace
 func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName string) error {
 	workspace, dirName, err := s.findWorkspace(workspaceID)
@@ -735,6 +803,12 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 	cancelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Track the first error for early termination
+	var (
+		firstErr     error
+		firstErrOnce sync.Once
+	)
+
 	for i, repo := range workspace.Repos {
 		wg.Add(1)
 
@@ -766,6 +840,14 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 				result.Error = err
 				results[idx] = result
 
+				// Cancel other goroutines on first error if not continuing
+				if !continueOnError {
+					firstErrOnce.Do(func() {
+						firstErr = err
+						cancel()
+					})
+				}
+
 				return
 			}
 
@@ -773,22 +855,22 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 			result.Stderr = cmdResult.Stderr
 			result.ExitCode = cmdResult.ExitCode
 			results[idx] = result
+
+			// Also cancel on non-zero exit code if not continuing
+			if result.ExitCode != 0 && !continueOnError {
+				firstErrOnce.Do(func() {
+					firstErr = cerrors.NewCommandFailed(fmt.Sprintf("git in repo %s", r.Name), fmt.Errorf("exit code %d", result.ExitCode))
+					cancel()
+				})
+			}
 		}(i, repo)
 	}
 
 	wg.Wait()
 
-	// Check for errors if not continuing on error
-	if !continueOnError {
-		for _, r := range results {
-			if r.Error != nil {
-				return results, r.Error
-			}
-
-			if r.ExitCode != 0 {
-				return results, cerrors.NewCommandFailed(fmt.Sprintf("git in repo %s", r.RepoName), fmt.Errorf("exit code %d", r.ExitCode))
-			}
-		}
+	// Return the first error that triggered cancellation
+	if firstErr != nil {
+		return results, firstErr
 	}
 
 	return results, nil

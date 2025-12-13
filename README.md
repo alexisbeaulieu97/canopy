@@ -33,9 +33,21 @@ Think of **Canopy** as your vantage point above the forest. Just as a canopy pro
 
 ## Installation
 
+### Using Go Install (Simple)
+
 ```bash
 go install github.com/alexisbeaulieu97/canopy/cmd/canopy@latest
 ```
+
+### From Source (With Version Info)
+
+```bash
+git clone https://github.com/alexisbeaulieu97/canopy.git
+cd canopy
+make install
+```
+
+This embeds version, commit hash, and build date into the binary.
 
 ## Quick Start
 
@@ -132,6 +144,18 @@ See [Configuration](docs/configuration.md#tui-keybindings) to customize keybindi
 | `canopy init` | Initialize configuration |
 | `canopy status` | Show overall status |
 | `canopy check` | Validate configuration |
+| `canopy version` | Print version information |
+
+**Version output example:**
+
+```
+canopy version v1.0.0
+commit: abc1234
+built: 2025-01-15T10:30:00Z
+go: go1.21.0
+```
+
+Use `canopy version --json` for machine-readable output or `canopy --version` for a short version string.
 
 ## Configuration
 

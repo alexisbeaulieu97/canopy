@@ -43,6 +43,9 @@ type GitOperations interface {
 	// Checkout checks out a branch in the given path, optionally creating it.
 	Checkout(path, branchName string, create bool) error
 
+	// RenameBranch renames a branch in the given repository.
+	RenameBranch(ctx context.Context, repoPath, oldName, newName string) error
+
 	// RunCommand executes an arbitrary git command in the specified repository path.
 	RunCommand(ctx context.Context, repoPath string, args ...string) (*CommandResult, error)
 }

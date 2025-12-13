@@ -312,6 +312,58 @@ func (e *Engine) Delete(workspaceID string) error {
 	return os.RemoveAll(path)
 }
 
+// Rename renames a workspace directory and updates its metadata.
+func (e *Engine) Rename(oldDirName, newDirName, newID string) error {
+	safeOldDir, err := sanitizeDirName(oldDirName)
+	if err != nil {
+		return fmt.Errorf("invalid old workspace directory: %w", err)
+	}
+
+	safeNewDir, err := sanitizeDirName(newDirName)
+	if err != nil {
+		return fmt.Errorf("invalid new workspace directory: %w", err)
+	}
+
+	oldPath := filepath.Join(e.WorkspacesRoot, safeOldDir)
+	newPath := filepath.Join(e.WorkspacesRoot, safeNewDir)
+
+	// Check that old path exists
+	if _, err := os.Stat(oldPath); err != nil {
+		if os.IsNotExist(err) {
+			return cerrors.NewWorkspaceNotFound(oldDirName)
+		}
+		return fmt.Errorf("failed to stat old workspace: %w", err)
+	}
+
+	// Check that new path doesn't exist
+	if _, err := os.Stat(newPath); err == nil {
+		return cerrors.NewWorkspaceExists(newID)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to stat new workspace path: %w", err)
+	}
+
+	// Load existing metadata
+	ws, err := e.Load(safeOldDir)
+	if err != nil {
+		return fmt.Errorf("failed to load workspace metadata: %w", err)
+	}
+
+	// Rename the directory
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return fmt.Errorf("failed to rename workspace directory: %w", err)
+	}
+
+	// Update metadata with new ID
+	ws.ID = newID
+	if err := e.Save(safeNewDir, *ws); err != nil {
+		// Attempt rollback on metadata save failure
+		_ = os.Rename(newPath, oldPath)
+		return fmt.Errorf("failed to update workspace metadata: %w", err)
+	}
+
+	return nil
+}
+
 // LatestClosed returns the newest closed entry for the given workspace ID.
 func (e *Engine) LatestClosed(workspaceID string) (*ClosedWorkspace, error) { //nolint:gocyclo // handles filesystem traversal and selection
 	if e.ClosedRoot == "" {

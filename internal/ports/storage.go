@@ -35,6 +35,11 @@ type WorkspaceStorage interface {
 	// Delete removes a workspace.
 	Delete(workspaceID string) error
 
+	// Rename renames a workspace directory and updates its metadata.
+	// oldDirName is the current directory name, newDirName is the target directory name,
+	// and newID is the new workspace ID to be stored in metadata.
+	Rename(oldDirName, newDirName, newID string) error
+
 	// LatestClosed returns the newest closed entry for the given workspace ID.
 	LatestClosed(workspaceID string) (*domain.ClosedWorkspace, error)
 

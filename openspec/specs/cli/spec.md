@@ -1,7 +1,7 @@
 # cli Specification
 
 ## Purpose
-TBD - created by archiving change initialize-canopy. Update Purpose after archive.
+Defines the command-line interface for Canopy, including workspace and repository commands, global flags, output formatting (JSON/text), error handling patterns, and exit code conventions. This spec ensures consistent CLI behavior across all commands for both interactive and scripted usage.
 ## Requirements
 ### Requirement: Initialize Config
 The `init` command SHALL create the global configuration file.

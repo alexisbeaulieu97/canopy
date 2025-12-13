@@ -22,6 +22,7 @@ type MockWorkspaceStorage struct {
 	LoadFunc         func(dirName string) (*domain.Workspace, error)
 	LoadByIDFunc     func(id string) (*domain.Workspace, string, error)
 	DeleteFunc       func(workspaceID string) error
+	RenameFunc       func(oldDirName, newDirName, newID string) error
 	LatestClosedFunc func(workspaceID string) (*domain.ClosedWorkspace, error)
 	DeleteClosedFunc func(path string) error
 
@@ -129,6 +130,24 @@ func (m *MockWorkspaceStorage) Delete(workspaceID string) error {
 	}
 
 	delete(m.Workspaces, workspaceID)
+
+	return nil
+}
+
+// Rename calls the mock function if set, otherwise renames in Workspaces.
+func (m *MockWorkspaceStorage) Rename(oldDirName, newDirName, newID string) error {
+	if m.RenameFunc != nil {
+		return m.RenameFunc(oldDirName, newDirName, newID)
+	}
+
+	ws, ok := m.Workspaces[oldDirName]
+	if !ok {
+		return fmt.Errorf("workspace %s not found", oldDirName)
+	}
+
+	delete(m.Workspaces, oldDirName)
+	ws.ID = newID
+	m.Workspaces[newDirName] = ws
 
 	return nil
 }

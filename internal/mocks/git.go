@@ -23,6 +23,7 @@ type MockGitOperations struct {
 	PushFunc            func(ctx context.Context, path, branch string) error
 	ListFunc            func() ([]string, error)
 	CheckoutFunc        func(path, branchName string, create bool) error
+	RenameBranchFunc    func(ctx context.Context, repoPath, oldName, newName string) error
 	RunCommandFunc      func(ctx context.Context, repoPath string, args ...string) (*ports.CommandResult, error)
 }
 
@@ -107,6 +108,15 @@ func (m *MockGitOperations) List() ([]string, error) {
 func (m *MockGitOperations) Checkout(path, branchName string, create bool) error {
 	if m.CheckoutFunc != nil {
 		return m.CheckoutFunc(path, branchName, create)
+	}
+
+	return nil
+}
+
+// RenameBranch calls the mock function if set, otherwise returns nil.
+func (m *MockGitOperations) RenameBranch(ctx context.Context, repoPath, oldName, newName string) error {
+	if m.RenameBranchFunc != nil {
+		return m.RenameBranchFunc(ctx, repoPath, oldName, newName)
 	}
 
 	return nil
