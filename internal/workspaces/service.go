@@ -410,12 +410,7 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 
 // AddRepoToWorkspace adds a repository to an existing workspace
 func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName string) error {
-	// Validate inputs
-	if err := validation.ValidateWorkspaceID(workspaceID); err != nil {
-		return err
-	}
-
-	if err := validation.ValidateRepoName(repoName); err != nil {
+	if err := validateAddRepoInputs(workspaceID, repoName); err != nil {
 		return err
 	}
 
@@ -424,38 +419,76 @@ func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName 
 		return err
 	}
 
-	// 2. Check if repo already exists in workspace
-	for _, r := range workspace.Repos {
+	if repoExistsInWorkspace(workspace.Repos, repoName) {
+		return cerrors.NewRepoAlreadyExists(repoName, workspaceID)
+	}
+
+	repo, err := s.resolveWorkspaceRepo(workspaceID, repoName)
+	if err != nil {
+		return err
+	}
+
+	branchName, err := s.workspaceBranchName(workspaceID, workspace.BranchName)
+	if err != nil {
+		return err
+	}
+
+	if err := s.ensureWorkspaceWorktree(ctx, repo, dirName, branchName); err != nil {
+		return err
+	}
+
+	if err := s.saveWorkspaceRepo(dirName, workspaceID, workspace, repo); err != nil {
+		return err
+	}
+
+	s.cache.Invalidate(workspaceID)
+
+	return nil
+}
+
+func validateAddRepoInputs(workspaceID, repoName string) error {
+	if err := validation.ValidateWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+
+	return validation.ValidateRepoName(repoName)
+}
+
+func repoExistsInWorkspace(repos []domain.Repo, repoName string) bool {
+	for _, r := range repos {
 		if r.Name == repoName {
-			return cerrors.NewRepoAlreadyExists(repoName, workspaceID)
+			return true
 		}
 	}
 
-	// 3. Resolve repo URL
+	return false
+}
+
+func (s *Service) resolveWorkspaceRepo(workspaceID, repoName string) (domain.Repo, error) {
 	repos, err := s.ResolveRepos(workspaceID, []string{repoName})
 	if err != nil {
-		// Preserve original error type if it's already typed
 		var canopyErr *cerrors.CanopyError
 		if errors.As(err, &canopyErr) {
-			return canopyErr.WithContext("operation", fmt.Sprintf("resolve repo %s", repoName))
+			return domain.Repo{}, canopyErr.WithContext("operation", fmt.Sprintf("resolve repo %s", repoName))
 		}
 
-		return cerrors.Wrap(cerrors.ErrUnknownRepository, fmt.Sprintf("failed to resolve repo %s", repoName), err)
+		return domain.Repo{}, cerrors.Wrap(cerrors.ErrUnknownRepository, fmt.Sprintf("failed to resolve repo %s", repoName), err)
 	}
 
-	repo := repos[0]
+	return repos[0], nil
+}
 
-	// 4. Clone repo
-	// Ensure canonical exists
-	_, err = s.gitEngine.EnsureCanonical(ctx, repo.URL, repo.Name)
-	if err != nil {
-		return cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
-	}
-
-	// Create worktree
-	branchName := workspace.BranchName
+func (s *Service) workspaceBranchName(workspaceID, branchName string) (string, error) {
 	if branchName == "" {
-		return cerrors.NewMissingBranchConfig(workspaceID)
+		return "", cerrors.NewMissingBranchConfig(workspaceID)
+	}
+
+	return branchName, nil
+}
+
+func (s *Service) ensureWorkspaceWorktree(ctx context.Context, repo domain.Repo, dirName, branchName string) error {
+	if _, err := s.gitEngine.EnsureCanonical(ctx, repo.URL, repo.Name); err != nil {
+		return cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
 	}
 
 	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
@@ -463,14 +496,14 @@ func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName 
 		return cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
 	}
 
-	// 5. Update metadata
+	return nil
+}
+
+func (s *Service) saveWorkspaceRepo(dirName, workspaceID string, workspace *domain.Workspace, repo domain.Repo) error {
 	workspace.Repos = append(workspace.Repos, repo)
 	if err := s.wsEngine.Save(dirName, *workspace); err != nil {
 		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
-
-	// Invalidate cache after metadata update
-	s.cache.Invalidate(workspaceID)
 
 	return nil
 }
