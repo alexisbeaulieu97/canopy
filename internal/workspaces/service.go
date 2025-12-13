@@ -16,6 +16,7 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/hooks"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
+	"github.com/alexisbeaulieu97/canopy/internal/validation"
 )
 
 // Service manages workspace operations
@@ -112,11 +113,24 @@ func (s *Service) CreateWorkspace(ctx context.Context, id, branchName string, re
 
 // CreateWorkspaceWithOptions creates a new workspace with configurable options.
 func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName string, repos []domain.Repo, opts CreateOptions) (string, error) {
+	// Validate inputs
+	if err := validation.ValidateWorkspaceID(id); err != nil {
+		return "", err
+	}
+
+	if err := validation.ValidateBranchName(branchName); err != nil {
+		return "", err
+	}
+
 	dirName := id
 
 	// Default branch name is the workspace ID
 	if branchName == "" {
 		branchName = id
+		// Validate the derived branch name (workspace IDs may contain chars invalid for git refs)
+		if err := validation.ValidateBranchName(branchName); err != nil {
+			return "", cerrors.NewInvalidArgument("workspace-id", "cannot be used as default branch name: "+err.Error())
+		}
 	}
 
 	if err := s.wsEngine.Create(dirName, id, branchName, repos); err != nil {
@@ -222,11 +236,7 @@ func (s *Service) WorkspacePath(workspaceID string) (string, error) {
 
 // validateRenameInputs validates the inputs for renaming a workspace.
 func (s *Service) validateRenameInputs(newID string) error {
-	if newID == "" {
-		return cerrors.NewInvalidArgument("new-id", "cannot be empty")
-	}
-
-	return nil
+	return validation.ValidateWorkspaceID(newID)
 }
 
 // ensureNewIDAvailable checks that the new workspace ID doesn't already exist.
@@ -400,43 +410,85 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 
 // AddRepoToWorkspace adds a repository to an existing workspace
 func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName string) error {
+	if err := validateAddRepoInputs(workspaceID, repoName); err != nil {
+		return err
+	}
+
 	workspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return err
 	}
 
-	// 2. Check if repo already exists in workspace
-	for _, r := range workspace.Repos {
+	if repoExistsInWorkspace(workspace.Repos, repoName) {
+		return cerrors.NewRepoAlreadyExists(repoName, workspaceID)
+	}
+
+	repo, err := s.resolveWorkspaceRepo(workspaceID, repoName)
+	if err != nil {
+		return err
+	}
+
+	branchName, err := s.workspaceBranchName(workspaceID, workspace.BranchName)
+	if err != nil {
+		return err
+	}
+
+	if err := s.ensureWorkspaceWorktree(ctx, repo, dirName, branchName); err != nil {
+		return err
+	}
+
+	if err := s.saveWorkspaceRepo(dirName, workspaceID, workspace, repo); err != nil {
+		return err
+	}
+
+	s.cache.Invalidate(workspaceID)
+
+	return nil
+}
+
+func validateAddRepoInputs(workspaceID, repoName string) error {
+	if err := validation.ValidateWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+
+	return validation.ValidateRepoName(repoName)
+}
+
+func repoExistsInWorkspace(repos []domain.Repo, repoName string) bool {
+	for _, r := range repos {
 		if r.Name == repoName {
-			return cerrors.NewRepoAlreadyExists(repoName, workspaceID)
+			return true
 		}
 	}
 
-	// 3. Resolve repo URL
+	return false
+}
+
+func (s *Service) resolveWorkspaceRepo(workspaceID, repoName string) (domain.Repo, error) {
 	repos, err := s.ResolveRepos(workspaceID, []string{repoName})
 	if err != nil {
-		// Preserve original error type if it's already typed
 		var canopyErr *cerrors.CanopyError
 		if errors.As(err, &canopyErr) {
-			return canopyErr.WithContext("operation", fmt.Sprintf("resolve repo %s", repoName))
+			return domain.Repo{}, canopyErr.WithContext("operation", fmt.Sprintf("resolve repo %s", repoName))
 		}
 
-		return cerrors.Wrap(cerrors.ErrUnknownRepository, fmt.Sprintf("failed to resolve repo %s", repoName), err)
+		return domain.Repo{}, cerrors.Wrap(cerrors.ErrUnknownRepository, fmt.Sprintf("failed to resolve repo %s", repoName), err)
 	}
 
-	repo := repos[0]
+	return repos[0], nil
+}
 
-	// 4. Clone repo
-	// Ensure canonical exists
-	_, err = s.gitEngine.EnsureCanonical(ctx, repo.URL, repo.Name)
-	if err != nil {
-		return cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
-	}
-
-	// Create worktree
-	branchName := workspace.BranchName
+func (s *Service) workspaceBranchName(workspaceID, branchName string) (string, error) {
 	if branchName == "" {
-		return cerrors.NewMissingBranchConfig(workspaceID)
+		return "", cerrors.NewMissingBranchConfig(workspaceID)
+	}
+
+	return branchName, nil
+}
+
+func (s *Service) ensureWorkspaceWorktree(ctx context.Context, repo domain.Repo, dirName, branchName string) error {
+	if _, err := s.gitEngine.EnsureCanonical(ctx, repo.URL, repo.Name); err != nil {
+		return cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
 	}
 
 	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
@@ -444,14 +496,14 @@ func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName 
 		return cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
 	}
 
-	// 5. Update metadata
+	return nil
+}
+
+func (s *Service) saveWorkspaceRepo(dirName, workspaceID string, workspace *domain.Workspace, repo domain.Repo) error {
 	workspace.Repos = append(workspace.Repos, repo)
 	if err := s.wsEngine.Save(dirName, *workspace); err != nil {
 		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
-
-	// Invalidate cache after metadata update
-	s.cache.Invalidate(workspaceID)
 
 	return nil
 }
