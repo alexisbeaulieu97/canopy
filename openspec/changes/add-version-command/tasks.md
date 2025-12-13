@@ -16,7 +16,7 @@
 ### 2. Version Command
 - [x] 2.1 Create `versionCmd` cobra command
 - [x] 2.2 Implement text output format:
-  ```
+  ```text
   canopy version v1.2.3
   commit: abc1234
   built: 2025-01-15T10:30:00Z

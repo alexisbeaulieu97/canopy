@@ -334,6 +334,19 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 
 	if shouldRenameBranch {
 		if err := s.updateBranchMetadata(newDirName, newID); err != nil {
+			rollbackErr := s.wsEngine.Rename(newDirName, oldDirName, oldID)
+			if rollbackErr != nil {
+				if s.logger != nil {
+					s.logger.Error("failed to rollback workspace rename after metadata update error",
+						"error", rollbackErr,
+						"from", newDirName,
+						"to", oldDirName,
+					)
+				}
+
+				return errors.Join(err, fmt.Errorf("rollback workspace rename failed: %w", rollbackErr))
+			}
+
 			return err
 		}
 	}
