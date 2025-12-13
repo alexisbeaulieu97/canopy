@@ -2,6 +2,8 @@
 package mocks
 
 import (
+	"time"
+
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
@@ -141,4 +143,15 @@ func (m *MockConfigProvider) GetHooks() config.Hooks {
 // GetKeybindings returns the TUI keybindings with defaults applied.
 func (m *MockConfigProvider) GetKeybindings() config.Keybindings {
 	return config.Keybindings{}.WithDefaults()
+}
+
+// GetGitRetryConfig returns default git retry configuration.
+func (m *MockConfigProvider) GetGitRetryConfig() config.ParsedRetryConfig {
+	return config.ParsedRetryConfig{
+		MaxAttempts:  3,
+		InitialDelay: 1 * time.Second,
+		MaxDelay:     30 * time.Second,
+		Multiplier:   2.0,
+		JitterFactor: 0.25,
+	}
 }

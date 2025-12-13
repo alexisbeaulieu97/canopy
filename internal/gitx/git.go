@@ -60,11 +60,23 @@ var _ ports.GitOperations = (*GitEngine)(nil)
 // See package documentation for known limitations.
 type GitEngine struct {
 	ProjectsRoot string
+	RetryConfig  RetryConfig
 }
 
-// New creates a new GitEngine
+// New creates a new GitEngine with default retry configuration.
 func New(projectsRoot string) *GitEngine {
-	return &GitEngine{ProjectsRoot: projectsRoot}
+	return &GitEngine{
+		ProjectsRoot: projectsRoot,
+		RetryConfig:  DefaultRetryConfig(),
+	}
+}
+
+// NewWithRetry creates a new GitEngine with custom retry configuration.
+func NewWithRetry(projectsRoot string, retryCfg RetryConfig) *GitEngine {
+	return &GitEngine{
+		ProjectsRoot: projectsRoot,
+		RetryConfig:  retryCfg,
+	}
 }
 
 // EnsureCanonical ensures the repo is cloned in ProjectsRoot (bare)
@@ -81,9 +93,19 @@ func (g *GitEngine) EnsureCanonical(ctx context.Context, repoURL, repoName strin
 	ctx, cancel := g.withDefaultTimeout(ctx)
 	defer cancel()
 
-	// Clone if not exists
-	r, err = git.PlainCloneContext(ctx, path, true, &git.CloneOptions{
-		URL: repoURL,
+	// Clone if not exists, with retry for transient failures
+	r, err = WithRetry(ctx, g.RetryConfig, func() (*git.Repository, error) {
+		repo, cloneErr := git.PlainCloneContext(ctx, path, true, &git.CloneOptions{
+			URL: repoURL,
+		})
+		if cloneErr != nil {
+			// Clean up partial clone on error before retry
+			if cleanupErr := os.RemoveAll(path); cleanupErr != nil {
+				log.Warn("failed to cleanup partial clone", "path", path, "error", cleanupErr)
+			}
+		}
+
+		return repo, cloneErr
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -211,9 +233,19 @@ func (g *GitEngine) Clone(ctx context.Context, url, name string) error {
 	ctx, cancel := g.withDefaultTimeout(ctx)
 	defer cancel()
 
-	// Clone as bare using go-git
-	_, err = git.PlainCloneContext(ctx, path, true, &git.CloneOptions{
-		URL: url,
+	// Clone as bare using go-git, with retry for transient failures
+	err = WithRetryNoResult(ctx, g.RetryConfig, func() error {
+		_, cloneErr := git.PlainCloneContext(ctx, path, true, &git.CloneOptions{
+			URL: url,
+		})
+		if cloneErr != nil {
+			// Clean up partial clone on error before retry
+			if cleanupErr := os.RemoveAll(path); cleanupErr != nil {
+				log.Warn("failed to cleanup partial clone", "path", path, "error", cleanupErr)
+			}
+		}
+
+		return cloneErr
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -267,19 +299,22 @@ func (g *GitEngine) Fetch(ctx context.Context, name string) error {
 		remoteName := remote.Config().Name
 		refSpec := config.RefSpec(fmt.Sprintf("+refs/heads/*:refs/remotes/%s/*", remoteName))
 
-		err := remote.FetchContext(ctx, &git.FetchOptions{
-			RefSpecs: []config.RefSpec{refSpec},
+		// Wrap fetch with retry for transient failures
+		fetchErr := WithRetryNoResult(ctx, g.RetryConfig, func() error {
+			return remote.FetchContext(ctx, &git.FetchOptions{
+				RefSpecs: []config.RefSpec{refSpec},
+			})
 		})
-		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-			if errors.Is(err, context.Canceled) {
+		if fetchErr != nil && !errors.Is(fetchErr, git.NoErrAlreadyUpToDate) {
+			if errors.Is(fetchErr, context.Canceled) {
 				return cerrors.NewOperationCanceledWithTarget("fetch", name)
 			}
 
-			if errors.Is(err, context.DeadlineExceeded) {
+			if errors.Is(fetchErr, context.DeadlineExceeded) {
 				return cerrors.NewOperationTimeout("fetch", name)
 			}
 
-			return cerrors.WrapGitError(err, "fetch")
+			return cerrors.WrapGitError(fetchErr, "fetch")
 		}
 	}
 
@@ -304,9 +339,11 @@ func (g *GitEngine) Pull(ctx context.Context, path string) error {
 	ctx, cancel := g.withDefaultTimeout(ctx)
 	defer cancel()
 
-	// Pull changes
-	err = w.PullContext(ctx, &git.PullOptions{
-		RemoteName: "origin",
+	// Pull changes, with retry for transient failures
+	err = WithRetryNoResult(ctx, g.RetryConfig, func() error {
+		return w.PullContext(ctx, &git.PullOptions{
+			RemoteName: "origin",
+		})
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		if errors.Is(err, context.Canceled) {
@@ -367,8 +404,10 @@ func (g *GitEngine) Push(ctx context.Context, path, branch string) error {
 	ctx, cancel := g.withDefaultTimeout(ctx)
 	defer cancel()
 
-	// Push changes
-	err = r.PushContext(ctx, pushOpts)
+	// Push changes, with retry for transient failures
+	err = WithRetryNoResult(ctx, g.RetryConfig, func() error {
+		return r.PushContext(ctx, pushOpts)
+	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		if errors.Is(err, context.Canceled) {
 			return cerrors.NewOperationCanceledWithTarget("push", path)

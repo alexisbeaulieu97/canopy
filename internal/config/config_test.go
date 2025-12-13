@@ -7,6 +7,19 @@ import (
 	"testing"
 )
 
+// validGitConfig returns a GitConfig with valid default values for testing.
+func validGitConfig() GitConfig {
+	return GitConfig{
+		Retry: GitRetrySettings{
+			MaxAttempts:  3,
+			InitialDelay: "1s",
+			MaxDelay:     "30s",
+			Multiplier:   2.0,
+			JitterFactor: 0.25,
+		},
+	}
+}
+
 func TestLoad(t *testing.T) {
 	// Create a temporary config file
 	tmpDir, err := os.MkdirTemp("", "canopy-config-test")
@@ -140,6 +153,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 			},
 			wantErr: false,
 		},
@@ -151,6 +165,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 			},
 			wantErr:   true,
 			errSubstr: "projects_root is required",
@@ -163,6 +178,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 			},
 			wantErr:   true,
 			errSubstr: "workspaces_root is required",
@@ -175,6 +191,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 			},
 			wantErr:   true,
 			errSubstr: "closed_root is required",
@@ -187,6 +204,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "invalid",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 			},
 			wantErr:   true,
 			errSubstr: "workspace_close_default must be either",
@@ -199,6 +217,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 			},
 			wantErr: false,
 		},
@@ -210,6 +229,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "archive",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 			},
 			wantErr: false,
 		},
@@ -221,6 +241,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: -1,
+				Git:                validGitConfig(),
 			},
 			wantErr:   true,
 			errSubstr: "stale_threshold_days must be zero or positive",
@@ -233,6 +254,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 0,
+				Git:                validGitConfig(),
 			},
 			wantErr: false,
 		},
@@ -244,6 +266,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 				Defaults: Defaults{
 					WorkspacePatterns: []WorkspacePattern{
 						{Pattern: "[invalid", Repos: []string{"repo"}},
@@ -261,6 +284,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 				Defaults: Defaults{
 					WorkspacePatterns: []WorkspacePattern{
 						{Pattern: "^TEST-.*", Repos: []string{"repo"}},
@@ -277,6 +301,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 				Hooks: Hooks{
 					PostCreate: []Hook{
 						{Command: "npm install", Repos: []string{"frontend"}},
@@ -296,6 +321,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 				Hooks: Hooks{
 					PostCreate: []Hook{
 						{Command: ""},
@@ -313,6 +339,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 				Hooks: Hooks{
 					PreClose: []Hook{
 						{Command: "echo first"},
@@ -331,6 +358,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 				Hooks: Hooks{
 					PostCreate: []Hook{
 						{Command: "   \t"},
@@ -348,6 +376,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 				Hooks: Hooks{
 					PreClose: []Hook{
 						{Command: "echo first\nrm -rf /"},
@@ -365,6 +394,7 @@ func TestValidateValues(t *testing.T) {
 				ClosedRoot:         "/tmp/closed",
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 				Hooks: Hooks{
 					PostCreate: []Hook{
 						{Command: "npm install", Timeout: -5},
@@ -538,6 +568,7 @@ func TestValidate(t *testing.T) {
 				ClosedRoot:         closedDir,
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 			},
 			wantErr: false,
 		},
@@ -549,6 +580,7 @@ func TestValidate(t *testing.T) {
 				ClosedRoot:         closedDir,
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 			},
 			wantErr:   true,
 			errSubstr: "projects_root is required",
@@ -561,6 +593,7 @@ func TestValidate(t *testing.T) {
 				ClosedRoot:         closedDir,
 				CloseDefault:       "invalid",
 				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
 			},
 			wantErr:   true,
 			errSubstr: "workspace_close_default must be either",
@@ -738,6 +771,7 @@ func TestConfigValidateKeybindings(t *testing.T) {
 				WorkspacesRoot: "/tmp/workspaces",
 				ClosedRoot:     "/tmp/closed",
 				CloseDefault:   "delete",
+				Git:            validGitConfig(),
 			},
 		},
 		{
@@ -747,6 +781,7 @@ func TestConfigValidateKeybindings(t *testing.T) {
 				WorkspacesRoot: "/tmp/workspaces",
 				ClosedRoot:     "/tmp/closed",
 				CloseDefault:   "delete",
+				Git:            validGitConfig(),
 				TUI: TUIConfig{
 					Keybindings: Keybindings{
 						Quit:   []string{"x"},
@@ -762,6 +797,7 @@ func TestConfigValidateKeybindings(t *testing.T) {
 				WorkspacesRoot: "/tmp/workspaces",
 				ClosedRoot:     "/tmp/closed",
 				CloseDefault:   "delete",
+				Git:            validGitConfig(),
 				TUI: TUIConfig{
 					Keybindings: Keybindings{
 						Quit:   []string{"p"},
@@ -780,6 +816,7 @@ func TestConfigValidateKeybindings(t *testing.T) {
 				WorkspacesRoot: "/tmp/workspaces",
 				ClosedRoot:     "/tmp/closed",
 				CloseDefault:   "delete",
+				Git:            validGitConfig(),
 				TUI: TUIConfig{
 					Keybindings: Keybindings{
 						Quit: []string{"invalid-key"},
@@ -824,4 +861,178 @@ func findSubstring(s, substr string) bool {
 	}
 
 	return false
+}
+
+func TestValidateGitRetry(t *testing.T) {
+	baseConfig := func() *Config {
+		return &Config{
+			ProjectsRoot:       "/projects",
+			WorkspacesRoot:     "/workspaces",
+			ClosedRoot:         "/closed",
+			CloseDefault:       "delete",
+			StaleThresholdDays: 14,
+			Git:                validGitConfig(),
+		}
+	}
+
+	tests := []struct {
+		name      string
+		modify    func(c *Config)
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name:    "valid default config",
+			modify:  func(_ *Config) {},
+			wantErr: false,
+		},
+		{
+			name: "max_attempts zero",
+			modify: func(c *Config) {
+				c.Git.Retry.MaxAttempts = 0
+			},
+			wantErr:   true,
+			errSubstr: "must be at least 1",
+		},
+		{
+			name: "max_attempts negative",
+			modify: func(c *Config) {
+				c.Git.Retry.MaxAttempts = -1
+			},
+			wantErr:   true,
+			errSubstr: "must be at least 1",
+		},
+		{
+			name: "max_attempts exceeds limit",
+			modify: func(c *Config) {
+				c.Git.Retry.MaxAttempts = 11
+			},
+			wantErr:   true,
+			errSubstr: "must not exceed 10",
+		},
+		{
+			name: "initial_delay invalid format",
+			modify: func(c *Config) {
+				c.Git.Retry.InitialDelay = "not-a-duration"
+			},
+			wantErr:   true,
+			errSubstr: "initial_delay is invalid",
+		},
+		{
+			name: "initial_delay zero",
+			modify: func(c *Config) {
+				c.Git.Retry.InitialDelay = "0s"
+			},
+			wantErr:   true,
+			errSubstr: "must be positive",
+		},
+		{
+			name: "initial_delay negative",
+			modify: func(c *Config) {
+				c.Git.Retry.InitialDelay = "-1s"
+			},
+			wantErr:   true,
+			errSubstr: "must be positive",
+		},
+		{
+			name: "max_delay invalid format",
+			modify: func(c *Config) {
+				c.Git.Retry.MaxDelay = "invalid"
+			},
+			wantErr:   true,
+			errSubstr: "max_delay is invalid",
+		},
+		{
+			name: "max_delay zero",
+			modify: func(c *Config) {
+				c.Git.Retry.MaxDelay = "0s"
+			},
+			wantErr:   true,
+			errSubstr: "must be positive",
+		},
+		{
+			name: "initial_delay exceeds max_delay",
+			modify: func(c *Config) {
+				c.Git.Retry.InitialDelay = "1m"
+				c.Git.Retry.MaxDelay = "30s"
+			},
+			wantErr:   true,
+			errSubstr: "must not exceed max_delay",
+		},
+		{
+			name: "multiplier below 1.0",
+			modify: func(c *Config) {
+				c.Git.Retry.Multiplier = 0.5
+			},
+			wantErr:   true,
+			errSubstr: "must be at least 1.0",
+		},
+		{
+			name: "jitter_factor negative",
+			modify: func(c *Config) {
+				c.Git.Retry.JitterFactor = -0.1
+			},
+			wantErr:   true,
+			errSubstr: "must be between 0 and 1",
+		},
+		{
+			name: "jitter_factor exceeds 1",
+			modify: func(c *Config) {
+				c.Git.Retry.JitterFactor = 1.5
+			},
+			wantErr:   true,
+			errSubstr: "must be between 0 and 1",
+		},
+		{
+			name: "edge case: multiplier exactly 1.0",
+			modify: func(c *Config) {
+				c.Git.Retry.Multiplier = 1.0
+			},
+			wantErr: false,
+		},
+		{
+			name: "edge case: jitter_factor exactly 0",
+			modify: func(c *Config) {
+				c.Git.Retry.JitterFactor = 0.0
+			},
+			wantErr: false,
+		},
+		{
+			name: "edge case: jitter_factor exactly 1",
+			modify: func(c *Config) {
+				c.Git.Retry.JitterFactor = 1.0
+			},
+			wantErr: false,
+		},
+		{
+			name: "edge case: initial_delay equals max_delay",
+			modify: func(c *Config) {
+				c.Git.Retry.InitialDelay = "30s"
+				c.Git.Retry.MaxDelay = "30s"
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := baseConfig()
+			tt.modify(cfg)
+
+			err := cfg.ValidateValues()
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ValidateValues() expected error containing %q, got nil", tt.errSubstr)
+
+					return
+				}
+
+				if tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("ValidateValues() error = %q, want substring %q", err.Error(), tt.errSubstr)
+				}
+			} else if err != nil {
+				t.Errorf("ValidateValues() unexpected error: %v", err)
+			}
+		})
+	}
 }
