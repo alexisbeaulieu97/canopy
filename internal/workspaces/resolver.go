@@ -7,18 +7,58 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/giturl"
 )
 
 // RepoResolver handles resolution of repository identifiers to domain.Repo objects.
-// It supports resolution by alias, URL, or GitHub shorthand (org/repo).
+// It iterates through a chain of resolution strategies until one succeeds.
 type RepoResolver struct {
-	registry *config.RepoRegistry
+	strategies []ResolutionStrategy
 }
 
-// NewRepoResolver creates a new RepoResolver with the given registry.
+// NewRepoResolver creates a new RepoResolver with the default strategy chain.
+// The default order is: URL → Registry → GitHub Shorthand.
 func NewRepoResolver(registry *config.RepoRegistry) *RepoResolver {
+	return NewRepoResolverWithStrategies(DefaultStrategies(registry))
+}
+
+// NewRepoResolverWithStrategies creates a new RepoResolver with custom strategies.
+// Strategies are tried in the order provided.
+func NewRepoResolverWithStrategies(strategies []ResolutionStrategy) *RepoResolver {
 	return &RepoResolver{
-		registry: registry,
+		strategies: strategies,
+	}
+}
+
+// DefaultStrategies returns the default resolution strategy chain.
+// Order: URL → Registry → GitHub Shorthand.
+func DefaultStrategies(registry *config.RepoRegistry) []ResolutionStrategy {
+	var urlLookup URLRegistryLookup
+
+	var registryLookup RegistryLookup
+
+	if registry != nil {
+		urlLookup = func(url string) (string, string, bool) {
+			if entry, ok := registry.ResolveByURL(url); ok {
+				return entry.Alias, entry.URL, true
+			}
+
+			return "", "", false
+		}
+
+		registryLookup = func(alias string) (string, string, bool) {
+			if entry, ok := registry.Resolve(alias); ok {
+				return entry.Alias, entry.URL, true
+			}
+
+			return "", "", false
+		}
+	}
+
+	return []ResolutionStrategy{
+		NewURLStrategy(urlLookup),
+		NewRegistryStrategy(registryLookup),
+		NewGitHubShorthandStrategy(),
 	}
 }
 
@@ -28,112 +68,33 @@ func NewRepoResolver(registry *config.RepoRegistry) *RepoResolver {
 // - A registry alias
 // - A GitHub shorthand (org/repo)
 //
-// If userRequested is true, unresolved identifiers return an error.
-// If userRequested is false, unresolved identifiers return (Repo{}, false, error).
+// Resolution strategies are tried in order until one succeeds.
+// If no strategy can resolve the identifier, an error is returned.
 func (r *RepoResolver) Resolve(raw string, userRequested bool) (domain.Repo, bool, error) {
 	val := strings.TrimSpace(raw)
 	if val == "" {
 		return domain.Repo{}, false, nil
 	}
 
-	// Try URL resolution
-	if repo, ok := r.resolveURL(val); ok {
-		return repo, true, nil
-	}
-
-	// Try registry alias
-	if repo, ok := r.resolveRegistry(val); ok {
-		return repo, true, nil
-	}
-
-	// Try GitHub shorthand
-	if repo, ok := r.resolveGitHubShorthand(val); ok {
-		return repo, true, nil
+	for _, strategy := range r.strategies {
+		if repo, ok := strategy.Resolve(val); ok {
+			return repo, true, nil
+		}
 	}
 
 	return domain.Repo{}, false, cerrors.NewUnknownRepository(val, userRequested)
 }
 
-// resolveURL attempts to resolve a URL to a repo.
-func (r *RepoResolver) resolveURL(val string) (domain.Repo, bool) {
-	if !isLikelyURL(val) {
-		return domain.Repo{}, false
-	}
-
-	if r.registry != nil {
-		if entry, ok := r.registry.ResolveByURL(val); ok {
-			return domain.Repo{Name: entry.Alias, URL: entry.URL}, true
-		}
-	}
-
-	return domain.Repo{Name: repoNameFromURL(val), URL: val}, true
-}
-
-// resolveRegistry attempts to resolve via registry alias.
-func (r *RepoResolver) resolveRegistry(val string) (domain.Repo, bool) {
-	if r.registry == nil {
-		return domain.Repo{}, false
-	}
-
-	if entry, ok := r.registry.Resolve(val); ok {
-		return domain.Repo{Name: entry.Alias, URL: entry.URL}, true
-	}
-
-	return domain.Repo{}, false
-}
-
-// resolveGitHubShorthand attempts to resolve GitHub shorthand (owner/repo).
-func (r *RepoResolver) resolveGitHubShorthand(val string) (domain.Repo, bool) {
-	if strings.Count(val, "/") != 1 {
-		return domain.Repo{}, false
-	}
-
-	parts := strings.Split(val, "/")
-	owner := strings.TrimSpace(parts[0])
-	repo := strings.TrimSpace(parts[1])
-
-	// Both owner and repo must be non-empty for valid GitHub shorthand
-	if owner == "" || repo == "" {
-		return domain.Repo{}, false
-	}
-
-	url := "https://github.com/" + owner + "/" + repo
-
-	return domain.Repo{Name: repo, URL: url}, true
-}
-
 // isLikelyURL checks if the given string appears to be a URL.
+//
+// Deprecated: Use giturl.IsURL instead.
 func isLikelyURL(val string) bool {
-	return strings.HasPrefix(val, "http://") ||
-		strings.HasPrefix(val, "https://") ||
-		strings.HasPrefix(val, "ssh://") ||
-		strings.HasPrefix(val, "git://") ||
-		strings.HasPrefix(val, "git@") ||
-		strings.HasPrefix(val, "file://")
+	return giturl.IsURL(val)
 }
 
 // repoNameFromURL extracts the repository name from a URL.
+//
+// Deprecated: Use giturl.ExtractRepoName instead.
 func repoNameFromURL(url string) string {
-	// Strip scp-like prefix if present
-	if strings.Contains(url, ":") && !strings.HasPrefix(url, "http") {
-		parts := strings.Split(url, ":")
-		url = parts[len(parts)-1]
-	}
-
-	parts := strings.Split(url, "/")
-
-	var name string
-
-	for i := len(parts) - 1; i >= 0; i-- {
-		if trimmed := strings.TrimSpace(parts[i]); trimmed != "" {
-			name = trimmed
-			break
-		}
-	}
-
-	if name == "" {
-		return ""
-	}
-
-	return strings.TrimSuffix(name, ".git")
+	return giturl.ExtractRepoName(url)
 }

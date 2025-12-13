@@ -16,6 +16,7 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/giturl"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
@@ -92,7 +93,7 @@ var repoAddCmd = &cobra.Command{
 		if !skipRegister {
 			alias := aliasOverride
 			if alias == "" {
-				alias = config.DeriveAliasFromURL(url)
+				alias = giturl.DeriveAlias(url)
 			}
 			if alias == "" {
 				alias = name

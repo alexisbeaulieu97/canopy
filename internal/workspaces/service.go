@@ -1072,8 +1072,8 @@ func (s *Service) ExportWorkspace(_ context.Context, workspaceID string) (*domai
 		}
 
 		// Try to find registry alias for this URL
-		if s.resolver != nil && s.resolver.registry != nil {
-			if entry, ok := s.resolver.registry.ResolveByURL(repo.URL); ok {
+		if registry := s.config.GetRegistry(); registry != nil {
+			if entry, ok := registry.ResolveByURL(repo.URL); ok {
 				repoExport.Alias = entry.Alias
 			}
 		}
@@ -1171,10 +1171,12 @@ func (s *Service) resolveExportedRepos(exportedRepos []domain.RepoExport, worksp
 		// When alias resolves, we use the registry's canonical name (entry.Alias) rather than
 		// the exported name. This ensures consistency with the local registry and handles cases
 		// where the exporting machine used a different alias for the same repo.
-		if exported.Alias != "" && s.resolver != nil && s.resolver.registry != nil {
-			if entry, ok := s.resolver.registry.Resolve(exported.Alias); ok {
-				repo = domain.Repo{Name: entry.Alias, URL: entry.URL}
-				resolved = true
+		if exported.Alias != "" {
+			if registry := s.config.GetRegistry(); registry != nil {
+				if entry, ok := registry.Resolve(exported.Alias); ok {
+					repo = domain.Repo{Name: entry.Alias, URL: entry.URL}
+					resolved = true
+				}
 			}
 		}
 
