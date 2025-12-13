@@ -303,6 +303,28 @@ func (s *Service) invalidateWorkspaceCache(ids ...string) {
 	}
 }
 
+// updateBranchMetadataWithRollback updates workspace metadata and rolls back directory rename on failure.
+func (s *Service) updateBranchMetadataWithRollback(oldDirName, newDirName, oldID, newID string) error {
+	if err := s.updateBranchMetadata(newDirName, newID); err != nil {
+		rollbackErr := s.wsEngine.Rename(newDirName, oldDirName, oldID)
+		if rollbackErr != nil {
+			if s.logger != nil {
+				s.logger.Error("failed to rollback workspace rename after metadata update error",
+					"error", rollbackErr,
+					"from", newDirName,
+					"to", oldDirName,
+				)
+			}
+
+			return errors.Join(err, fmt.Errorf("rollback workspace rename failed: %w", rollbackErr))
+		}
+
+		return err
+	}
+
+	return nil
+}
+
 // RenameWorkspace renames a workspace to a new ID.
 // If renameBranch is true and the branch name matches the old ID, it will also rename branches.
 func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, renameBranch bool) error {
@@ -333,20 +355,7 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 	}
 
 	if shouldRenameBranch {
-		if err := s.updateBranchMetadata(newDirName, newID); err != nil {
-			rollbackErr := s.wsEngine.Rename(newDirName, oldDirName, oldID)
-			if rollbackErr != nil {
-				if s.logger != nil {
-					s.logger.Error("failed to rollback workspace rename after metadata update error",
-						"error", rollbackErr,
-						"from", newDirName,
-						"to", oldDirName,
-					)
-				}
-
-				return errors.Join(err, fmt.Errorf("rollback workspace rename failed: %w", rollbackErr))
-			}
-
+		if err := s.updateBranchMetadataWithRollback(oldDirName, newDirName, oldID, newID); err != nil {
 			return err
 		}
 	}
