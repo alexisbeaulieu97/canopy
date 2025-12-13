@@ -17,11 +17,17 @@ type contextKey string
 const appContextKey contextKey = "app"
 
 var (
-	debug   bool
-	rootCmd = &cobra.Command{
+	debug       bool
+	showVersion bool
+	rootCmd     = &cobra.Command{
 		Use:   "canopy",
 		Short: "Workspace-centric development",
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			// Skip app initialization for version command or --version flag
+			if cmd.Name() == "version" || showVersion {
+				return nil
+			}
+
 			appInstance, err := app.New(debug)
 			if err != nil {
 				return err
@@ -32,11 +38,21 @@ var (
 			cmd.Root().SetContext(ctx)
 			return nil
 		},
+		Run: func(cmd *cobra.Command, _ []string) {
+			// Handle --version flag on root command
+			if showVersion {
+				printVersion()
+				return
+			}
+			// Show help when no subcommand is provided
+			_ = cmd.Help()
+		},
 	}
 )
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging")
+	rootCmd.Flags().BoolVarP(&showVersion, "version", "V", false, "Print version information and exit")
 }
 
 func main() {

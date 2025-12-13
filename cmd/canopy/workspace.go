@@ -136,6 +136,40 @@ var (
 		},
 	}
 
+	workspaceRenameCmd = &cobra.Command{
+		Use:   "rename <OLD-ID> <NEW-ID>",
+		Short: "Rename a workspace",
+		Long:  `Rename a workspace to a new ID. Optionally renames branches in all repos if they match the old ID.`,
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			oldID := args[0]
+			newID := args[1]
+
+			// Fast-fail if IDs are the same
+			if oldID == newID {
+				return fmt.Errorf("old and new workspace IDs are the same")
+			}
+
+			renameBranch, _ := cmd.Flags().GetBool("rename-branch")
+
+			app, err := getApp(cmd)
+			if err != nil {
+				return err
+			}
+
+			if err := app.Service.RenameWorkspace(cmd.Context(), oldID, newID, renameBranch); err != nil {
+				return err
+			}
+
+			if renameBranch {
+				fmt.Printf("Renamed workspace %s to %s (branches also renamed)\n", oldID, newID) //nolint:forbidigo // user-facing CLI output
+			} else {
+				fmt.Printf("Renamed workspace %s to %s\n", oldID, newID) //nolint:forbidigo // user-facing CLI output
+			}
+			return nil
+		},
+	}
+
 	workspaceListCmd = &cobra.Command{
 		Use:   "list",
 		Short: "List active workspaces",
@@ -781,6 +815,7 @@ func init() {
 	workspaceCmd.AddCommand(workspaceListCmd)
 	workspaceCmd.AddCommand(workspaceCloseCmd)
 	workspaceCmd.AddCommand(workspaceReopenCmd)
+	workspaceCmd.AddCommand(workspaceRenameCmd)
 	workspaceCmd.AddCommand(workspaceViewCmd)
 	workspaceCmd.AddCommand(workspacePathCmd)
 	workspaceCmd.AddCommand(workspaceBranchCmd)
@@ -817,6 +852,8 @@ func init() {
 	workspaceCloseCmd.Flags().Bool("no-hooks", false, "Skip pre_close hooks")
 	workspaceCloseCmd.Flags().Bool("hooks-only", false, "Run pre_close hooks without closing the workspace")
 	workspaceReopenCmd.Flags().Bool("force", false, "Overwrite existing workspace if one already exists")
+
+	workspaceRenameCmd.Flags().Bool("rename-branch", true, "Rename branches in repos if they match the old workspace ID")
 
 	workspaceBranchCmd.Flags().Bool("create", false, "Create branch if it doesn't exist")
 

@@ -220,6 +220,184 @@ func (s *Service) WorkspacePath(workspaceID string) (string, error) {
 	return "", cerrors.NewWorkspaceNotFound(workspaceID)
 }
 
+// validateRenameInputs validates the inputs for renaming a workspace.
+func (s *Service) validateRenameInputs(newID string) error {
+	if newID == "" {
+		return cerrors.NewInvalidArgument("new-id", "cannot be empty")
+	}
+
+	return nil
+}
+
+// ensureNewIDAvailable checks that the new workspace ID doesn't already exist.
+func (s *Service) ensureNewIDAvailable(newID string) error {
+	_, _, err := s.wsEngine.LoadByID(newID)
+	if err == nil {
+		return cerrors.NewWorkspaceExists(newID)
+	}
+
+	// If the error is "workspace not found", that's what we want - the ID is available
+	if errors.Is(err, cerrors.WorkspaceNotFound) {
+		return nil
+	}
+
+	// For any other error (IO failure, etc.), propagate it
+	return err
+}
+
+// renameBranchesInRepos renames branches in all repos and returns the list of repos that were renamed.
+func (s *Service) renameBranchesInRepos(ctx context.Context, workspace domain.Workspace, dirName, oldID, newID string) error {
+	for _, repo := range workspace.Repos {
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+
+		if err := s.gitEngine.RenameBranch(ctx, worktreePath, oldID, newID); err != nil {
+			return cerrors.WrapGitError(err, fmt.Sprintf("rename branch in repo %s", repo.Name))
+		}
+	}
+
+	return nil
+}
+
+// rollbackBranchRenames attempts to rollback branch renames on failure (best effort, ignores errors).
+func (s *Service) rollbackBranchRenames(ctx context.Context, workspace domain.Workspace, dirName, oldID, newID string) {
+	for _, repo := range workspace.Repos {
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		_ = s.gitEngine.RenameBranch(ctx, worktreePath, newID, oldID) // best effort rollback
+	}
+}
+
+// rollbackBranchRenamesWithError attempts to rollback branch renames and reports errors.
+func (s *Service) rollbackBranchRenamesWithError(ctx context.Context, workspace domain.Workspace, dirName, oldID, newID string) error {
+	var joined error
+
+	for _, repo := range workspace.Repos {
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		if err := s.gitEngine.RenameBranch(ctx, worktreePath, newID, oldID); err != nil {
+			joined = errors.Join(joined, cerrors.WrapGitError(err, fmt.Sprintf("rollback branch rename in repo %s", repo.Name)))
+		}
+	}
+
+	return joined
+}
+
+// updateBranchMetadata loads the workspace and updates the branch name metadata.
+func (s *Service) updateBranchMetadata(dirName, newID string) error {
+	ws, err := s.wsEngine.Load(dirName)
+	if err != nil {
+		return cerrors.NewWorkspaceMetadataError(newID, "load", err)
+	}
+
+	ws.BranchName = newID
+	if err := s.wsEngine.Save(dirName, *ws); err != nil {
+		return cerrors.NewWorkspaceMetadataError(newID, "save", err)
+	}
+
+	return nil
+}
+
+// renameWorkspaceDir renames the workspace directory and handles rollback on failure.
+func (s *Service) renameWorkspaceDir(ctx context.Context, workspace domain.Workspace, oldDirName, newDirName, oldID, newID string, shouldRenameBranch bool) error {
+	if err := s.wsEngine.Rename(oldDirName, newDirName, newID); err != nil {
+		if shouldRenameBranch {
+			s.rollbackBranchRenames(ctx, workspace, oldDirName, oldID, newID)
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+// invalidateWorkspaceCache invalidates cache entries for the given workspace IDs.
+func (s *Service) invalidateWorkspaceCache(ids ...string) {
+	if s.cache != nil {
+		for _, id := range ids {
+			s.cache.Invalidate(id)
+		}
+	}
+}
+
+// updateBranchMetadataWithRollback updates workspace metadata and rolls back branch and directory renames on failure.
+func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspace domain.Workspace, oldDirName, newDirName, oldID, newID string) error {
+	if err := s.updateBranchMetadata(newDirName, newID); err != nil {
+		var rollbackErrors []error
+
+		// Attempt to rollback branch renames first so repo state aligns with directory rollback.
+		if branchRollbackErr := s.rollbackBranchRenamesWithError(ctx, workspace, newDirName, oldID, newID); branchRollbackErr != nil {
+			if s.logger != nil {
+				s.logger.Error("failed to rollback branch renames after metadata update error",
+					"error", branchRollbackErr,
+					"from", newID,
+					"to", oldID,
+				)
+			}
+
+			rollbackErrors = append(rollbackErrors, fmt.Errorf("branch rollback failed: %w", branchRollbackErr))
+		}
+
+		// Then rollback directory rename.
+		if dirRollbackErr := s.wsEngine.Rename(newDirName, oldDirName, oldID); dirRollbackErr != nil {
+			if s.logger != nil {
+				s.logger.Error("failed to rollback workspace rename after metadata update error",
+					"error", dirRollbackErr,
+					"from", newDirName,
+					"to", oldDirName,
+				)
+			}
+
+			rollbackErrors = append(rollbackErrors, fmt.Errorf("workspace rename rollback failed: %w", dirRollbackErr))
+		}
+
+		if len(rollbackErrors) > 0 {
+			return errors.Join(append([]error{err}, rollbackErrors...)...)
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+// RenameWorkspace renames a workspace to a new ID.
+// If renameBranch is true and the branch name matches the old ID, it will also rename branches.
+func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, renameBranch bool) error {
+	workspace, oldDirName, err := s.findWorkspace(oldID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.validateRenameInputs(newID); err != nil {
+		return err
+	}
+
+	if err := s.ensureNewIDAvailable(newID); err != nil {
+		return err
+	}
+
+	shouldRenameBranch := renameBranch && workspace.BranchName == oldID
+	newDirName := newID
+
+	if shouldRenameBranch {
+		if err := s.renameBranchesInRepos(ctx, *workspace, oldDirName, oldID, newID); err != nil {
+			return err
+		}
+	}
+
+	if err := s.renameWorkspaceDir(ctx, *workspace, oldDirName, newDirName, oldID, newID, shouldRenameBranch); err != nil {
+		return err
+	}
+
+	if shouldRenameBranch {
+		if err := s.updateBranchMetadataWithRollback(ctx, *workspace, oldDirName, newDirName, oldID, newID); err != nil {
+			return err
+		}
+	}
+
+	s.invalidateWorkspaceCache(oldID, newID)
+
+	return nil
+}
+
 // AddRepoToWorkspace adds a repository to an existing workspace
 func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName string) error {
 	workspace, dirName, err := s.findWorkspace(workspaceID)
@@ -735,6 +913,12 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 	cancelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Track the first error for early termination
+	var (
+		firstErr     error
+		firstErrOnce sync.Once
+	)
+
 	for i, repo := range workspace.Repos {
 		wg.Add(1)
 
@@ -744,9 +928,17 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 			// Check if context is cancelled before acquiring semaphore
 			select {
 			case <-cancelCtx.Done():
+				ctxErr := cerrors.NewContextError(cancelCtx, "git command", r.Name)
 				results[idx] = RepoGitResult{
 					RepoName: r.Name,
-					Error:    cerrors.NewContextError(cancelCtx, "git command", r.Name),
+					Error:    ctxErr,
+				}
+
+				// Propagate cancellation error to caller if not continuing on error
+				if !continueOnError {
+					firstErrOnce.Do(func() {
+						firstErr = ctxErr
+					})
 				}
 
 				return
@@ -766,6 +958,15 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 				result.Error = err
 				results[idx] = result
 
+				// Cancel other goroutines on first error if not continuing
+				if !continueOnError {
+					firstErrOnce.Do(func() {
+						firstErr = err
+
+						cancel()
+					})
+				}
+
 				return
 			}
 
@@ -773,22 +974,23 @@ func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspac
 			result.Stderr = cmdResult.Stderr
 			result.ExitCode = cmdResult.ExitCode
 			results[idx] = result
+
+			// Also cancel on non-zero exit code if not continuing
+			if result.ExitCode != 0 && !continueOnError {
+				firstErrOnce.Do(func() {
+					firstErr = cerrors.NewCommandFailed(fmt.Sprintf("git in repo %s", r.Name), fmt.Errorf("exit code %d", result.ExitCode))
+
+					cancel()
+				})
+			}
 		}(i, repo)
 	}
 
 	wg.Wait()
 
-	// Check for errors if not continuing on error
-	if !continueOnError {
-		for _, r := range results {
-			if r.Error != nil {
-				return results, r.Error
-			}
-
-			if r.ExitCode != 0 {
-				return results, cerrors.NewCommandFailed(fmt.Sprintf("git in repo %s", r.RepoName), fmt.Errorf("exit code %d", r.ExitCode))
-			}
-		}
+	// Return the first error that triggered cancellation
+	if firstErr != nil {
+		return results, firstErr
 	}
 
 	return results, nil

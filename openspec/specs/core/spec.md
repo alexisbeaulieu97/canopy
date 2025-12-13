@@ -1,7 +1,7 @@
 # core Specification
 
 ## Purpose
-TBD - created by archiving change initialize-canopy. Update Purpose after archive.
+Defines core domain behaviors for Canopy including canonical repository management, worktree creation, safe deletion with dirty-state protection, and configuration validation. These are foundational capabilities that underpin workspace and repository operations.
 ## Requirements
 ### Requirement: Manage Canonical Repos
 The system SHALL maintain a directory of canonical git repositories (bare clones) to serve as the source for worktrees.

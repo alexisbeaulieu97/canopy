@@ -3,6 +3,7 @@ package workspaces
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -319,6 +320,155 @@ func TestRunGitInWorkspace(t *testing.T) {
 		_, err := svc.RunGitInWorkspace(context.Background(), "non-existent", []string{"status"}, GitRunOptions{})
 		if err == nil {
 			t.Fatal("expected error for non-existent workspace")
+		}
+	})
+
+	t.Run("parallel early termination on error", func(t *testing.T) {
+		t.Parallel()
+
+		mockStorage := mocks.NewMockWorkspaceStorage()
+		mockStorage.Workspaces["test-ws"] = domain.Workspace{
+			ID:         "test-ws",
+			BranchName: "main",
+			Repos: []domain.Repo{
+				{Name: "repo-a", URL: "https://example.com/repo-a"},
+				{Name: "repo-b", URL: "https://example.com/repo-b"},
+				{Name: "repo-c", URL: "https://example.com/repo-c"},
+				{Name: "repo-d", URL: "https://example.com/repo-d"},
+			},
+		}
+
+		mockConfig := mocks.NewMockConfigProvider()
+		mockConfig.WorkspacesRoot = "/workspaces"
+
+		var completedCount int32
+
+		mockGit := mocks.NewMockGitOperations()
+		mockGit.RunCommandFunc = func(ctx context.Context, _ string, _ ...string) (*ports.CommandResult, error) {
+			// Check if context was cancelled (from another goroutine's error)
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+
+			// Use atomic to avoid race condition in concurrent goroutines
+			count := atomic.AddInt32(&completedCount, 1)
+			// Return error for first call
+			if count == 1 {
+				return nil, errors.New("git error")
+			}
+
+			return &ports.CommandResult{
+				Stdout:   "success",
+				ExitCode: 0,
+			}, nil
+		}
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil)
+
+		_, err := svc.RunGitInWorkspace(context.Background(), "test-ws", []string{"fetch"}, GitRunOptions{
+			Parallel:        true,
+			ContinueOnError: false,
+		})
+		if err == nil {
+			t.Fatal("expected error in parallel execution")
+		}
+	})
+
+	t.Run("parallel continue on error completes all", func(t *testing.T) {
+		t.Parallel()
+
+		mockStorage := mocks.NewMockWorkspaceStorage()
+		mockStorage.Workspaces["test-ws"] = domain.Workspace{
+			ID:         "test-ws",
+			BranchName: "main",
+			Repos: []domain.Repo{
+				{Name: "repo-a", URL: "https://example.com/repo-a"},
+				{Name: "repo-b", URL: "https://example.com/repo-b"},
+				{Name: "repo-c", URL: "https://example.com/repo-c"},
+			},
+		}
+
+		mockConfig := mocks.NewMockConfigProvider()
+		mockConfig.WorkspacesRoot = "/workspaces"
+
+		mockGit := mocks.NewMockGitOperations()
+		mockGit.RunCommandFunc = func(_ context.Context, path string, _ ...string) (*ports.CommandResult, error) {
+			// Fail repo-b
+			if path == "/workspaces/test-ws/repo-b" {
+				return nil, errors.New("repo-b failed")
+			}
+
+			return &ports.CommandResult{
+				Stdout:   "success",
+				ExitCode: 0,
+			}, nil
+		}
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil)
+
+		results, err := svc.RunGitInWorkspace(context.Background(), "test-ws", []string{"status"}, GitRunOptions{
+			Parallel:        true,
+			ContinueOnError: true,
+		})
+		// Should not return error with ContinueOnError
+		if err != nil {
+			t.Fatalf("unexpected error with ContinueOnError: %v", err)
+		}
+
+		// Should have all 3 results
+		if len(results) != 3 {
+			t.Errorf("expected 3 results, got %d", len(results))
+		}
+
+		// Check that repo-b failed
+		for _, r := range results {
+			if r.RepoName == "repo-b" && r.Error == nil {
+				t.Error("expected repo-b to have error")
+			}
+		}
+	})
+
+	t.Run("parallel with non-zero exit code triggers early termination", func(t *testing.T) {
+		t.Parallel()
+
+		mockStorage := mocks.NewMockWorkspaceStorage()
+		mockStorage.Workspaces["test-ws"] = domain.Workspace{
+			ID:         "test-ws",
+			BranchName: "main",
+			Repos: []domain.Repo{
+				{Name: "repo-a", URL: "https://example.com/repo-a"},
+				{Name: "repo-b", URL: "https://example.com/repo-b"},
+			},
+		}
+
+		mockConfig := mocks.NewMockConfigProvider()
+		mockConfig.WorkspacesRoot = "/workspaces"
+
+		mockGit := mocks.NewMockGitOperations()
+		mockGit.RunCommandFunc = func(_ context.Context, path string, _ ...string) (*ports.CommandResult, error) {
+			// First repo returns non-zero exit code
+			if path == "/workspaces/test-ws/repo-a" {
+				return &ports.CommandResult{
+					Stdout:   "",
+					Stderr:   "merge conflict",
+					ExitCode: 1,
+				}, nil
+			}
+
+			return &ports.CommandResult{
+				Stdout:   "success",
+				ExitCode: 0,
+			}, nil
+		}
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil)
+
+		_, err := svc.RunGitInWorkspace(context.Background(), "test-ws", []string{"merge"}, GitRunOptions{
+			Parallel:        true,
+			ContinueOnError: false,
+		})
+		if err == nil {
+			t.Fatal("expected error on non-zero exit code")
 		}
 	})
 }

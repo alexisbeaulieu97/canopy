@@ -501,6 +501,22 @@ func (g *GitEngine) Checkout(path, branchName string, create bool) error {
 	return nil
 }
 
+// RenameBranch renames a branch in the given repository.
+// This uses git CLI via RunCommand as go-git does not support branch renaming directly.
+func (g *GitEngine) RenameBranch(ctx context.Context, repoPath, oldName, newName string) error {
+	result, err := g.RunCommand(ctx, repoPath, "branch", "-m", oldName, newName)
+	if err != nil {
+		return err
+	}
+
+	if result.ExitCode != 0 {
+		return cerrors.NewCommandFailed(fmt.Sprintf("git branch -m %s %s", oldName, newName),
+			fmt.Errorf("exit code %d: %s", result.ExitCode, result.Stderr))
+	}
+
+	return nil
+}
+
 // countAheadBehind calculates how many commits local is ahead and behind remote.
 // This is a pure go-git implementation of git rev-list --left-right --count.
 func (g *GitEngine) countAheadBehind(r *git.Repository, localHash, remoteHash plumbing.Hash) (int, int, error) {
