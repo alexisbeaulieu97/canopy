@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/alexisbeaulieu97/canopy/internal/giturl"
 	"gopkg.in/yaml.v3"
 )
 
@@ -135,7 +136,7 @@ func (r *RepoRegistry) Register(alias string, entry RegistryEntry, force bool) e
 	}
 
 	entry.URL = strings.TrimSpace(entry.URL)
-	if !isLikelyURL(entry.URL) {
+	if !giturl.IsURL(entry.URL) {
 		return fmt.Errorf("invalid repository URL: %s", entry.URL)
 	}
 
@@ -160,7 +161,7 @@ func (r *RepoRegistry) RegisterWithSuffix(alias string, entry RegistryEntry) (st
 	}
 
 	entry.URL = strings.TrimSpace(entry.URL)
-	if !isLikelyURL(entry.URL) {
+	if !giturl.IsURL(entry.URL) {
 		return "", fmt.Errorf("invalid repository URL: %s", entry.URL)
 	}
 
@@ -221,39 +222,9 @@ func (r *RepoRegistry) Path() string {
 }
 
 // DeriveAliasFromURL returns a sensible alias from a Git URL.
+// Deprecated: Use giturl.DeriveAlias instead.
 func DeriveAliasFromURL(url string) string {
-	url = strings.TrimSpace(url)
-	if url == "" {
-		return ""
-	}
-
-	// Handle scp-like git@host:owner/repo.git
-	if strings.Contains(url, ":") && !strings.HasPrefix(url, "http") {
-		parts := strings.Split(url, ":")
-		if len(parts) > 1 {
-			url = parts[len(parts)-1]
-		}
-	}
-
-	parts := strings.Split(url, "/")
-
-	var last string
-
-	for i := len(parts) - 1; i >= 0; i-- {
-		if trimmed := strings.TrimSpace(parts[i]); trimmed != "" {
-			last = trimmed
-			break
-		}
-	}
-
-	if last == "" {
-		return ""
-	}
-
-	last = strings.TrimSuffix(last, ".git")
-	last = strings.ToLower(last)
-
-	return last
+	return giturl.DeriveAlias(url)
 }
 
 func defaultRegistryPath() (string, error) {
@@ -287,11 +258,4 @@ func hasAllTags(entryTags, required []string) bool {
 	}
 
 	return true
-}
-
-func isLikelyURL(val string) bool {
-	return strings.HasPrefix(val, "http://") ||
-		strings.HasPrefix(val, "https://") ||
-		strings.HasPrefix(val, "git@") ||
-		strings.HasPrefix(val, "file://")
 }
