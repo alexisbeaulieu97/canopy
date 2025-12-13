@@ -39,31 +39,42 @@ func NewWorkspaceCache(ttl time.Duration) *WorkspaceCache {
 }
 
 // Get retrieves a workspace from the cache by ID.
-// Returns the workspace, directory name, and a boolean indicating if the entry was found and valid.
+// Returns a deep copy of the workspace, directory name, and a boolean indicating if the entry was found and valid.
+// Expired entries are lazily deleted when accessed.
 func (c *WorkspaceCache) Get(id string) (*domain.Workspace, string, bool) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	entry, ok := c.entries[id]
+	c.mu.RUnlock()
+
 	if !ok {
 		return nil, "", false
 	}
 
 	if time.Now().After(entry.expiresAt) {
-		// Entry has expired; caller should reload from storage
+		// Entry has expired; lazily delete it
+		c.mu.Lock()
+		// Re-check after acquiring write lock to avoid race conditions
+		if entry, ok := c.entries[id]; ok && time.Now().After(entry.expiresAt) {
+			delete(c.entries, id)
+		}
+
+		c.mu.Unlock()
+
 		return nil, "", false
 	}
 
-	return entry.workspace, entry.dirName, true
+	// Return a deep copy to prevent callers from mutating cached state
+	return copyWorkspace(entry.workspace), entry.dirName, true
 }
 
 // Set adds or updates a workspace in the cache.
+// A deep copy of the workspace is stored to prevent external mutations.
 func (c *WorkspaceCache) Set(id string, ws *domain.Workspace, dirName string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.entries[id] = cacheEntry{
-		workspace: ws,
+		workspace: copyWorkspace(ws),
 		dirName:   dirName,
 		expiresAt: time.Now().Add(c.ttl),
 	}
@@ -91,4 +102,28 @@ func (c *WorkspaceCache) Size() int {
 	defer c.mu.RUnlock()
 
 	return len(c.entries)
+}
+
+// copyWorkspace creates a deep copy of a workspace to prevent mutation of cached data.
+func copyWorkspace(ws *domain.Workspace) *domain.Workspace {
+	if ws == nil {
+		return nil
+	}
+
+	// Copy the struct
+	copied := *ws
+
+	// Deep copy the Repos slice
+	if ws.Repos != nil {
+		copied.Repos = make([]domain.Repo, len(ws.Repos))
+		copy(copied.Repos, ws.Repos)
+	}
+
+	// Deep copy the ClosedAt pointer
+	if ws.ClosedAt != nil {
+		closedAt := *ws.ClosedAt
+		copied.ClosedAt = &closedAt
+	}
+
+	return &copied
 }

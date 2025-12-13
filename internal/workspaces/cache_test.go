@@ -56,8 +56,8 @@ func TestWorkspaceCache_GetSet(t *testing.T) {
 func TestWorkspaceCache_TTLExpiration(t *testing.T) {
 	t.Parallel()
 
-	// Use a very short TTL for testing
-	cache := NewWorkspaceCache(10 * time.Millisecond)
+	// Use a short TTL for testing, but long enough to be reliable in CI
+	cache := NewWorkspaceCache(50 * time.Millisecond)
 
 	testWs := &domain.Workspace{ID: "test-id"}
 	cache.Set("test-id", testWs, "test-dir")
@@ -68,8 +68,8 @@ func TestWorkspaceCache_TTLExpiration(t *testing.T) {
 		t.Error("expected cache hit before TTL expiration")
 	}
 
-	// Wait for TTL to expire
-	time.Sleep(20 * time.Millisecond)
+	// Wait for TTL to expire (sleep 3x the TTL to be safe)
+	time.Sleep(150 * time.Millisecond)
 
 	// After TTL, should be a miss
 	_, _, ok = cache.Get("test-id")
@@ -210,4 +210,82 @@ func TestWorkspaceCache_Concurrency(t *testing.T) {
 	}
 
 	// If we get here without a race condition or deadlock, the test passes
+}
+
+func TestWorkspaceCache_LazyDeletion(t *testing.T) {
+	t.Parallel()
+
+	cache := NewWorkspaceCache(50 * time.Millisecond)
+
+	testWs := &domain.Workspace{ID: "test-id"}
+	cache.Set("test-id", testWs, "test-dir")
+
+	// Entry should be in cache
+	if cache.Size() != 1 {
+		t.Errorf("expected size 1, got %d", cache.Size())
+	}
+
+	// Wait for TTL to expire
+	time.Sleep(150 * time.Millisecond)
+
+	// Get should trigger lazy deletion
+	_, _, ok := cache.Get("test-id")
+	if ok {
+		t.Error("expected cache miss after TTL expiration")
+	}
+
+	// Entry should be deleted from cache
+	if cache.Size() != 0 {
+		t.Errorf("expected size 0 after lazy deletion, got %d", cache.Size())
+	}
+}
+
+func TestWorkspaceCache_DeepCopy(t *testing.T) {
+	t.Parallel()
+
+	cache := NewWorkspaceCache(DefaultCacheTTL)
+
+	// Create workspace with repos
+	original := &domain.Workspace{
+		ID:         "test-id",
+		BranchName: "main",
+		Repos: []domain.Repo{
+			{Name: "repo1", URL: "https://github.com/org/repo1.git"},
+		},
+	}
+	cache.Set("test-id", original, "test-dir")
+
+	// Get the cached workspace
+	ws1, _, ok := cache.Get("test-id")
+	if !ok {
+		t.Fatal("expected cache hit")
+	}
+
+	// Modify the returned workspace
+	ws1.BranchName = "modified"
+	ws1.Repos[0].Name = "modified-repo"
+	ws1.Repos = append(ws1.Repos, domain.Repo{Name: "new-repo"})
+
+	// Get another copy - should be unaffected by previous modifications
+	ws2, _, ok := cache.Get("test-id")
+	if !ok {
+		t.Fatal("expected cache hit")
+	}
+
+	if ws2.BranchName != "main" {
+		t.Errorf("expected BranchName 'main', got %q (cache was mutated)", ws2.BranchName)
+	}
+
+	if len(ws2.Repos) != 1 {
+		t.Errorf("expected 1 repo, got %d (cache was mutated)", len(ws2.Repos))
+	}
+
+	if ws2.Repos[0].Name != "repo1" {
+		t.Errorf("expected repo name 'repo1', got %q (cache was mutated)", ws2.Repos[0].Name)
+	}
+
+	// Also verify original wasn't mutated
+	if original.BranchName != "main" {
+		t.Errorf("original workspace was mutated: BranchName = %q", original.BranchName)
+	}
 }
