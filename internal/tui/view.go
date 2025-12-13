@@ -8,13 +8,9 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
-// View renders the UI for the current state.
+// View renders the UI by delegating to the current view state.
 func (m Model) View() string {
-	if m.detailView {
-		return m.renderDetailView()
-	}
-
-	return m.renderListView()
+	return m.viewState.View(&m)
 }
 
 // renderListView renders the main workspace list view.
@@ -28,20 +24,50 @@ func (m Model) renderListView() string {
 	// Show spinner if pushing
 	if m.pushing {
 		spinnerLine := fmt.Sprintf("%s Pushing %s...",
-			m.spinner.View(),
+			m.ui.Spinner.View(),
 			accentTextStyle.Render(m.pushTarget))
 		b.WriteString(spinnerLine)
 		b.WriteString("\n\n")
 	}
 
-	// Confirmation prompt if active
-	if m.confirming {
-		b.WriteString(m.renderConfirmPrompt())
+	// Main list
+	b.WriteString(m.ui.List.View())
+
+	// Footer with shortcuts
+	b.WriteString("\n")
+	b.WriteString(m.renderFooter())
+
+	return b.String()
+}
+
+// renderListViewWithConfirm renders the list view with a confirmation dialog overlay.
+func (m Model) renderListViewWithConfirm(state *ConfirmViewState) string {
+	var b strings.Builder
+
+	// Header section
+	b.WriteString(m.renderHeader())
+	b.WriteString("\n\n")
+
+	// Show spinner if pushing
+	if m.pushing {
+		spinnerLine := fmt.Sprintf("%s Pushing %s...",
+			m.ui.Spinner.View(),
+			accentTextStyle.Render(m.pushTarget))
+		b.WriteString(spinnerLine)
 		b.WriteString("\n\n")
 	}
 
+	// Confirmation prompt
+	dialog := components.ConfirmDialog{
+		Active:   true,
+		Action:   components.ConfirmAction(state.Action),
+		TargetID: state.TargetID,
+	}
+	b.WriteString(dialog.Render())
+	b.WriteString("\n\n")
+
 	// Main list
-	b.WriteString(m.list.View())
+	b.WriteString(m.ui.List.View())
 
 	// Footer with shortcuts
 	b.WriteString("\n")
@@ -55,8 +81,8 @@ func (m Model) renderHeader() string {
 	var parts []string
 
 	// Title with count
-	total := len(m.allItems)
-	visible := len(m.list.Items())
+	total := len(m.workspaces.Items())
+	visible := len(m.ui.List.Items())
 
 	titleText := fmt.Sprintf("🌲 Workspaces (%d)", total)
 	if visible != total {
@@ -66,20 +92,20 @@ func (m Model) renderHeader() string {
 	parts = append(parts, titleStyle.Render(titleText))
 
 	// Disk usage
-	if m.totalDiskUsage > 0 {
-		diskInfo := fmt.Sprintf("💾 %s", humanizeBytes(m.totalDiskUsage))
+	if m.workspaces.TotalDiskUsage() > 0 {
+		diskInfo := fmt.Sprintf("💾 %s", humanizeBytes(m.workspaces.TotalDiskUsage()))
 		parts = append(parts, mutedTextStyle.Render(diskInfo))
 	}
 
 	// Active filters
 	var filters []string
 
-	if m.filterStale {
+	if m.workspaces.IsStaleFilterActive() {
 		filters = append(filters, badgeWarnStyle.Render("STALE"))
 	}
 
-	if m.list.FilterValue() != "" {
-		searchBadge := badgeInfoStyle.Render(fmt.Sprintf("🔍 %s", m.list.FilterValue()))
+	if m.ui.List.FilterValue() != "" {
+		searchBadge := badgeInfoStyle.Render(fmt.Sprintf("🔍 %s", m.ui.List.FilterValue()))
 		filters = append(filters, searchBadge)
 	}
 
@@ -102,35 +128,24 @@ func (m Model) renderHeader() string {
 	return header
 }
 
-// renderConfirmPrompt renders the confirmation dialog using the ConfirmDialog component.
-func (m Model) renderConfirmPrompt() string {
-	dialog := components.ConfirmDialog{
-		Active:   m.confirming,
-		Action:   components.ConfirmAction(m.actionToConfirm),
-		TargetID: m.confirmingID,
-	}
-
-	return dialog.Render()
-}
-
 // renderFooter renders the keyboard shortcuts footer.
 func (m Model) renderFooter() string {
 	if m.pushing {
 		return subtleTextStyle.Render("⏳ Push in progress...")
 	}
 
-	if m.confirming {
+	if m.isConfirming() {
 		return ""
 	}
 
 	// Build shortcuts using configured keybindings
-	searchKey := firstKey(m.keybindings.Search)
-	toggleStaleKey := firstKey(m.keybindings.ToggleStale)
-	detailsKey := firstKey(m.keybindings.Details)
-	openKey := firstKey(m.keybindings.OpenEditor)
-	pushKey := firstKey(m.keybindings.Push)
-	closeKey := firstKey(m.keybindings.Close)
-	quitKey := firstKey(m.keybindings.Quit)
+	searchKey := firstKey(m.ui.Keybindings.Search)
+	toggleStaleKey := firstKey(m.ui.Keybindings.ToggleStale)
+	detailsKey := firstKey(m.ui.Keybindings.Details)
+	openKey := firstKey(m.ui.Keybindings.OpenEditor)
+	pushKey := firstKey(m.ui.Keybindings.Push)
+	closeKey := firstKey(m.ui.Keybindings.Close)
+	quitKey := firstKey(m.ui.Keybindings.Quit)
 
 	shortcuts := []string{
 		"[↑↓] navigate",
@@ -151,8 +166,9 @@ func (m Model) renderDetailView() string {
 	var b strings.Builder
 
 	// Loading state
-	if m.loadingDetail {
-		b.WriteString(fmt.Sprintf("%s Loading workspace details...", m.spinner.View()))
+	detailState := m.getDetailState()
+	if detailState != nil && detailState.Loading {
+		b.WriteString(fmt.Sprintf("%s Loading workspace details...", m.ui.Spinner.View()))
 
 		return b.String()
 	}
@@ -186,7 +202,7 @@ func (m Model) renderDetailView() string {
 	b.WriteString("\n\n")
 
 	// Footer with configured keys (cancel keys always exist via WithDefaults)
-	b.WriteString(helpTextStyle.Render(fmt.Sprintf("Press [%s] to return", firstKey(m.keybindings.Cancel))))
+	b.WriteString(helpTextStyle.Render(fmt.Sprintf("Press [%s] to return", firstKey(m.ui.Keybindings.Cancel))))
 
 	return b.String()
 }
