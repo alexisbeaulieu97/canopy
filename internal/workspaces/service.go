@@ -258,12 +258,26 @@ func (s *Service) renameBranchesInRepos(ctx context.Context, workspace domain.Wo
 	return nil
 }
 
-// rollbackBranchRenames attempts to rollback branch renames on failure.
+// rollbackBranchRenames attempts to rollback branch renames on failure (best effort, ignores errors).
 func (s *Service) rollbackBranchRenames(ctx context.Context, workspace domain.Workspace, dirName, oldID, newID string) {
 	for _, repo := range workspace.Repos {
 		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		_ = s.gitEngine.RenameBranch(ctx, worktreePath, newID, oldID) // best effort rollback
 	}
+}
+
+// rollbackBranchRenamesWithError attempts to rollback branch renames and reports errors.
+func (s *Service) rollbackBranchRenamesWithError(ctx context.Context, workspace domain.Workspace, dirName, oldID, newID string) error {
+	var joined error
+
+	for _, repo := range workspace.Repos {
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		if err := s.gitEngine.RenameBranch(ctx, worktreePath, newID, oldID); err != nil {
+			joined = errors.Join(joined, cerrors.WrapGitError(err, fmt.Sprintf("rollback branch rename in repo %s", repo.Name)))
+		}
+	}
+
+	return joined
 }
 
 // updateBranchMetadata loads the workspace and updates the branch name metadata.
@@ -303,20 +317,39 @@ func (s *Service) invalidateWorkspaceCache(ids ...string) {
 	}
 }
 
-// updateBranchMetadataWithRollback updates workspace metadata and rolls back directory rename on failure.
-func (s *Service) updateBranchMetadataWithRollback(oldDirName, newDirName, oldID, newID string) error {
+// updateBranchMetadataWithRollback updates workspace metadata and rolls back branch and directory renames on failure.
+func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspace domain.Workspace, oldDirName, newDirName, oldID, newID string) error {
 	if err := s.updateBranchMetadata(newDirName, newID); err != nil {
-		rollbackErr := s.wsEngine.Rename(newDirName, oldDirName, oldID)
-		if rollbackErr != nil {
+		var rollbackErrors []error
+
+		// Attempt to rollback branch renames first so repo state aligns with directory rollback.
+		if branchRollbackErr := s.rollbackBranchRenamesWithError(ctx, workspace, newDirName, oldID, newID); branchRollbackErr != nil {
+			if s.logger != nil {
+				s.logger.Error("failed to rollback branch renames after metadata update error",
+					"error", branchRollbackErr,
+					"from", newID,
+					"to", oldID,
+				)
+			}
+
+			rollbackErrors = append(rollbackErrors, fmt.Errorf("branch rollback failed: %w", branchRollbackErr))
+		}
+
+		// Then rollback directory rename.
+		if dirRollbackErr := s.wsEngine.Rename(newDirName, oldDirName, oldID); dirRollbackErr != nil {
 			if s.logger != nil {
 				s.logger.Error("failed to rollback workspace rename after metadata update error",
-					"error", rollbackErr,
+					"error", dirRollbackErr,
 					"from", newDirName,
 					"to", oldDirName,
 				)
 			}
 
-			return errors.Join(err, fmt.Errorf("rollback workspace rename failed: %w", rollbackErr))
+			rollbackErrors = append(rollbackErrors, fmt.Errorf("workspace rename rollback failed: %w", dirRollbackErr))
+		}
+
+		if len(rollbackErrors) > 0 {
+			return errors.Join(append([]error{err}, rollbackErrors...)...)
 		}
 
 		return err
@@ -355,7 +388,7 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 	}
 
 	if shouldRenameBranch {
-		if err := s.updateBranchMetadataWithRollback(oldDirName, newDirName, oldID, newID); err != nil {
+		if err := s.updateBranchMetadataWithRollback(ctx, *workspace, oldDirName, newDirName, oldID, newID); err != nil {
 			return err
 		}
 	}
