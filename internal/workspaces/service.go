@@ -16,6 +16,7 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/hooks"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
+	"github.com/alexisbeaulieu97/canopy/internal/validation"
 )
 
 // Service manages workspace operations
@@ -112,6 +113,15 @@ func (s *Service) CreateWorkspace(ctx context.Context, id, branchName string, re
 
 // CreateWorkspaceWithOptions creates a new workspace with configurable options.
 func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName string, repos []domain.Repo, opts CreateOptions) (string, error) {
+	// Validate inputs
+	if err := validation.ValidateWorkspaceID(id); err != nil {
+		return "", err
+	}
+
+	if err := validation.ValidateBranchName(branchName); err != nil {
+		return "", err
+	}
+
 	dirName := id
 
 	// Default branch name is the workspace ID
@@ -222,11 +232,7 @@ func (s *Service) WorkspacePath(workspaceID string) (string, error) {
 
 // validateRenameInputs validates the inputs for renaming a workspace.
 func (s *Service) validateRenameInputs(newID string) error {
-	if newID == "" {
-		return cerrors.NewInvalidArgument("new-id", "cannot be empty")
-	}
-
-	return nil
+	return validation.ValidateWorkspaceID(newID)
 }
 
 // ensureNewIDAvailable checks that the new workspace ID doesn't already exist.
@@ -400,6 +406,15 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 
 // AddRepoToWorkspace adds a repository to an existing workspace
 func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName string) error {
+	// Validate inputs
+	if err := validation.ValidateWorkspaceID(workspaceID); err != nil {
+		return err
+	}
+
+	if err := validation.ValidateRepoName(repoName); err != nil {
+		return err
+	}
+
 	workspace, dirName, err := s.findWorkspace(workspaceID)
 	if err != nil {
 		return err
