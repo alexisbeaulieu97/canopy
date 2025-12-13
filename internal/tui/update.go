@@ -61,6 +61,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 	case workspaceDetailsMsg:
 		m.selectedWS = msg.workspace
 		m.wsStatus = msg.status
+
 		m.wsOrphans = msg.orphans
 		if ds := m.getDetailState(); ds != nil {
 			ds.Loading = false
@@ -137,7 +138,7 @@ func (m *Model) applyFilters() {
 }
 
 // handleListKeyWithState handles key events in the main list view using ViewState pattern.
-func (m *Model) handleListKeyWithState(state *ListViewState, key string) (ViewState, tea.Cmd, bool) {
+func (m *Model) handleListKeyWithState(state *ListViewState, key string) (ViewState, tea.Cmd, bool) { //nolint:gocyclo // key-driven switch covers multiple keybindings
 	if m.pushing {
 		if matchesKey(key, m.ui.Keybindings.Quit) {
 			return state, tea.Quit, true
@@ -214,6 +215,8 @@ func (m *Model) handleConfirmKeyWithState(state *ConfirmViewState, key string) (
 		return &ListViewState{}, nil, true
 	}
 
+	// Swallow all other keys during confirmation to prevent accidental actions.
+	// The user must explicitly confirm (y) or cancel (n/esc).
 	return state, nil, true
 }
 
@@ -236,14 +239,19 @@ func (m *Model) handleEnterWithState() (ViewState, tea.Cmd, bool) {
 		return &ListViewState{}, tea.Quit, true
 	}
 
-	detailState := &DetailViewState{Loading: true}
-
 	wsCopy := selected.Workspace
 	if cached, ok := m.workspaces.GetCachedStatus(selected.Workspace.ID); ok {
-		return detailState, func() tea.Msg {
+		// Show cached status immediately, but still fetch full details (including orphans)
+		// in the background. The UI will update when the full details arrive.
+		detailState := &DetailViewState{Loading: false} // Not loading since we have cached data
+		cachedMsg := func() tea.Msg {
 			return workspaceDetailsMsg{workspace: &wsCopy, status: cached}
-		}, true
+		}
+
+		return detailState, tea.Batch(cachedMsg, m.loadWorkspaceDetails(selected.Workspace.ID)), true
 	}
+
+	detailState := &DetailViewState{Loading: true}
 
 	return detailState, m.loadWorkspaceDetails(selected.Workspace.ID), true
 }

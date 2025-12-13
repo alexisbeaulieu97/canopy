@@ -2,20 +2,23 @@ package tui
 
 import "testing"
 
-func TestViewStateInterface(t *testing.T) {
+func TestViewStateInterface(_ *testing.T) {
 	// Verify all states implement ViewState
-	var _ ViewState = (*ListViewState)(nil)
-	var _ ViewState = (*DetailViewState)(nil)
-	var _ ViewState = (*ConfirmViewState)(nil)
+	var (
+		_ ViewState = (*ListViewState)(nil)
+		_ ViewState = (*DetailViewState)(nil)
+		_ ViewState = (*ConfirmViewState)(nil)
+	)
 }
 
-func TestListViewState_Initial(t *testing.T) {
+func TestListViewState_IsZeroValue(_ *testing.T) {
+	// ListViewState is a zero-value struct with no fields.
+	// Verify it can be created and used as a ViewState.
 	state := &ListViewState{}
 
-	// ListViewState has no fields to initialize
-	if state == nil {
-		t.Error("ListViewState should not be nil")
-	}
+	// Verify it implements ViewState by assigning to the interface type.
+	// This is a compile-time check; if it fails, the code won't compile.
+	var _ ViewState = state
 }
 
 func TestDetailViewState_Loading(t *testing.T) {

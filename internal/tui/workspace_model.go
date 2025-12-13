@@ -8,8 +8,8 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 )
 
-// WorkspaceModel manages workspace data and caches.
-type WorkspaceModel struct {
+// workspaceModel manages workspace data and caches.
+type workspaceModel struct {
 	// allItems contains all loaded workspace items (unfiltered).
 	allItems []workspaceItem
 	// statusCache maps workspace ID to its status.
@@ -22,79 +22,83 @@ type WorkspaceModel struct {
 	staleThresholdDays int
 }
 
-// NewWorkspaceModel creates a new WorkspaceModel with the given stale threshold.
-func NewWorkspaceModel(staleThresholdDays int) *WorkspaceModel {
-	return &WorkspaceModel{
+// newWorkspaceModel creates a new workspaceModel with the given stale threshold.
+func newWorkspaceModel(staleThresholdDays int) *workspaceModel {
+	return &workspaceModel{
 		statusCache:        make(map[string]*domain.WorkspaceStatus),
 		staleThresholdDays: staleThresholdDays,
 	}
 }
 
 // SetItems sets all workspace items and total disk usage.
-func (wm *WorkspaceModel) SetItems(items []workspaceItem, totalUsage int64) {
+func (wm *workspaceModel) SetItems(items []workspaceItem, totalUsage int64) {
 	wm.allItems = items
 	wm.totalDiskUsage = totalUsage
 }
 
 // Items returns all workspace items.
-func (wm *WorkspaceModel) Items() []workspaceItem {
+func (wm *workspaceModel) Items() []workspaceItem {
 	return wm.allItems
 }
 
 // TotalDiskUsage returns the total disk usage across all workspaces.
-func (wm *WorkspaceModel) TotalDiskUsage() int64 {
+func (wm *workspaceModel) TotalDiskUsage() int64 {
 	return wm.totalDiskUsage
 }
 
 // CacheStatus stores a workspace status in the cache.
-func (wm *WorkspaceModel) CacheStatus(id string, status *domain.WorkspaceStatus) {
+func (wm *workspaceModel) CacheStatus(id string, status *domain.WorkspaceStatus) {
 	wm.statusCache[id] = status
 }
 
 // GetCachedStatus retrieves a cached workspace status.
-func (wm *WorkspaceModel) GetCachedStatus(id string) (*domain.WorkspaceStatus, bool) {
+func (wm *workspaceModel) GetCachedStatus(id string) (*domain.WorkspaceStatus, bool) {
 	status, ok := wm.statusCache[id]
 	return status, ok
 }
 
 // ToggleStaleFilter toggles the stale filter on/off.
-func (wm *WorkspaceModel) ToggleStaleFilter() {
+func (wm *workspaceModel) ToggleStaleFilter() {
 	wm.filterStale = !wm.filterStale
 }
 
 // IsStaleFilterActive returns whether the stale filter is active.
-func (wm *WorkspaceModel) IsStaleFilterActive() bool {
+func (wm *workspaceModel) IsStaleFilterActive() bool {
 	return wm.filterStale
 }
 
 // StaleThresholdDays returns the stale threshold in days.
-func (wm *WorkspaceModel) StaleThresholdDays() int {
+func (wm *workspaceModel) StaleThresholdDays() int {
 	return wm.staleThresholdDays
 }
 
 // UpdateItemSummary updates the summary for a workspace item.
-func (wm *WorkspaceModel) UpdateItemSummary(id string, status *domain.WorkspaceStatus, err error) {
+// If err is non-nil, the item is marked as having an error.
+// If status is non-nil (and err is nil), the item is marked as loaded with its summary.
+func (wm *workspaceModel) UpdateItemSummary(id string, status *domain.WorkspaceStatus, err error) {
 	for idx, it := range wm.allItems {
 		if it.Workspace.ID != id {
 			continue
 		}
 
-		if status != nil {
+		// Error and status handling are mutually exclusive.
+		if err != nil {
+			it.Err = err
+			// Don't mark as loaded on error - keep previous state.
+		} else if status != nil {
 			it.Loaded = true
 			it.Err = nil
 			it.Summary = summarizeStatus(status)
 		}
 
-		if err != nil {
-			it.Err = err
-		}
-
 		wm.allItems[idx] = it
+
+		return // Only one item can match; exit early.
 	}
 }
 
 // FindItemByID finds a workspace item by its ID.
-func (wm *WorkspaceModel) FindItemByID(id string) (workspaceItem, bool) {
+func (wm *workspaceModel) FindItemByID(id string) (workspaceItem, bool) {
 	for _, it := range wm.allItems {
 		if it.Workspace.ID == id {
 			return it, true
@@ -105,7 +109,7 @@ func (wm *WorkspaceModel) FindItemByID(id string) (workspaceItem, bool) {
 }
 
 // ApplyFilters returns filtered list items based on current filters and search value.
-func (wm *WorkspaceModel) ApplyFilters(searchValue string) []list.Item {
+func (wm *workspaceModel) ApplyFilters(searchValue string) []list.Item {
 	var items []list.Item
 
 	search := strings.ToLower(strings.TrimSpace(searchValue))

@@ -8,7 +8,7 @@ import (
 )
 
 func TestWorkspaceModel_SetAndGetItems(t *testing.T) {
-	wm := NewWorkspaceModel(30)
+	wm := newWorkspaceModel(30)
 
 	items := []workspaceItem{
 		{Workspace: domain.Workspace{ID: "ws1"}},
@@ -27,7 +27,7 @@ func TestWorkspaceModel_SetAndGetItems(t *testing.T) {
 }
 
 func TestWorkspaceModel_StatusCache(t *testing.T) {
-	wm := NewWorkspaceModel(30)
+	wm := newWorkspaceModel(30)
 
 	status := &domain.WorkspaceStatus{
 		Repos: []domain.RepoStatus{{Name: "repo1"}},
@@ -51,7 +51,7 @@ func TestWorkspaceModel_StatusCache(t *testing.T) {
 }
 
 func TestWorkspaceModel_StaleFilter(t *testing.T) {
-	wm := NewWorkspaceModel(30)
+	wm := newWorkspaceModel(30)
 
 	if wm.IsStaleFilterActive() {
 		t.Error("IsStaleFilterActive() = true, want false initially")
@@ -71,7 +71,7 @@ func TestWorkspaceModel_StaleFilter(t *testing.T) {
 }
 
 func TestWorkspaceModel_StaleThreshold(t *testing.T) {
-	wm := NewWorkspaceModel(45)
+	wm := newWorkspaceModel(45)
 
 	if got := wm.StaleThresholdDays(); got != 45 {
 		t.Errorf("StaleThresholdDays() = %d, want 45", got)
@@ -79,7 +79,7 @@ func TestWorkspaceModel_StaleThreshold(t *testing.T) {
 }
 
 func TestWorkspaceModel_FindItemByID(t *testing.T) {
-	wm := NewWorkspaceModel(30)
+	wm := newWorkspaceModel(30)
 
 	items := []workspaceItem{
 		{Workspace: domain.Workspace{ID: "ws1"}},
@@ -104,7 +104,7 @@ func TestWorkspaceModel_FindItemByID(t *testing.T) {
 }
 
 func TestWorkspaceModel_UpdateItemSummary(t *testing.T) {
-	wm := NewWorkspaceModel(30)
+	wm := newWorkspaceModel(30)
 
 	items := []workspaceItem{
 		{Workspace: domain.Workspace{ID: "ws1"}},
@@ -128,7 +128,7 @@ func TestWorkspaceModel_UpdateItemSummary(t *testing.T) {
 }
 
 func TestWorkspaceModel_ApplyFilters_Search(t *testing.T) {
-	wm := NewWorkspaceModel(30)
+	wm := newWorkspaceModel(30)
 
 	items := []workspaceItem{
 		{Workspace: domain.Workspace{ID: "project-alpha"}},
@@ -158,7 +158,7 @@ func TestWorkspaceModel_ApplyFilters_Search(t *testing.T) {
 }
 
 func TestWorkspaceModel_ApplyFilters_Stale(t *testing.T) {
-	wm := NewWorkspaceModel(30)
+	wm := newWorkspaceModel(30)
 
 	recentTime := time.Now()
 	staleTime := time.Now().AddDate(0, 0, -60) // 60 days ago
@@ -178,6 +178,7 @@ func TestWorkspaceModel_ApplyFilters_Stale(t *testing.T) {
 
 	// With stale filter
 	wm.ToggleStaleFilter()
+
 	result = wm.ApplyFilters("")
 	if len(result) != 1 {
 		t.Errorf("ApplyFilters('') with stale filter = %d items, want 1", len(result))

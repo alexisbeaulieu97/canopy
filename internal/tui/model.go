@@ -13,7 +13,7 @@ type Model struct {
 	// viewState manages the current view mode (list, detail, confirm).
 	viewState ViewState
 	// workspaces manages workspace data and caches.
-	workspaces *WorkspaceModel
+	workspaces *workspaceModel
 	// ui groups UI components (list, spinner, keybindings).
 	ui UIComponents
 	// svc provides workspace operations.
@@ -47,7 +47,7 @@ func NewModel(svc *workspaces.Service, printPath bool) Model {
 
 	return Model{
 		viewState:  &ListViewState{},
-		workspaces: NewWorkspaceModel(threshold),
+		workspaces: newWorkspaceModel(threshold),
 		ui:         NewUIComponents(kb, threshold),
 		svc:        svc,
 		printPath:  printPath,
@@ -110,6 +110,7 @@ func (m Model) getConfirmState() *ConfirmViewState {
 	if cs, ok := m.viewState.(*ConfirmViewState); ok {
 		return cs
 	}
+
 	return nil
 }
 
@@ -118,5 +119,6 @@ func (m Model) getDetailState() *DetailViewState {
 	if ds, ok := m.viewState.(*DetailViewState); ok {
 		return ds
 	}
+
 	return nil
 }
