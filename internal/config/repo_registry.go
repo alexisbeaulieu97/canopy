@@ -138,13 +138,15 @@ func (r *RepoRegistry) Register(alias string, entry RegistryEntry, force bool) e
 	}
 
 	entry.URL = strings.TrimSpace(entry.URL)
+
+	sanitizedURL := giturl.Sanitize(entry.URL)
 	if !giturl.IsURL(entry.URL) {
-		return cerrors.NewInvalidArgument("url", fmt.Sprintf("invalid repository URL: %s", entry.URL))
+		return cerrors.NewInvalidArgument("url", fmt.Sprintf("invalid repository URL: %s", sanitizedURL))
 	}
 
 	if _, exists := r.Repos[alias]; exists && !force {
 		existing := r.Repos[alias]
-		return cerrors.NewRegistryError("register", fmt.Sprintf("alias '%s' already exists for %s", alias, existing.URL), nil)
+		return cerrors.NewRegistryError("register", fmt.Sprintf("alias '%s' already exists for %s", alias, giturl.Sanitize(existing.URL)), nil)
 	}
 
 	entry.Alias = alias
@@ -163,8 +165,10 @@ func (r *RepoRegistry) RegisterWithSuffix(alias string, entry RegistryEntry) (st
 	}
 
 	entry.URL = strings.TrimSpace(entry.URL)
+
+	sanitizedURL := giturl.Sanitize(entry.URL)
 	if !giturl.IsURL(entry.URL) {
-		return "", cerrors.NewInvalidArgument("url", fmt.Sprintf("invalid repository URL: %s", entry.URL))
+		return "", cerrors.NewInvalidArgument("url", fmt.Sprintf("invalid repository URL: %s", sanitizedURL))
 	}
 
 	target := alias

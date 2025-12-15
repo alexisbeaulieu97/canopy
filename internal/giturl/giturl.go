@@ -83,3 +83,25 @@ func DeriveAlias(url string) string {
 
 	return strings.ToLower(name)
 }
+
+// Sanitize removes credentials from a Git URL while preserving its structure.
+// If parsing fails, the original string is returned unchanged.
+func Sanitize(raw string) string {
+	if raw == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+
+	// If the input isn't recognized as a URL (no scheme/host/user), leave it untouched.
+	if parsed.Scheme == "" && parsed.Host == "" && parsed.User == nil {
+		return raw
+	}
+
+	parsed.User = nil
+
+	return parsed.String()
+}

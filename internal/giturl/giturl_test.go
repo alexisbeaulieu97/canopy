@@ -112,3 +112,46 @@ func TestDeriveAlias(t *testing.T) {
 		})
 	}
 }
+
+func TestSanitize(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "https with credentials",
+			input: "https://user:token@github.com/org/repo.git",
+			want:  "https://github.com/org/repo.git",
+		},
+		{
+			name:  "ssh with user",
+			input: "ssh://git@github.com/org/repo.git",
+			want:  "ssh://github.com/org/repo.git",
+		},
+		{
+			name:  "url without credentials",
+			input: "https://github.com/org/repo.git",
+			want:  "https://github.com/org/repo.git",
+		},
+		{
+			name:  "non url stays unchanged",
+			input: "not a url",
+			want:  "not a url",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := Sanitize(tt.input); got != tt.want {
+				t.Errorf("Sanitize(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

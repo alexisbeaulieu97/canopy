@@ -435,7 +435,7 @@ func TestValidateValues(t *testing.T) {
 				}
 
 				if tt.errType != nil && !errors.Is(err, tt.errType) {
-					t.Errorf("ValidateValues() error type mismatch: got %T, want %T", err, tt.errType)
+					t.Errorf("ValidateValues() error does not match expected sentinel: got %v, want %v", err, tt.errType)
 				}
 			} else if err != nil {
 				t.Errorf("ValidateValues() unexpected error: %v", err)
