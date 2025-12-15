@@ -1,4 +1,41 @@
-// Package workspaces contains workspace-level business logic.
+// Package workspaces provides the core business logic for workspace management.
+//
+// This package implements the central orchestration layer for all workspace
+// operations including creation, closure, repository management, and status
+// reporting. It follows hexagonal architecture principles, depending on
+// interfaces (ports) rather than concrete implementations.
+//
+// # Key Operations
+//
+// Workspace lifecycle:
+//   - CreateWorkspace: Creates a new workspace with repositories
+//   - CloseWorkspace: Removes a workspace (with optional archival)
+//   - ReopenWorkspace: Restores an archived workspace
+//   - RenameWorkspace: Renames workspace and associated branches
+//
+// Repository operations:
+//   - AddRepoToWorkspace: Adds a repository to an existing workspace
+//   - RemoveRepoFromWorkspace: Removes a repository from a workspace
+//   - ResolveRepos: Resolves repository names to URL/name pairs
+//
+// Status and queries:
+//   - ListWorkspaces: Lists all active workspaces
+//   - GetWorkspaceStatus: Returns git status for all repos in a workspace
+//   - WorkspacePath: Returns the filesystem path for a workspace
+//
+// # Service Options
+//
+// The Service can be configured with functional options:
+//
+//	svc := workspaces.NewService(cfg, git, storage, logger,
+//	    workspaces.WithHookExecutor(customExecutor),
+//	    workspaces.WithCache(customCache),
+//	)
+//
+// # Thread Safety
+//
+// The Service is safe for concurrent use. Individual operations acquire
+// appropriate locks and the internal cache handles concurrent access.
 package workspaces
 
 import (

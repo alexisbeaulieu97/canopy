@@ -1,4 +1,29 @@
-// Package domain contains core domain models.
+// Package domain contains core domain models for Canopy.
+//
+// This package defines the fundamental data structures used throughout the application.
+// Domain types are pure data with no external dependencies, making them safe to use
+// across all layers of the architecture.
+//
+// # Key Types
+//
+// Workspace-related types:
+//   - Workspace: Represents an active workspace with its repositories
+//   - ClosedWorkspace: Represents an archived workspace
+//   - WorkspaceStatus: Aggregate git status for a workspace
+//   - WorkspaceClosePreview: Preview of what closing a workspace would do
+//   - WorkspaceExport: Portable format for workspace import/export
+//
+// Repository-related types:
+//   - Repo: A git repository with name and URL
+//   - RepoStatus: Git status of a single repository
+//   - RepoRemovePreview: Preview of what removing a repo would do
+//
+// Hook-related types:
+//   - HookContext: Context provided to lifecycle hooks
+//
+// Orphan detection:
+//   - OrphanedWorktree: A worktree with missing or invalid references
+//   - OrphanReason: Why a worktree is considered orphaned
 package domain
 
 import "time"
