@@ -4,17 +4,31 @@ Canopy uses typed error codes for predictable scripting and automation. This doc
 
 ## Exit Codes
 
-Canopy uses the following exit codes:
+Canopy maps error types to specific exit codes for scripting:
 
-| Exit Code | Meaning |
-|-----------|---------|
-| `0` | Success |
-| `1` | General error |
-| `2` | Configuration error |
-| `64` | Command line usage error |
-| `65` | Data format error |
-| `73` | Cannot create output file |
-| `74` | I/O error |
+| Exit Code | Meaning | Error Code |
+|-----------|---------|------------|
+| `0` | Success | - |
+| `1` | General error | (fallback) |
+| `2` | Resource not found | `WORKSPACE_NOT_FOUND`, `REPO_NOT_FOUND` |
+| `3` | Resource already exists | `WORKSPACE_EXISTS`, `REPO_ALREADY_EXISTS` |
+| `4` | Dirty workspace | `REPO_NOT_CLEAN` |
+| `5` | Configuration error | `CONFIG_INVALID`, `CONFIG_VALIDATION` |
+| `6` | Git operation failed | `GIT_OPERATION_FAILED` |
+| `7` | Unknown resource | `UNKNOWN_REPOSITORY` |
+| `8` | Not in workspace | `NOT_IN_WORKSPACE` |
+| `9` | Invalid argument | `INVALID_ARGUMENT`, `PATH_INVALID`, `PATH_NOT_DIRECTORY` |
+| `10` | I/O error | `IO_FAILED` |
+| `11` | Registry error | `REGISTRY_ERROR` |
+| `12` | Command failed | `COMMAND_FAILED` |
+| `13` | Internal error | `INTERNAL_ERROR` |
+| `14` | Repository in use | `REPO_IN_USE` |
+| `15` | Metadata error | `WORKSPACE_METADATA_ERROR` |
+| `16` | No repos configured | `NO_REPOS_CONFIGURED` |
+| `17` | Missing branch | `MISSING_BRANCH_CONFIG` |
+| `18` | Operation aborted | `OPERATION_CANCELLED`, `OPERATION_TIMEOUT`, `HOOK_FAILED`, `HOOK_TIMEOUT` |
+
+**Note:** Exit code mapping is defined in `cmd/canopy/errors.go`. Currently, most CLI commands return exit code 1 for any error. Specific exit codes are available through the error handling infrastructure but not yet fully integrated into all commands.
 
 ## Error Code Reference
 
@@ -80,7 +94,7 @@ Canopy uses the following exit codes:
 
 ## JSON Output Format
 
-When using `--json` flag, errors are returned in this format:
+Some commands support the `--json` flag for machine-readable output. When available, errors are returned in this format:
 
 ```json
 {
@@ -93,6 +107,9 @@ When using `--json` flag, errors are returned in this format:
     }
   }
 }
+```
+
+**Note:** JSON output is not yet implemented for all commands. Commands that support `--json` include `check` and select workspace commands. Other commands return plain text errors.
 ```
 
 ## Scripting Examples

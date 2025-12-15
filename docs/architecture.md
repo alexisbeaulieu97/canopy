@@ -12,7 +12,7 @@ Canopy follows **hexagonal architecture** (also known as ports and adapters), wh
 
 ## Package Structure
 
-```
+```text
 internal/
 ├── app/          # Application container and dependency injection
 ├── config/       # Configuration loading and validation
@@ -167,7 +167,7 @@ type WorkspaceStorage interface {
 
 ### Creating a Workspace
 
-```
+```text
 1. CLI parses command: canopy workspace new TICKET-123 --repos backend
    ↓
 2. App container provides Service with injected dependencies
@@ -185,7 +185,7 @@ type WorkspaceStorage interface {
 
 ### Directory Structure on Disk
 
-```
+```text
 ~/.canopy/
 ├── config.yaml           # User configuration
 ├── registry.yaml         # Repository aliases

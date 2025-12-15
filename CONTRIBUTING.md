@@ -29,9 +29,9 @@ Thank you for your interest in contributing to Canopy! This document provides gu
    cd canopy
    ```
 
-3. **Install development tools**:
+3. **Download dependencies**:
    ```bash
-   make tools
+   make deps
    ```
 
 4. **Verify setup**:
@@ -93,8 +93,8 @@ GOOS=darwin GOARCH=arm64 make build
 # Run all tests
 make test
 
-# Run tests with coverage
-make test-coverage
+# Run tests with race detector
+make test-race
 
 # Run specific package tests
 go test ./internal/workspaces/...
@@ -153,7 +153,7 @@ Integration tests are located in `test/integration/`. They test the full applica
 
 ```bash
 # Run integration tests
-make test-integration
+go test ./test/integration/...
 ```
 
 ## Code Style

@@ -2,8 +2,8 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/github/actions/workflow/status/alexisbeaulieu97/canopy/test.yml?label=tests)](https://github.com/alexisbeaulieu97/canopy/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/alexisbeaulieu97/canopy)](https://goreportcard.com/report/github.com/alexisbeaulieu97/canopy)
+[![Tests](https://img.shields.io/github/actions/workflow/status/alexisbeaulieu97/yard/ci.yml?label=tests)](https://github.com/alexisbeaulieu97/yard/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/alexisbeaulieu97/yard)](https://goreportcard.com/report/github.com/alexisbeaulieu97/yard)
 
 > A bird's-eye view of your git workspaces
 

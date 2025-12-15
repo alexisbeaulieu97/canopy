@@ -10,7 +10,7 @@
 // Workspace lifecycle:
 //   - CreateWorkspace: Creates a new workspace with repositories
 //   - CloseWorkspace: Removes a workspace (with optional archival)
-//   - ReopenWorkspace: Restores an archived workspace
+//   - RestoreWorkspace: Restores an archived workspace
 //   - RenameWorkspace: Renames workspace and associated branches
 //
 // Repository operations:
@@ -31,11 +31,6 @@
 //	    workspaces.WithHookExecutor(customExecutor),
 //	    workspaces.WithCache(customCache),
 //	)
-//
-// # Thread Safety
-//
-// The Service is safe for concurrent use. Individual operations acquire
-// appropriate locks and the internal cache handles concurrent access.
 package workspaces
 
 import (
