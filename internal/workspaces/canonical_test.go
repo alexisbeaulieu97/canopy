@@ -55,7 +55,7 @@ func TestCanonicalRepoService_List(t *testing.T) {
 
 		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
 
-		repos, err := svc.List()
+		repos, err := svc.List(context.Background())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

@@ -936,8 +936,8 @@ func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error)
 }
 
 // ListCanonicalRepos returns a list of all cached repositories
-func (s *Service) ListCanonicalRepos() ([]string, error) {
-	return s.canonical.List()
+func (s *Service) ListCanonicalRepos(ctx context.Context) ([]string, error) {
+	return s.canonical.List(ctx)
 }
 
 // AddCanonicalRepo adds a new repository to the cache and returns the canonical name.

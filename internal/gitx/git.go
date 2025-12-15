@@ -151,34 +151,37 @@ func (g *GitEngine) CreateWorktree(ctx context.Context, repoName, worktreePath, 
 		return cerrors.NewContextError(ctx, "create worktree", repoName)
 	}
 
-	// Check if branch already exists
-	branchExists := g.branchExistsWithContext(ctx, canonicalPath, branchName)
+	// Create the worktree (with existing or new branch)
+	if err := g.createWorktreeDir(ctx, canonicalPath, worktreePath, branchName, repoName); err != nil {
+		return err
+	}
 
-	var (
-		result *ports.CommandResult
-		err    error
-	)
+	// Configure the worktree's remote and branch tracking
+	g.configureWorktreeRemote(ctx, repoName, worktreePath, branchName)
+
+	return nil
+}
+
+// createWorktreeDir creates the git worktree directory.
+func (g *GitEngine) createWorktreeDir(ctx context.Context, canonicalPath, worktreePath, branchName, repoName string) error {
+	// Check if branch already exists
+	branchExists, err := g.branchExistsWithContext(ctx, canonicalPath, branchName)
+	if err != nil {
+		return g.wrapContextError(err, "check branch exists", repoName)
+	}
+
+	var result *ports.CommandResult
 
 	if branchExists {
 		// Branch exists, create worktree for existing branch
-		// git worktree add <path> <branch>
 		result, err = g.RunCommand(ctx, canonicalPath, "worktree", "add", worktreePath, branchName)
 	} else {
-		// Create the worktree with a new branch using git worktree add
-		// git worktree add -b <branch> <path>
+		// Create the worktree with a new branch
 		result, err = g.RunCommand(ctx, canonicalPath, "worktree", "add", "-b", branchName, worktreePath)
 	}
 
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return cerrors.NewOperationCanceledWithTarget("create worktree", repoName)
-		}
-
-		if errors.Is(err, context.DeadlineExceeded) {
-			return cerrors.NewOperationTimeout("create worktree", repoName)
-		}
-
-		return cerrors.WrapGitError(err, "git worktree add")
+		return g.wrapContextError(err, "git worktree add", repoName)
 	}
 
 	if result.ExitCode != 0 {
@@ -188,23 +191,25 @@ func (g *GitEngine) CreateWorktree(ctx context.Context, repoName, worktreePath, 
 		)
 	}
 
-	// Configure the worktree's origin remote to point to the upstream URL
+	return nil
+}
+
+// configureWorktreeRemote configures the worktree's origin remote and branch tracking.
+func (g *GitEngine) configureWorktreeRemote(ctx context.Context, repoName, worktreePath, branchName string) {
 	upstreamURL, err := g.GetUpstreamURL(repoName)
 	if err != nil {
-		// Fall back to default behavior if upstream URL not stored
 		log.Warn("upstream URL not found, worktree will use canonical as origin", "repo", repoName)
-
-		return nil
+		return
 	}
 
 	// Set the origin remote URL in the worktree
-	result, err = g.RunCommand(ctx, worktreePath, "remote", "set-url", "origin", upstreamURL)
+	result, err := g.RunCommand(ctx, worktreePath, "remote", "set-url", "origin", upstreamURL)
 	if err != nil {
-		return cerrors.WrapGitError(err, "set worktree remote URL")
+		log.Warn("failed to set worktree remote URL", "error", err)
+		return
 	}
 
 	if result.ExitCode != 0 {
-		// Non-fatal: worktree exists but may have wrong remote
 		log.Warn("failed to set worktree remote URL", "error", result.Stderr)
 	}
 
@@ -220,21 +225,30 @@ func (g *GitEngine) CreateWorktree(ctx context.Context, repoName, worktreePath, 
 	if err != nil {
 		log.Warn("failed to set branch merge config", "error", err)
 	}
-
-	return nil
 }
 
-// branchExists checks if a branch exists in a repository.
-// Deprecated: use branchExistsWithContext instead.
-func (g *GitEngine) branchExists(repoPath, branchName string) bool {
-	return g.branchExistsWithContext(context.Background(), repoPath, branchName)
+// wrapContextError wraps context-related errors appropriately.
+func (g *GitEngine) wrapContextError(err error, operation, target string) error {
+	if errors.Is(err, context.Canceled) {
+		return cerrors.NewOperationCanceledWithTarget(operation, target)
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return cerrors.NewOperationTimeout(operation, target)
+	}
+
+	return cerrors.WrapGitError(err, operation)
 }
 
 // branchExistsWithContext checks if a branch exists in a repository with context support.
-func (g *GitEngine) branchExistsWithContext(ctx context.Context, repoPath, branchName string) bool {
+// Returns true if the branch exists, false if it doesn't, or an error if the check failed.
+func (g *GitEngine) branchExistsWithContext(ctx context.Context, repoPath, branchName string) (bool, error) {
 	result, err := g.RunCommand(ctx, repoPath, "rev-parse", "--verify", fmt.Sprintf("refs/heads/%s", branchName))
+	if err != nil {
+		return false, err
+	}
 
-	return err == nil && result.ExitCode == 0
+	return result.ExitCode == 0, nil
 }
 
 // Status returns isDirty, unpushedCommits, behindRemote, branchName, error
@@ -244,73 +258,80 @@ func (g *GitEngine) Status(ctx context.Context, path string) (bool, int, int, st
 	ctx, cancel := g.withLocalTimeout(ctx)
 	defer cancel()
 
-	// Get branch name using git CLI (works for both regular repos and worktrees)
+	// Get branch name
+	branchName, err := g.getBranchName(ctx, path)
+	if err != nil {
+		return false, 0, 0, "", err
+	}
+
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return false, 0, 0, "", cerrors.NewContextError(ctx, "status", path)
+	}
+
+	// Check for dirty status
+	isDirty, err := g.checkDirtyStatus(ctx, path)
+	if err != nil {
+		return false, 0, 0, "", err
+	}
+
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return false, 0, 0, "", cerrors.NewContextError(ctx, "status", path)
+	}
+
+	// Get ahead/behind counts
+	unpushed, behind := g.getAheadBehindCounts(ctx, path, branchName)
+
+	return isDirty, unpushed, behind, branchName, nil
+}
+
+// getBranchName returns the current branch name for a repository.
+func (g *GitEngine) getBranchName(ctx context.Context, path string) (string, error) {
 	result, err := g.RunCommand(ctx, path, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return false, 0, 0, "", cerrors.NewOperationCanceledWithTarget("status", path)
-		}
-
-		if errors.Is(err, context.DeadlineExceeded) {
-			return false, 0, 0, "", cerrors.NewOperationTimeout("status", path)
-		}
-
-		return false, 0, 0, "", cerrors.WrapGitError(err, "get HEAD")
+		return "", g.wrapContextError(err, "get HEAD", path)
 	}
 
 	if result.ExitCode != 0 {
-		return false, 0, 0, "", cerrors.NewCommandFailed("git rev-parse HEAD", fmt.Errorf("exit code %d: %s", result.ExitCode, result.Stderr))
+		return "", cerrors.NewCommandFailed("git rev-parse HEAD", fmt.Errorf("exit code %d: %s", result.ExitCode, result.Stderr))
 	}
 
-	branchName := strings.TrimSpace(result.Stdout)
+	return strings.TrimSpace(result.Stdout), nil
+}
 
-	// Check for context cancellation
-	if ctx.Err() != nil {
-		return false, 0, 0, "", cerrors.NewContextError(ctx, "status", path)
-	}
-
-	// Check for dirty status using git status --porcelain
-	result, err = g.RunCommand(ctx, path, "status", "--porcelain")
+// checkDirtyStatus returns whether the repository has uncommitted changes.
+func (g *GitEngine) checkDirtyStatus(ctx context.Context, path string) (bool, error) {
+	result, err := g.RunCommand(ctx, path, "status", "--porcelain")
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return false, 0, 0, "", cerrors.NewOperationCanceledWithTarget("status", path)
-		}
-
-		if errors.Is(err, context.DeadlineExceeded) {
-			return false, 0, 0, "", cerrors.NewOperationTimeout("status", path)
-		}
-
-		return false, 0, 0, "", cerrors.WrapGitError(err, "get status")
+		return false, g.wrapContextError(err, "get status", path)
 	}
 
-	isDirty := strings.TrimSpace(result.Stdout) != ""
+	return strings.TrimSpace(result.Stdout) != "", nil
+}
 
-	// Check for context cancellation
-	if ctx.Err() != nil {
-		return false, 0, 0, "", cerrors.NewContextError(ctx, "status", path)
-	}
-
-	// Get ahead/behind counts using git rev-list
-	unpushed := 0
-	behindRemote := 0
-
-	// Check if remote branch exists
+// getAheadBehindCounts returns the number of commits ahead and behind the remote.
+func (g *GitEngine) getAheadBehindCounts(ctx context.Context, path, branchName string) (unpushed, behind int) {
 	remoteBranch := fmt.Sprintf("origin/%s", branchName)
 	verifyResult, verifyErr := g.RunCommand(ctx, path, "rev-parse", "--verify", remoteBranch)
 
-	if verifyErr == nil && verifyResult.ExitCode == 0 {
-		// Remote branch exists, count ahead/behind
-		revListResult, revListErr := g.RunCommand(ctx, path, "rev-list", "--count", "--left-right", fmt.Sprintf("%s...HEAD", remoteBranch))
-		if revListErr == nil && revListResult.ExitCode == 0 {
-			parts := strings.Fields(strings.TrimSpace(revListResult.Stdout))
-			if len(parts) == 2 {
-				_, _ = fmt.Sscanf(parts[0], "%d", &behindRemote)
-				_, _ = fmt.Sscanf(parts[1], "%d", &unpushed)
-			}
-		}
+	if verifyErr != nil || verifyResult.ExitCode != 0 {
+		return 0, 0
 	}
 
-	return isDirty, unpushed, behindRemote, branchName, nil
+	// Remote branch exists, count ahead/behind
+	revListResult, revListErr := g.RunCommand(ctx, path, "rev-list", "--count", "--left-right", fmt.Sprintf("%s...HEAD", remoteBranch))
+	if revListErr != nil || revListResult.ExitCode != 0 {
+		return 0, 0
+	}
+
+	parts := strings.Fields(strings.TrimSpace(revListResult.Stdout))
+	if len(parts) == 2 {
+		_, _ = fmt.Sscanf(parts[0], "%d", &behind)
+		_, _ = fmt.Sscanf(parts[1], "%d", &unpushed)
+	}
+
+	return unpushed, behind
 }
 
 // Clone clones a repository to the projects root (bare)
