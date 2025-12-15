@@ -14,20 +14,20 @@ var _ ports.GitOperations = (*MockGitOperations)(nil)
 
 // MockGitOperations is a mock implementation of ports.GitOperations for testing.
 type MockGitOperations struct {
-	EnsureCanonicalFunc  func(ctx context.Context, repoURL, repoName string) (*git.Repository, error)
-	CreateWorktreeFunc   func(repoName, worktreePath, branchName string) error
-	StatusFunc           func(path string) (bool, int, int, string, error)
-	CloneFunc            func(ctx context.Context, url, name string) error
-	FetchFunc            func(ctx context.Context, name string) error
-	PullFunc             func(ctx context.Context, path string) error
-	PushFunc             func(ctx context.Context, path, branch string) error
-	ListFunc             func() ([]string, error)
-	CheckoutFunc         func(path, branchName string, create bool) error
-	RenameBranchFunc     func(ctx context.Context, repoPath, oldName, newName string) error
-	RunCommandFunc       func(ctx context.Context, repoPath string, args ...string) (*ports.CommandResult, error)
-	GetUpstreamURLFunc   func(repoName string) (string, error)
-	RemoveWorktreeFunc   func(ctx context.Context, repoName, worktreePath string) error
-	PruneWorktreesFunc   func(ctx context.Context, repoName string) error
+	EnsureCanonicalFunc func(ctx context.Context, repoURL, repoName string) (*git.Repository, error)
+	CreateWorktreeFunc  func(repoName, worktreePath, branchName string) error
+	StatusFunc          func(path string) (bool, int, int, string, error)
+	CloneFunc           func(ctx context.Context, url, name string) error
+	FetchFunc           func(ctx context.Context, name string) error
+	PullFunc            func(ctx context.Context, path string) error
+	PushFunc            func(ctx context.Context, path, branch string) error
+	ListFunc            func() ([]string, error)
+	CheckoutFunc        func(path, branchName string, create bool) error
+	RenameBranchFunc    func(ctx context.Context, repoPath, oldName, newName string) error
+	RunCommandFunc      func(ctx context.Context, repoPath string, args ...string) (*ports.CommandResult, error)
+	GetUpstreamURLFunc  func(repoName string) (string, error)
+	RemoveWorktreeFunc  func(ctx context.Context, repoName, worktreePath string) error
+	PruneWorktreesFunc  func(ctx context.Context, repoName string) error
 }
 
 // NewMockGitOperations creates a new MockGitOperations with default no-op behavior.

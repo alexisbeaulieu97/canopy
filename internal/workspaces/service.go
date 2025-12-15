@@ -761,6 +761,9 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, forc
 		return nil, err
 	}
 
+	// Remove worktrees from canonical repos before deleting workspace directory
+	s.removeWorkspaceWorktrees(targetWorkspace, dirName)
+
 	if err := s.wsEngine.Delete(dirName); err != nil {
 		_ = s.wsEngine.DeleteClosed(archived.Path)
 		return nil, cerrors.NewIOFailed("remove workspace directory", err)
@@ -1054,6 +1057,12 @@ func (s *Service) DetectOrphansForWorkspace(workspaceID string) ([]domain.Orphan
 	return s.orphanService.DetectOrphansForWorkspace(workspaceID)
 }
 
+// PruneAllWorktrees cleans up stale worktree references from all canonical repos.
+// This removes worktree entries that point to non-existent directories.
+func (s *Service) PruneAllWorktrees(ctx context.Context) error {
+	return s.orphanService.PruneAllWorktrees(ctx)
+}
+
 func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, error) {
 	// Check cache first
 	if ws, dirName, ok := s.cache.Get(workspaceID); ok {
@@ -1100,6 +1109,29 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, act
 	}
 
 	return nil
+}
+
+// removeWorkspaceWorktrees removes all worktrees from canonical repos for a workspace.
+// This is called during workspace close to properly clean up git worktree references.
+// Errors are logged but not returned since the workspace is being deleted anyway.
+func (s *Service) removeWorkspaceWorktrees(workspace *domain.Workspace, dirName string) {
+	if s.gitEngine == nil {
+		return
+	}
+
+	for _, repo := range workspace.Repos {
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+
+		//nolint:contextcheck // Using background context since this is cleanup during close
+		if err := s.gitEngine.RemoveWorktree(context.Background(), repo.Name, worktreePath); err != nil {
+			if s.logger != nil {
+				s.logger.Warn("Failed to remove worktree from canonical repo",
+					"repo", repo.Name,
+					"path", worktreePath,
+					"error", err)
+			}
+		}
+	}
 }
 
 // ExportWorkspace creates a portable export of a workspace definition.

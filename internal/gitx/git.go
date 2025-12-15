@@ -139,16 +139,31 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 		return cerrors.WrapGitError(err, "open canonical repo")
 	}
 
-	// Create the worktree with a new branch using git worktree add
-	// git worktree add -b <branch> <path>
-	result, err := g.RunCommand(context.Background(), canonicalPath, "worktree", "add", "-b", branchName, worktreePath)
+	// Check if branch already exists
+	branchExists := g.branchExists(canonicalPath, branchName)
+
+	var (
+		result *ports.CommandResult
+		err    error
+	)
+
+	if branchExists {
+		// Branch exists, create worktree for existing branch
+		// git worktree add <path> <branch>
+		result, err = g.RunCommand(context.Background(), canonicalPath, "worktree", "add", worktreePath, branchName)
+	} else {
+		// Create the worktree with a new branch using git worktree add
+		// git worktree add -b <branch> <path>
+		result, err = g.RunCommand(context.Background(), canonicalPath, "worktree", "add", "-b", branchName, worktreePath)
+	}
+
 	if err != nil {
 		return cerrors.WrapGitError(err, "git worktree add")
 	}
 
 	if result.ExitCode != 0 {
 		return cerrors.NewCommandFailed(
-			fmt.Sprintf("git worktree add -b %s %s", branchName, worktreePath),
+			fmt.Sprintf("git worktree add %s %s", branchName, worktreePath),
 			fmt.Errorf("exit code %d: %s", result.ExitCode, result.Stderr),
 		)
 	}
@@ -174,13 +189,13 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 	}
 
 	// Set up branch tracking for proper push/pull behavior
-	result, err = g.RunCommand(context.Background(), worktreePath,
+	_, err = g.RunCommand(context.Background(), worktreePath,
 		"config", fmt.Sprintf("branch.%s.remote", branchName), "origin")
 	if err != nil {
 		log.Warn("failed to set branch remote", "error", err)
 	}
 
-	result, err = g.RunCommand(context.Background(), worktreePath,
+	_, err = g.RunCommand(context.Background(), worktreePath,
 		"config", fmt.Sprintf("branch.%s.merge", branchName), fmt.Sprintf("refs/heads/%s", branchName))
 	if err != nil {
 		log.Warn("failed to set branch merge config", "error", err)
@@ -189,46 +204,53 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 	return nil
 }
 
+// branchExists checks if a branch exists in a repository.
+func (g *GitEngine) branchExists(repoPath, branchName string) bool {
+	result, err := g.RunCommand(context.Background(), repoPath, "rev-parse", "--verify", fmt.Sprintf("refs/heads/%s", branchName))
+
+	return err == nil && result.ExitCode == 0
+}
+
 // Status returns isDirty, unpushedCommits, behindRemote, branchName, error
+// Uses git CLI for worktree-compatible status checking.
 func (g *GitEngine) Status(path string) (bool, int, int, string, error) {
-	r, err := git.PlainOpen(path)
+	// Get branch name using git CLI (works for both regular repos and worktrees)
+	result, err := g.RunCommand(context.Background(), path, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
-		return false, 0, 0, "", cerrors.WrapGitError(err, "open repo")
+		return false, 0, 0, "", cerrors.WrapGitError(err, "get HEAD")
 	}
 
-	w, err := r.Worktree()
-	if err != nil {
-		return false, 0, 0, "", cerrors.WrapGitError(err, "get worktree")
+	if result.ExitCode != 0 {
+		return false, 0, 0, "", cerrors.NewCommandFailed("git rev-parse HEAD", fmt.Errorf("exit code %d: %s", result.ExitCode, result.Stderr))
 	}
 
-	status, err := w.Status()
+	branchName := strings.TrimSpace(result.Stdout)
+
+	// Check for dirty status using git status --porcelain
+	result, err = g.RunCommand(context.Background(), path, "status", "--porcelain")
 	if err != nil {
 		return false, 0, 0, "", cerrors.WrapGitError(err, "get status")
 	}
 
-	isDirty := !status.IsClean()
+	isDirty := strings.TrimSpace(result.Stdout) != ""
 
-	// Get current branch
-	head, err := r.Head()
-	if err != nil {
-		return isDirty, 0, 0, "", cerrors.WrapGitError(err, "get HEAD")
-	}
-
-	branchName := head.Name().Short()
-
-	// Check unpushed commits using pure go-git
+	// Get ahead/behind counts using git rev-list
 	unpushed := 0
 	behindRemote := 0
 
-	remoteName := "origin"
-	remoteRefName := plumbing.NewRemoteReferenceName(remoteName, branchName)
+	// Check if remote branch exists
+	remoteBranch := fmt.Sprintf("origin/%s", branchName)
+	verifyResult, verifyErr := g.RunCommand(context.Background(), path, "rev-parse", "--verify", remoteBranch)
 
-	if ref, refErr := r.Reference(remoteRefName, true); refErr == nil {
-		// Calculate ahead/behind using go-git rev walking
-		ahead, behind, countErr := g.countAheadBehind(r, head.Hash(), ref.Hash())
-		if countErr == nil {
-			unpushed = ahead
-			behindRemote = behind
+	if verifyErr == nil && verifyResult.ExitCode == 0 {
+		// Remote branch exists, count ahead/behind
+		revListResult, revListErr := g.RunCommand(context.Background(), path, "rev-list", "--count", "--left-right", fmt.Sprintf("%s...HEAD", remoteBranch))
+		if revListErr == nil && revListResult.ExitCode == 0 {
+			parts := strings.Fields(strings.TrimSpace(revListResult.Stdout))
+			if len(parts) == 2 {
+				_, _ = fmt.Sscanf(parts[0], "%d", &behindRemote)
+				_, _ = fmt.Sscanf(parts[1], "%d", &unpushed)
+			}
 		}
 	}
 
@@ -682,9 +704,6 @@ func (g *GitEngine) withDefaultTimeout(ctx context.Context) (context.Context, co
 
 	return context.WithTimeout(ctx, DefaultNetworkTimeout)
 }
-
-// canopyUpstreamURLKey is the git config key for storing the upstream URL.
-const canopyUpstreamURLKey = "canopy.upstreamUrl"
 
 // storeUpstreamURL stores the upstream URL in the repository's git config.
 // This allows worktrees to be configured with the correct remote.

@@ -183,19 +183,15 @@ func TestGitEngine_CreateWorktree(t *testing.T) {
 			t.Fatalf("CreateWorktree failed: %v", err)
 		}
 
-		// Verify worktree exists and is on the correct branch
-		repo, err := git.PlainOpen(worktreePath)
+		// Verify worktree exists and is on the correct branch using git CLI
+		// (go-git doesn't fully support worktrees)
+		_, _, _, branchName, err := engine.Status(worktreePath)
 		if err != nil {
-			t.Fatalf("failed to open worktree: %v", err)
+			t.Fatalf("failed to get worktree status: %v", err)
 		}
 
-		head, err := repo.Head()
-		if err != nil {
-			t.Fatalf("failed to get HEAD: %v", err)
-		}
-
-		if head.Name().Short() != "feature-branch" {
-			t.Errorf("expected branch feature-branch, got %s", head.Name().Short())
+		if branchName != "feature-branch" {
+			t.Errorf("expected branch feature-branch, got %s", branchName)
 		}
 
 		// Verify files exist
