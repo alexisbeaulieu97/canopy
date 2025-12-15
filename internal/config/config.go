@@ -1,3 +1,42 @@
+// Package config provides configuration loading and management for Canopy.
+//
+// Configuration is loaded from YAML files in standard locations:
+//   - ./config.yaml (current directory)
+//   - ~/.canopy/config.yaml
+//   - ~/.config/canopy/config.yaml
+//
+// Environment variables with the CANOPY_ prefix can override configuration values.
+//
+// # Configuration Options
+//
+// Key configuration options include:
+//   - projects_root: Directory for canonical bare repositories
+//   - workspaces_root: Directory for active workspaces
+//   - closed_root: Directory for archived workspace metadata
+//   - workspace_close_default: Default close behavior ("delete" or "archive")
+//   - stale_threshold_days: Days before a workspace is considered stale
+//
+// # Workspace Patterns
+//
+// Workspace patterns allow automatic repository assignment based on workspace ID:
+//
+//	defaults:
+//	  workspace_patterns:
+//	    - pattern: "^PROJ-"
+//	      repos: ["backend", "frontend"]
+//
+// # Lifecycle Hooks
+//
+// Hooks execute commands at workspace lifecycle events:
+//
+//	hooks:
+//	  post_create:
+//	    - command: "npm install"
+//	      repos: ["frontend"]
+//	  pre_close:
+//	    - command: "git stash"
+//
+// See the configuration documentation for complete reference.
 package config
 
 import (

@@ -10,6 +10,8 @@ Welcome to the Canopy documentation. This guide will help you get started and ma
 | [Usage Guide](usage.md) | Complete workflow and command reference |
 | [Configuration](configuration.md) | All configuration options explained |
 | [Hooks](hooks.md) | Automate tasks with lifecycle hooks |
+| [Error Codes](error-codes.md) | Error codes reference for scripting |
+| [Architecture](architecture.md) | Technical architecture for contributors |
 
 ## What is Canopy?
 

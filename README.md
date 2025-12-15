@@ -2,6 +2,8 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/github/actions/workflow/status/alexisbeaulieu97/canopy/test.yml?label=tests)](https://github.com/alexisbeaulieu97/canopy/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/alexisbeaulieu97/canopy)](https://goreportcard.com/report/github.com/alexisbeaulieu97/canopy)
 
 > A bird's-eye view of your git workspaces
 
@@ -76,6 +78,8 @@ See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 | [Usage Guide](docs/usage.md) | Complete workflow and examples |
 | [Configuration](docs/configuration.md) | All configuration options |
 | [Hooks](docs/hooks.md) | Automate with lifecycle hooks |
+| [Error Codes](docs/error-codes.md) | Error codes for scripting |
+| [Architecture](docs/architecture.md) | Technical architecture overview |
 
 ## Command Reference
 
@@ -174,6 +178,48 @@ defaults:
 ```
 
 See [Configuration Reference](docs/configuration.md) for all options.
+
+## Troubleshooting
+
+### Common Issues
+
+**Workspace creation fails with "unknown repository"**
+
+The repository must be cloned or registered first:
+```bash
+# Clone the repository
+canopy repo add https://github.com/myorg/repo.git
+
+# Or register an alias
+canopy repo register repo https://github.com/myorg/repo.git
+```
+
+**Git operations timeout**
+
+Configure retry settings in `~/.canopy/config.yaml`:
+```yaml
+git:
+  retry:
+    max_attempts: 5
+    initial_delay: "2s"
+    max_delay: "60s"
+```
+
+**"Repository has uncommitted changes" error**
+
+Either commit/stash changes or use `--force`:
+```bash
+canopy workspace close PROJ-123 --force
+```
+
+**Configuration validation errors**
+
+Run `canopy check` to validate your configuration:
+```bash
+canopy check
+```
+
+For machine-readable error handling, see the [Error Codes Reference](docs/error-codes.md).
 
 ## License
 
