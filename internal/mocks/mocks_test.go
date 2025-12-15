@@ -152,8 +152,8 @@ func TestMockDiskUsage(t *testing.T) {
 		t.Parallel()
 
 		mock := mocks.NewMockDiskUsage()
-		mock.CachedUsage("/test")
-		mock.Calculate("/test")
+		_, _, _ = mock.CachedUsage("/test")
+		_, _, _ = mock.Calculate("/test")
 		mock.InvalidateCache("/test")
 		mock.ClearCache()
 

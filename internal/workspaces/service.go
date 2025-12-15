@@ -253,7 +253,7 @@ func (s *Service) runPostCreateHooks(id, dirName, branchName string, repos []dom
 		return nil
 	}
 
-	hookCtx := hooks.HookContext{
+	hookCtx := domain.HookContext{
 		WorkspaceID:   id,
 		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
 		BranchName:    branchName,
@@ -630,7 +630,7 @@ func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts
 	if !opts.SkipHooks {
 		hooksConfig := s.config.GetHooks()
 		if len(hooksConfig.PreClose) > 0 {
-			hookCtx := hooks.HookContext{
+			hookCtx := domain.HookContext{
 				WorkspaceID:   workspaceID,
 				WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
 				BranchName:    targetWorkspace.BranchName,
@@ -682,7 +682,7 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, forc
 	if !opts.SkipHooks {
 		hooksConfig := s.config.GetHooks()
 		if len(hooksConfig.PreClose) > 0 {
-			hookCtx := hooks.HookContext{
+			hookCtx := domain.HookContext{
 				WorkspaceID:   workspaceID,
 				WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
 				BranchName:    targetWorkspace.BranchName,
@@ -740,7 +740,7 @@ func (s *Service) RunHooks(workspaceID string, phase HookPhase, continueOnError 
 		return nil
 	}
 
-	hookCtx := hooks.HookContext{
+	hookCtx := domain.HookContext{
 		WorkspaceID:   workspaceID,
 		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
 		BranchName:    workspace.BranchName,

@@ -2,6 +2,8 @@
 package mocks
 
 import (
+	"sync"
+
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
@@ -10,7 +12,10 @@ import (
 var _ ports.WorkspaceCache = (*MockWorkspaceCache)(nil)
 
 // MockWorkspaceCache is a mock implementation of ports.WorkspaceCache for testing.
+// It is safe for concurrent use.
 type MockWorkspaceCache struct {
+	mu sync.RWMutex
+
 	// GetFunc is called when Get is invoked.
 	GetFunc func(id string) (*domain.Workspace, string, bool)
 
@@ -70,13 +75,18 @@ func NewMockWorkspaceCache() *MockWorkspaceCache {
 
 // Get calls the mock function if set, otherwise returns from internal storage.
 func (m *MockWorkspaceCache) Get(id string) (*domain.Workspace, string, bool) {
+	m.mu.Lock()
 	m.GetCalls = append(m.GetCalls, id)
+	m.mu.Unlock()
 
 	if m.GetFunc != nil {
 		return m.GetFunc(id)
 	}
 
+	m.mu.RLock()
 	entry, ok := m.entries[id]
+	m.mu.RUnlock()
+
 	if !ok {
 		return nil, "", false
 	}
@@ -86,60 +96,81 @@ func (m *MockWorkspaceCache) Get(id string) (*domain.Workspace, string, bool) {
 
 // Set calls the mock function if set, otherwise stores in internal storage.
 func (m *MockWorkspaceCache) Set(id string, ws *domain.Workspace, dirName string) {
+	m.mu.Lock()
 	m.SetCalls = append(m.SetCalls, SetCall{
 		ID:        id,
 		Workspace: ws,
 		DirName:   dirName,
 	})
+	m.mu.Unlock()
 
 	if m.SetFunc != nil {
 		m.SetFunc(id, ws, dirName)
 		return
 	}
 
+	m.mu.Lock()
 	m.entries[id] = cacheEntry{
 		workspace: ws,
 		dirName:   dirName,
 	}
+	m.mu.Unlock()
 }
 
 // Invalidate calls the mock function if set, otherwise removes from internal storage.
 func (m *MockWorkspaceCache) Invalidate(id string) {
+	m.mu.Lock()
 	m.InvalidateCalls = append(m.InvalidateCalls, id)
+	m.mu.Unlock()
 
 	if m.InvalidateFunc != nil {
 		m.InvalidateFunc(id)
 		return
 	}
 
+	m.mu.Lock()
 	delete(m.entries, id)
+	m.mu.Unlock()
 }
 
 // InvalidateAll calls the mock function if set, otherwise clears internal storage.
 func (m *MockWorkspaceCache) InvalidateAll() {
+	m.mu.Lock()
 	m.InvalidateAllCalls++
+	m.mu.Unlock()
 
 	if m.InvalidateAllFunc != nil {
 		m.InvalidateAllFunc()
 		return
 	}
 
+	m.mu.Lock()
 	m.entries = make(map[string]cacheEntry)
+	m.mu.Unlock()
 }
 
 // Size calls the mock function if set, otherwise returns internal storage size.
 func (m *MockWorkspaceCache) Size() int {
+	m.mu.Lock()
 	m.SizeCalls++
+	m.mu.Unlock()
 
 	if m.SizeFunc != nil {
 		return m.SizeFunc()
 	}
 
-	return len(m.entries)
+	m.mu.RLock()
+	size := len(m.entries)
+	m.mu.RUnlock()
+
+	return size
 }
 
 // ResetCalls clears all recorded calls.
 func (m *MockWorkspaceCache) ResetCalls() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.GetCalls = make([]string, 0)
 	m.SetCalls = make([]SetCall, 0)
 	m.InvalidateCalls = make([]string, 0)
@@ -149,5 +180,8 @@ func (m *MockWorkspaceCache) ResetCalls() {
 
 // ResetStorage clears the internal storage.
 func (m *MockWorkspaceCache) ResetStorage() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.entries = make(map[string]cacheEntry)
 }

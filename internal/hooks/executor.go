@@ -31,6 +31,7 @@ var _ ports.HookExecutor = (*Executor)(nil)
 const DefaultTimeout = 30 * time.Second
 
 // HookContext is an alias for domain.HookContext for backwards compatibility.
+//
 // Deprecated: Use domain.HookContext directly.
 type HookContext = domain.HookContext
 
