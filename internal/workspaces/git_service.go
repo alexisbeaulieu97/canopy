@@ -12,6 +12,9 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
+// defaultMaxParallel is the maximum number of parallel git operations.
+const defaultMaxParallel = 8
+
 // GitService defines the interface for git operations on workspaces.
 type GitService interface {
 	// PushWorkspace pushes all repos for a workspace.

@@ -92,14 +92,14 @@ func TestWorkspaceOrphanService_DetectOrphansForWorkspace(t *testing.T) {
 		wantErr       bool
 	}{
 		{
-			name: "workspace with matching canonical",
+			name: "workspace with matching canonical but missing directory",
 			workspace: &domain.Workspace{
 				ID:    "ws1",
 				Repos: []domain.Repo{{Name: "repo1"}},
 			},
 			dirName:       "ws1",
 			canonicalList: []string{"repo1"},
-			wantOrphans:   0, // Will be 1 because worktree directory doesn't exist
+			wantOrphans:   1, // Orphan because worktree directory doesn't exist
 			wantErr:       false,
 		},
 		{
@@ -145,9 +145,8 @@ func TestWorkspaceOrphanService_DetectOrphansForWorkspace(t *testing.T) {
 				t.Errorf("DetectOrphansForWorkspace() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			if !tt.wantErr && err == nil && tt.wantOrphans > 0 && len(orphans) < tt.wantOrphans {
-				// Note: we can't easily test the full flow without a real filesystem
-				t.Logf("Got %d orphans (test expects filesystem to not exist)", len(orphans))
+			if !tt.wantErr && len(orphans) != tt.wantOrphans {
+				t.Errorf("DetectOrphansForWorkspace() got %d orphans, want %d", len(orphans), tt.wantOrphans)
 			}
 		})
 	}

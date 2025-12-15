@@ -123,6 +123,8 @@ func (s *WorkspaceOrphanService) checkWorkspaceForOrphans(
 }
 
 // checkRepoForOrphan checks if a single repo is orphaned. Returns nil if not orphaned.
+// For non-existence errors (permission issues, I/O errors, etc.), it logs the error
+// and returns nil rather than marking the repo as orphaned.
 func (s *WorkspaceOrphanService) checkRepoForOrphan(
 	workspaceID, repoName, worktreePath string,
 	canonicalSet map[string]bool,
@@ -139,36 +141,42 @@ func (s *WorkspaceOrphanService) checkRepoForOrphan(
 
 	// Check 2: Worktree directory exists
 	if _, err := os.Stat(worktreePath); err != nil {
-		s.logStatError("worktree directory", workspaceID, repoName, worktreePath, err)
-
-		return &domain.OrphanedWorktree{
-			WorkspaceID:  workspaceID,
-			RepoName:     repoName,
-			WorktreePath: worktreePath,
-			Reason:       domain.OrphanReasonDirectoryMissing,
+		if os.IsNotExist(err) {
+			return &domain.OrphanedWorktree{
+				WorkspaceID:  workspaceID,
+				RepoName:     repoName,
+				WorktreePath: worktreePath,
+				Reason:       domain.OrphanReasonDirectoryMissing,
+			}
 		}
+		// Non-existence error (permission, I/O, etc.) - log and skip
+		if s.logger != nil {
+			s.logger.Warn("Unexpected error checking worktree directory",
+				"workspace", workspaceID, "repo", repoName, "path", worktreePath, "error", err)
+		}
+
+		return nil
 	}
 
 	// Check 3: Valid git directory
 	gitDir := filepath.Join(worktreePath, ".git")
 	if _, err := os.Stat(gitDir); err != nil {
-		s.logStatError(".git directory", workspaceID, repoName, gitDir, err)
-
-		return &domain.OrphanedWorktree{
-			WorkspaceID:  workspaceID,
-			RepoName:     repoName,
-			WorktreePath: worktreePath,
-			Reason:       domain.OrphanReasonInvalidGitDir,
+		if os.IsNotExist(err) {
+			return &domain.OrphanedWorktree{
+				WorkspaceID:  workspaceID,
+				RepoName:     repoName,
+				WorktreePath: worktreePath,
+				Reason:       domain.OrphanReasonInvalidGitDir,
+			}
 		}
+		// Non-existence error (permission, I/O, etc.) - log and skip
+		if s.logger != nil {
+			s.logger.Warn("Unexpected error checking .git directory",
+				"workspace", workspaceID, "repo", repoName, "path", gitDir, "error", err)
+		}
+
+		return nil
 	}
 
 	return nil
-}
-
-// logStatError logs stat errors if they are not IsNotExist errors.
-func (s *WorkspaceOrphanService) logStatError(itemType, workspaceID, repoName, path string, err error) {
-	if !os.IsNotExist(err) && s.logger != nil {
-		s.logger.Debug("Failed to stat "+itemType,
-			"workspace", workspaceID, "repo", repoName, "path", path, "error", err)
-	}
 }

@@ -937,8 +937,6 @@ type RepoGitResult struct {
 	Error    error
 }
 
-const defaultMaxParallel = 10
-
 // RunGitInWorkspace executes an arbitrary git command across all repos in a workspace.
 func (s *Service) RunGitInWorkspace(ctx context.Context, workspaceID string, args []string, opts GitRunOptions) ([]RepoGitResult, error) {
 	return s.gitService.RunGitInWorkspace(ctx, workspaceID, args, opts)

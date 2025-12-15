@@ -87,8 +87,10 @@ func TestWorkspaceGitService_PushWorkspace(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
+			pushCount := 0
 			mockGit := mocks.NewMockGitOperations()
 			mockGit.PushFunc = func(_ context.Context, _, _ string) error {
+				pushCount++
 				return tt.pushErr
 			}
 
@@ -108,6 +110,10 @@ func TestWorkspaceGitService_PushWorkspace(t *testing.T) {
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("PushWorkspace() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if pushCount != tt.expectedPushes {
+				t.Errorf("PushWorkspace() push count = %d, want %d", pushCount, tt.expectedPushes)
 			}
 		})
 	}
