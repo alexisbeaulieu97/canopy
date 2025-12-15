@@ -286,7 +286,7 @@ func (s *Service) cloneWorkspaceRepos(ctx context.Context, repos []domain.Repo, 
 
 		// Create worktree
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
-		if err := s.gitEngine.CreateWorktree(repo.Name, worktreePath, branchName); err != nil {
+		if err := s.gitEngine.CreateWorktree(ctx, repo.Name, worktreePath, branchName); err != nil {
 			return cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
 		}
 	}
@@ -599,7 +599,7 @@ func (s *Service) ensureWorkspaceWorktree(ctx context.Context, repo domain.Repo,
 	}
 
 	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
-	if err := s.gitEngine.CreateWorktree(repo.Name, worktreePath, branchName); err != nil {
+	if err := s.gitEngine.CreateWorktree(ctx, repo.Name, worktreePath, branchName); err != nil {
 		return cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
 	}
 
@@ -909,7 +909,7 @@ func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error)
 	for _, repo := range targetWorkspace.Repos {
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
-		isDirty, unpushed, behind, branch, err := s.gitEngine.Status(worktreePath)
+		isDirty, unpushed, behind, branch, err := s.gitEngine.Status(context.Background(), worktreePath)
 		if err != nil {
 			repoStatuses = append(repoStatuses, domain.RepoStatus{
 				Name:   repo.Name,
@@ -1089,7 +1089,7 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, act
 	for _, repo := range workspace.Repos {
 		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
-		isDirty, _, _, _, err := s.gitEngine.Status(worktreePath)
+		isDirty, _, _, _, err := s.gitEngine.Status(context.Background(), worktreePath)
 		if err != nil {
 			// Log the error but continue checking other repos.
 			// Status failures are non-fatal here as we're checking for uncommitted changes.

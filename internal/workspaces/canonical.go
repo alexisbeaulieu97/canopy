@@ -50,7 +50,7 @@ func NewCanonicalRepoService(
 
 // List returns a list of all canonical repository names.
 func (c *CanonicalRepoService) List() ([]string, error) {
-	return c.gitEngine.List()
+	return c.gitEngine.List(context.Background())
 }
 
 // Add clones a new repository to the canonical store and returns the canonical name.

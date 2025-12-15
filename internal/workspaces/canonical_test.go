@@ -47,7 +47,7 @@ func TestCanonicalRepoService_List(t *testing.T) {
 		t.Parallel()
 
 		mockGit := mocks.NewMockGitOperations()
-		mockGit.ListFunc = func() ([]string, error) {
+		mockGit.ListFunc = func(_ context.Context) ([]string, error) {
 			return []string{"repo-a", "repo-b"}, nil
 		}
 

@@ -50,6 +50,9 @@ import (
 // DefaultNetworkTimeout is the default timeout for network operations (clone, fetch, push, pull).
 const DefaultNetworkTimeout = 5 * time.Minute
 
+// DefaultLocalTimeout is the default timeout for local git operations (status, checkout, list, worktree).
+const DefaultLocalTimeout = 30 * time.Second
+
 // errStopIteration is a sentinel error used to break out of commit iteration loops.
 var errStopIteration = errors.New("stop iteration")
 
@@ -131,7 +134,11 @@ func (g *GitEngine) EnsureCanonical(ctx context.Context, repoURL, repoName strin
 // CreateWorktree creates a true git worktree for a workspace branch.
 // Uses git CLI via RunCommand as go-git's worktree API doesn't support
 // creating worktrees for non-existent branches.
-func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) error {
+func (g *GitEngine) CreateWorktree(ctx context.Context, repoName, worktreePath, branchName string) error {
+	// Apply default local timeout if context has no deadline
+	ctx, cancel := g.withLocalTimeout(ctx)
+	defer cancel()
+
 	canonicalPath := filepath.Join(g.ProjectsRoot, repoName)
 
 	// Ensure canonical repo exists
@@ -139,8 +146,13 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 		return cerrors.WrapGitError(err, "open canonical repo")
 	}
 
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return cerrors.NewContextError(ctx, "create worktree", repoName)
+	}
+
 	// Check if branch already exists
-	branchExists := g.branchExists(canonicalPath, branchName)
+	branchExists := g.branchExistsWithContext(ctx, canonicalPath, branchName)
 
 	var (
 		result *ports.CommandResult
@@ -150,14 +162,22 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 	if branchExists {
 		// Branch exists, create worktree for existing branch
 		// git worktree add <path> <branch>
-		result, err = g.RunCommand(context.Background(), canonicalPath, "worktree", "add", worktreePath, branchName)
+		result, err = g.RunCommand(ctx, canonicalPath, "worktree", "add", worktreePath, branchName)
 	} else {
 		// Create the worktree with a new branch using git worktree add
 		// git worktree add -b <branch> <path>
-		result, err = g.RunCommand(context.Background(), canonicalPath, "worktree", "add", "-b", branchName, worktreePath)
+		result, err = g.RunCommand(ctx, canonicalPath, "worktree", "add", "-b", branchName, worktreePath)
 	}
 
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return cerrors.NewOperationCanceledWithTarget("create worktree", repoName)
+		}
+
+		if errors.Is(err, context.DeadlineExceeded) {
+			return cerrors.NewOperationTimeout("create worktree", repoName)
+		}
+
 		return cerrors.WrapGitError(err, "git worktree add")
 	}
 
@@ -178,7 +198,7 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 	}
 
 	// Set the origin remote URL in the worktree
-	result, err = g.RunCommand(context.Background(), worktreePath, "remote", "set-url", "origin", upstreamURL)
+	result, err = g.RunCommand(ctx, worktreePath, "remote", "set-url", "origin", upstreamURL)
 	if err != nil {
 		return cerrors.WrapGitError(err, "set worktree remote URL")
 	}
@@ -189,13 +209,13 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 	}
 
 	// Set up branch tracking for proper push/pull behavior
-	_, err = g.RunCommand(context.Background(), worktreePath,
+	_, err = g.RunCommand(ctx, worktreePath,
 		"config", fmt.Sprintf("branch.%s.remote", branchName), "origin")
 	if err != nil {
 		log.Warn("failed to set branch remote", "error", err)
 	}
 
-	_, err = g.RunCommand(context.Background(), worktreePath,
+	_, err = g.RunCommand(ctx, worktreePath,
 		"config", fmt.Sprintf("branch.%s.merge", branchName), fmt.Sprintf("refs/heads/%s", branchName))
 	if err != nil {
 		log.Warn("failed to set branch merge config", "error", err)
@@ -205,18 +225,36 @@ func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) er
 }
 
 // branchExists checks if a branch exists in a repository.
+// Deprecated: use branchExistsWithContext instead.
 func (g *GitEngine) branchExists(repoPath, branchName string) bool {
-	result, err := g.RunCommand(context.Background(), repoPath, "rev-parse", "--verify", fmt.Sprintf("refs/heads/%s", branchName))
+	return g.branchExistsWithContext(context.Background(), repoPath, branchName)
+}
+
+// branchExistsWithContext checks if a branch exists in a repository with context support.
+func (g *GitEngine) branchExistsWithContext(ctx context.Context, repoPath, branchName string) bool {
+	result, err := g.RunCommand(ctx, repoPath, "rev-parse", "--verify", fmt.Sprintf("refs/heads/%s", branchName))
 
 	return err == nil && result.ExitCode == 0
 }
 
 // Status returns isDirty, unpushedCommits, behindRemote, branchName, error
 // Uses git CLI for worktree-compatible status checking.
-func (g *GitEngine) Status(path string) (bool, int, int, string, error) {
+func (g *GitEngine) Status(ctx context.Context, path string) (bool, int, int, string, error) {
+	// Apply default local timeout if context has no deadline
+	ctx, cancel := g.withLocalTimeout(ctx)
+	defer cancel()
+
 	// Get branch name using git CLI (works for both regular repos and worktrees)
-	result, err := g.RunCommand(context.Background(), path, "rev-parse", "--abbrev-ref", "HEAD")
+	result, err := g.RunCommand(ctx, path, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return false, 0, 0, "", cerrors.NewOperationCanceledWithTarget("status", path)
+		}
+
+		if errors.Is(err, context.DeadlineExceeded) {
+			return false, 0, 0, "", cerrors.NewOperationTimeout("status", path)
+		}
+
 		return false, 0, 0, "", cerrors.WrapGitError(err, "get HEAD")
 	}
 
@@ -226,13 +264,31 @@ func (g *GitEngine) Status(path string) (bool, int, int, string, error) {
 
 	branchName := strings.TrimSpace(result.Stdout)
 
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return false, 0, 0, "", cerrors.NewContextError(ctx, "status", path)
+	}
+
 	// Check for dirty status using git status --porcelain
-	result, err = g.RunCommand(context.Background(), path, "status", "--porcelain")
+	result, err = g.RunCommand(ctx, path, "status", "--porcelain")
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return false, 0, 0, "", cerrors.NewOperationCanceledWithTarget("status", path)
+		}
+
+		if errors.Is(err, context.DeadlineExceeded) {
+			return false, 0, 0, "", cerrors.NewOperationTimeout("status", path)
+		}
+
 		return false, 0, 0, "", cerrors.WrapGitError(err, "get status")
 	}
 
 	isDirty := strings.TrimSpace(result.Stdout) != ""
+
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return false, 0, 0, "", cerrors.NewContextError(ctx, "status", path)
+	}
 
 	// Get ahead/behind counts using git rev-list
 	unpushed := 0
@@ -240,11 +296,11 @@ func (g *GitEngine) Status(path string) (bool, int, int, string, error) {
 
 	// Check if remote branch exists
 	remoteBranch := fmt.Sprintf("origin/%s", branchName)
-	verifyResult, verifyErr := g.RunCommand(context.Background(), path, "rev-parse", "--verify", remoteBranch)
+	verifyResult, verifyErr := g.RunCommand(ctx, path, "rev-parse", "--verify", remoteBranch)
 
 	if verifyErr == nil && verifyResult.ExitCode == 0 {
 		// Remote branch exists, count ahead/behind
-		revListResult, revListErr := g.RunCommand(context.Background(), path, "rev-list", "--count", "--left-right", fmt.Sprintf("%s...HEAD", remoteBranch))
+		revListResult, revListErr := g.RunCommand(ctx, path, "rev-list", "--count", "--left-right", fmt.Sprintf("%s...HEAD", remoteBranch))
 		if revListErr == nil && revListResult.ExitCode == 0 {
 			parts := strings.Fields(strings.TrimSpace(revListResult.Stdout))
 			if len(parts) == 2 {
@@ -470,7 +526,16 @@ func (g *GitEngine) Push(ctx context.Context, path, branch string) error {
 }
 
 // List returns a list of repository names in the projects root
-func (g *GitEngine) List() ([]string, error) {
+func (g *GitEngine) List(ctx context.Context) ([]string, error) {
+	// Apply default local timeout if context has no deadline
+	ctx, cancel := g.withLocalTimeout(ctx)
+	defer cancel()
+
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return nil, cerrors.NewContextError(ctx, "list repos", g.ProjectsRoot)
+	}
+
 	entries, err := os.ReadDir(g.ProjectsRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -483,6 +548,11 @@ func (g *GitEngine) List() ([]string, error) {
 	var repos []string
 
 	for _, entry := range entries {
+		// Check for context cancellation in the loop
+		if ctx.Err() != nil {
+			return nil, cerrors.NewContextError(ctx, "list repos", g.ProjectsRoot)
+		}
+
 		if !entry.IsDir() {
 			continue
 		}
@@ -509,7 +579,16 @@ func (g *GitEngine) List() ([]string, error) {
 }
 
 // Checkout checks out a branch in the given path, optionally creating it
-func (g *GitEngine) Checkout(path, branchName string, create bool) error {
+func (g *GitEngine) Checkout(ctx context.Context, path, branchName string, create bool) error {
+	// Apply default local timeout if context has no deadline
+	ctx, cancel := g.withLocalTimeout(ctx)
+	defer cancel()
+
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return cerrors.NewContextError(ctx, "checkout", path)
+	}
+
 	// Open the repository
 	r, err := git.PlainOpen(path)
 	if err != nil {
@@ -536,6 +615,11 @@ func (g *GitEngine) Checkout(path, branchName string, create bool) error {
 		}
 
 		checkoutOpts.Hash = head.Hash()
+	}
+
+	// Check for context cancellation before checkout
+	if ctx.Err() != nil {
+		return cerrors.NewContextError(ctx, "checkout", path)
 	}
 
 	// Checkout the branch
@@ -703,6 +787,18 @@ func (g *GitEngine) withDefaultTimeout(ctx context.Context) (context.Context, co
 	}
 
 	return context.WithTimeout(ctx, DefaultNetworkTimeout)
+}
+
+// withLocalTimeout returns a context with the default local timeout applied
+// if the provided context has no deadline set. The returned cancel function
+// must be called to release resources (use defer cancel()).
+func (g *GitEngine) withLocalTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		// Context already has a deadline, return no-op cancel
+		return ctx, func() {}
+	}
+
+	return context.WithTimeout(ctx, DefaultLocalTimeout)
 }
 
 // storeUpstreamURL stores the upstream URL in the repository's git config.

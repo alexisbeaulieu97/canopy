@@ -94,7 +94,7 @@ func (s *WorkspaceOrphanService) DetectOrphansForWorkspace(workspaceID string) (
 
 // buildCanonicalRepoSet returns a set of canonical repo names.
 func (s *WorkspaceOrphanService) buildCanonicalRepoSet() (map[string]bool, error) {
-	canonicalRepos, err := s.gitEngine.List()
+	canonicalRepos, err := s.gitEngine.List(context.Background())
 	if err != nil {
 		return nil, cerrors.NewIOFailed("list canonical repos", err)
 	}
@@ -188,7 +188,7 @@ func (s *WorkspaceOrphanService) checkRepoForOrphan(
 // PruneAllWorktrees cleans up stale worktree references from all canonical repos.
 // This removes worktree entries that point to non-existent directories.
 func (s *WorkspaceOrphanService) PruneAllWorktrees(ctx context.Context) error {
-	repos, err := s.gitEngine.List()
+	repos, err := s.gitEngine.List(ctx)
 	if err != nil {
 		return cerrors.NewIOFailed("list canonical repos", err)
 	}

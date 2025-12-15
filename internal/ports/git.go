@@ -20,10 +20,10 @@ type GitOperations interface {
 	EnsureCanonical(ctx context.Context, repoURL, repoName string) (*git.Repository, error)
 
 	// CreateWorktree creates a worktree for a workspace branch.
-	CreateWorktree(repoName, worktreePath, branchName string) error
+	CreateWorktree(ctx context.Context, repoName, worktreePath, branchName string) error
 
 	// Status returns isDirty, unpushedCommits, behindRemote, branchName, error.
-	Status(path string) (isDirty bool, unpushed, behind int, branch string, err error)
+	Status(ctx context.Context, path string) (isDirty bool, unpushed, behind int, branch string, err error)
 
 	// Clone clones a repository to the projects root (bare).
 	Clone(ctx context.Context, url, name string) error
@@ -38,10 +38,10 @@ type GitOperations interface {
 	Push(ctx context.Context, path, branch string) error
 
 	// List returns a list of repository names in the projects root.
-	List() ([]string, error)
+	List(ctx context.Context) ([]string, error)
 
 	// Checkout checks out a branch in the given path, optionally creating it.
-	Checkout(path, branchName string, create bool) error
+	Checkout(ctx context.Context, path, branchName string, create bool) error
 
 	// RenameBranch renames a branch in the given repository.
 	RenameBranch(ctx context.Context, repoPath, oldName, newName string) error
