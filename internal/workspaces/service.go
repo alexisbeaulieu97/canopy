@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
@@ -34,6 +33,11 @@ type Service struct {
 
 	// cache provides in-memory caching of workspace metadata
 	cache ports.WorkspaceCache
+
+	// Extracted sub-services
+	gitService    *WorkspaceGitService
+	orphanService *WorkspaceOrphanService
+	exportService *WorkspaceExportService
 }
 
 // ErrNoReposConfigured indicates no repos were specified and none matched configuration.
@@ -107,7 +111,7 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 		cache = NewWorkspaceCache(DefaultCacheTTL)
 	}
 
-	return &Service{
+	svc := &Service{
 		config:       cfg,
 		gitEngine:    gitEngine,
 		wsEngine:     wsEngine,
@@ -118,6 +122,18 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 		canonical:    NewCanonicalRepoService(gitEngine, wsEngine, cfg.GetProjectsRoot(), logger, diskUsage),
 		cache:        cache,
 	}
+
+	// Initialize sub-services with the main service as the workspace finder/creator
+	svc.gitService = NewGitService(cfg, gitEngine, wsEngine, logger, cache, svc)
+	svc.orphanService = NewOrphanService(cfg, gitEngine, wsEngine, logger, svc)
+	svc.exportService = NewExportService(cfg, svc, svc)
+
+	return svc
+}
+
+// FindWorkspace implements WorkspaceFinder interface for sub-services.
+func (s *Service) FindWorkspace(workspaceID string) (*domain.Workspace, string, error) {
+	return s.findWorkspace(workspaceID)
 }
 
 // ResolveRepos determines which repos should be part of the workspace
@@ -903,32 +919,7 @@ func (s *Service) SyncCanonicalRepo(ctx context.Context, name string) error {
 
 // PushWorkspace pushes all repos for a workspace.
 func (s *Service) PushWorkspace(ctx context.Context, workspaceID string) error {
-	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-
-	for _, repo := range targetWorkspace.Repos {
-		// Check for context cancellation before each push
-		if ctx.Err() != nil {
-			return cerrors.NewContextError(ctx, "push workspace", workspaceID)
-		}
-
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
-		branchName := targetWorkspace.BranchName
-
-		if branchName == "" {
-			if s.logger != nil {
-				s.logger.Debug("Branch missing in metadata, will let git infer", "workspace", workspaceID, "repo", repo.Name)
-			}
-		}
-
-		if err := s.gitEngine.Push(ctx, worktreePath, branchName); err != nil {
-			return cerrors.WrapGitError(err, fmt.Sprintf("push repo %s", repo.Name))
-		}
-	}
-
-	return nil
+	return s.gitService.PushWorkspace(ctx, workspaceID)
 }
 
 // GitRunOptions contains options for running git commands across workspace repos.
@@ -948,187 +939,12 @@ type RepoGitResult struct {
 
 // RunGitInWorkspace executes an arbitrary git command across all repos in a workspace.
 func (s *Service) RunGitInWorkspace(ctx context.Context, workspaceID string, args []string, opts GitRunOptions) ([]RepoGitResult, error) {
-	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(targetWorkspace.Repos) == 0 {
-		return nil, nil
-	}
-
-	if opts.Parallel {
-		return s.runGitParallel(ctx, targetWorkspace, dirName, args, opts.ContinueOnError)
-	}
-
-	return s.runGitSequential(ctx, targetWorkspace, dirName, args, opts.ContinueOnError)
-}
-
-func (s *Service) runGitSequential(ctx context.Context, workspace *domain.Workspace, dirName string, args []string, continueOnError bool) ([]RepoGitResult, error) {
-	var results []RepoGitResult
-
-	for _, repo := range workspace.Repos {
-		// Check for context cancellation between iterations
-		if ctx.Err() != nil {
-			return results, cerrors.NewContextError(ctx, "git command", "sequential execution")
-		}
-
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
-
-		cmdResult, err := s.gitEngine.RunCommand(ctx, worktreePath, args...)
-
-		result := RepoGitResult{
-			RepoName: repo.Name,
-		}
-
-		if err != nil {
-			result.Error = err
-			results = append(results, result)
-
-			if !continueOnError {
-				return results, err
-			}
-
-			continue
-		}
-
-		result.Stdout = cmdResult.Stdout
-		result.Stderr = cmdResult.Stderr
-		result.ExitCode = cmdResult.ExitCode
-		results = append(results, result)
-
-		if cmdResult.ExitCode != 0 && !continueOnError {
-			return results, cerrors.NewCommandFailed(fmt.Sprintf("git in repo %s", repo.Name), fmt.Errorf("exit code %d", cmdResult.ExitCode))
-		}
-	}
-
-	return results, nil
-}
-
-const defaultMaxParallel = 10
-
-func (s *Service) runGitParallel(ctx context.Context, workspace *domain.Workspace, dirName string, args []string, continueOnError bool) ([]RepoGitResult, error) {
-	results := make([]RepoGitResult, len(workspace.Repos))
-
-	var wg sync.WaitGroup
-
-	// Bounded worker pool to avoid exhausting resources for large workspaces
-	sem := make(chan struct{}, defaultMaxParallel)
-
-	// Create a cancellable context for goroutines
-	cancelCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// Track the first error for early termination
-	var (
-		firstErr     error
-		firstErrOnce sync.Once
-	)
-
-	for i, repo := range workspace.Repos {
-		wg.Add(1)
-
-		go func(idx int, r domain.Repo) {
-			defer wg.Done()
-
-			// Check if context is cancelled before acquiring semaphore
-			select {
-			case <-cancelCtx.Done():
-				ctxErr := cerrors.NewContextError(cancelCtx, "git command", r.Name)
-				results[idx] = RepoGitResult{
-					RepoName: r.Name,
-					Error:    ctxErr,
-				}
-
-				// Propagate cancellation error to caller if not continuing on error
-				if !continueOnError {
-					firstErrOnce.Do(func() {
-						firstErr = ctxErr
-					})
-				}
-
-				return
-			case sem <- struct{}{}:
-			}
-
-			defer func() { <-sem }()
-
-			worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, r.Name)
-
-			result := RepoGitResult{
-				RepoName: r.Name,
-			}
-
-			cmdResult, err := s.gitEngine.RunCommand(cancelCtx, worktreePath, args...)
-			if err != nil {
-				result.Error = err
-				results[idx] = result
-
-				// Cancel other goroutines on first error if not continuing
-				if !continueOnError {
-					firstErrOnce.Do(func() {
-						firstErr = err
-
-						cancel()
-					})
-				}
-
-				return
-			}
-
-			result.Stdout = cmdResult.Stdout
-			result.Stderr = cmdResult.Stderr
-			result.ExitCode = cmdResult.ExitCode
-			results[idx] = result
-
-			// Also cancel on non-zero exit code if not continuing
-			if result.ExitCode != 0 && !continueOnError {
-				firstErrOnce.Do(func() {
-					firstErr = cerrors.NewCommandFailed(fmt.Sprintf("git in repo %s", r.Name), fmt.Errorf("exit code %d", result.ExitCode))
-
-					cancel()
-				})
-			}
-		}(i, repo)
-	}
-
-	wg.Wait()
-
-	// Return the first error that triggered cancellation
-	if firstErr != nil {
-		return results, firstErr
-	}
-
-	return results, nil
+	return s.gitService.RunGitInWorkspace(ctx, workspaceID, args, opts)
 }
 
 // SwitchBranch switches the branch for all repos in a workspace
-func (s *Service) SwitchBranch(_ context.Context, workspaceID, branchName string, create bool) error {
-	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
-	if err != nil {
-		return err
-	}
-
-	// 2. Iterate through repos and checkout
-	for _, repo := range targetWorkspace.Repos {
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
-		s.logger.Info("Switching branch", "repo", repo.Name, "branch", branchName)
-
-		if err := s.gitEngine.Checkout(worktreePath, branchName, create); err != nil {
-			return cerrors.WrapGitError(err, fmt.Sprintf("checkout branch %s in repo %s", branchName, repo.Name))
-		}
-	}
-
-	// 3. Update metadata
-	targetWorkspace.BranchName = branchName
-	if err := s.wsEngine.Save(dirName, *targetWorkspace); err != nil {
-		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
-	}
-
-	// Invalidate cache after metadata update
-	s.cache.Invalidate(workspaceID)
-
-	return nil
+func (s *Service) SwitchBranch(ctx context.Context, workspaceID, branchName string, create bool) error {
+	return s.gitService.SwitchBranch(ctx, workspaceID, branchName, create)
 }
 
 // RestoreWorkspace recreates a workspace from the newest closed entry.
@@ -1184,109 +1000,7 @@ func (s *Service) Keybindings() config.Keybindings {
 // - Has a worktree directory that doesn't exist
 // - Has an invalid git directory
 func (s *Service) DetectOrphans() ([]domain.OrphanedWorktree, error) {
-	workspaceMap, err := s.wsEngine.List()
-	if err != nil {
-		return nil, cerrors.NewIOFailed("list workspaces", err)
-	}
-
-	canonicalSet, err := s.buildCanonicalRepoSet()
-	if err != nil {
-		return nil, err
-	}
-
-	var orphans []domain.OrphanedWorktree
-
-	for dir, ws := range workspaceMap {
-		wsOrphans := s.checkWorkspaceForOrphans(ws, dir, canonicalSet)
-		orphans = append(orphans, wsOrphans...)
-	}
-
-	return orphans, nil
-}
-
-// buildCanonicalRepoSet returns a set of canonical repo names.
-func (s *Service) buildCanonicalRepoSet() (map[string]bool, error) {
-	canonicalRepos, err := s.gitEngine.List()
-	if err != nil {
-		return nil, cerrors.NewIOFailed("list canonical repos", err)
-	}
-
-	canonicalSet := make(map[string]bool)
-	for _, r := range canonicalRepos {
-		canonicalSet[r] = true
-	}
-
-	return canonicalSet, nil
-}
-
-// checkWorkspaceForOrphans checks a single workspace for orphaned worktrees.
-func (s *Service) checkWorkspaceForOrphans(
-	ws domain.Workspace,
-	dirName string,
-	canonicalSet map[string]bool,
-) []domain.OrphanedWorktree {
-	var orphans []domain.OrphanedWorktree
-
-	for _, repo := range ws.Repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
-
-		if orphan := s.checkRepoForOrphan(ws.ID, repo.Name, worktreePath, canonicalSet); orphan != nil {
-			orphans = append(orphans, *orphan)
-		}
-	}
-
-	return orphans
-}
-
-// checkRepoForOrphan checks if a single repo is orphaned. Returns nil if not orphaned.
-func (s *Service) checkRepoForOrphan(
-	workspaceID, repoName, worktreePath string,
-	canonicalSet map[string]bool,
-) *domain.OrphanedWorktree {
-	// Check 1: Canonical repo exists
-	if !canonicalSet[repoName] {
-		return &domain.OrphanedWorktree{
-			WorkspaceID:  workspaceID,
-			RepoName:     repoName,
-			WorktreePath: worktreePath,
-			Reason:       domain.OrphanReasonCanonicalMissing,
-		}
-	}
-
-	// Check 2: Worktree directory exists
-	if _, err := os.Stat(worktreePath); err != nil {
-		s.logStatError("worktree directory", workspaceID, repoName, worktreePath, err)
-
-		return &domain.OrphanedWorktree{
-			WorkspaceID:  workspaceID,
-			RepoName:     repoName,
-			WorktreePath: worktreePath,
-			Reason:       domain.OrphanReasonDirectoryMissing,
-		}
-	}
-
-	// Check 3: Valid git directory
-	gitDir := filepath.Join(worktreePath, ".git")
-	if _, err := os.Stat(gitDir); err != nil {
-		s.logStatError(".git directory", workspaceID, repoName, gitDir, err)
-
-		return &domain.OrphanedWorktree{
-			WorkspaceID:  workspaceID,
-			RepoName:     repoName,
-			WorktreePath: worktreePath,
-			Reason:       domain.OrphanReasonInvalidGitDir,
-		}
-	}
-
-	return nil
-}
-
-// logStatError logs stat errors if they are not IsNotExist errors.
-func (s *Service) logStatError(itemType, workspaceID, repoName, path string, err error) {
-	if !os.IsNotExist(err) && s.logger != nil {
-		s.logger.Debug("Failed to stat "+itemType,
-			"workspace", workspaceID, "repo", repoName, "path", path, "error", err)
-	}
+	return s.orphanService.DetectOrphans()
 }
 
 // GetWorkspacesUsingRepo returns the IDs of workspaces that use the given canonical repo.
@@ -1297,17 +1011,7 @@ func (s *Service) GetWorkspacesUsingRepo(repoName string) ([]string, error) {
 // DetectOrphansForWorkspace returns orphans for a specific workspace.
 // This is more efficient than DetectOrphans when only checking a single workspace.
 func (s *Service) DetectOrphansForWorkspace(workspaceID string) ([]domain.OrphanedWorktree, error) {
-	ws, dirName, err := s.findWorkspace(workspaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	canonicalSet, err := s.buildCanonicalRepoSet()
-	if err != nil {
-		return nil, err
-	}
-
-	return s.checkWorkspaceForOrphans(*ws, dirName, canonicalSet), nil
+	return s.orphanService.DetectOrphansForWorkspace(workspaceID)
 }
 
 func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, error) {
@@ -1359,147 +1063,11 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, act
 }
 
 // ExportWorkspace creates a portable export of a workspace definition.
-func (s *Service) ExportWorkspace(_ context.Context, workspaceID string) (*domain.WorkspaceExport, error) {
-	workspace, _, err := s.findWorkspace(workspaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	export := &domain.WorkspaceExport{
-		Version:    "1",
-		ID:         workspace.ID,
-		Branch:     workspace.BranchName,
-		ExportedAt: time.Now().UTC(),
-		Repos:      make([]domain.RepoExport, 0, len(workspace.Repos)),
-	}
-
-	for _, repo := range workspace.Repos {
-		repoExport := domain.RepoExport{
-			Name: repo.Name,
-			URL:  repo.URL,
-		}
-
-		// Try to find registry alias for this URL
-		if registry := s.config.GetRegistry(); registry != nil {
-			if entry, ok := registry.ResolveByURL(repo.URL); ok {
-				repoExport.Alias = entry.Alias
-			}
-		}
-
-		export.Repos = append(export.Repos, repoExport)
-	}
-
-	return export, nil
+func (s *Service) ExportWorkspace(ctx context.Context, workspaceID string) (*domain.WorkspaceExport, error) {
+	return s.exportService.ExportWorkspace(ctx, workspaceID)
 }
 
 // ImportWorkspace creates a workspace from an exported definition.
 func (s *Service) ImportWorkspace(ctx context.Context, export *domain.WorkspaceExport, idOverride, branchOverride string, force bool) (string, error) {
-	if export == nil {
-		return "", cerrors.NewInvalidArgument("export", "export definition is nil")
-	}
-
-	// Validate version
-	if export.Version != "1" {
-		return "", cerrors.NewInvalidArgument("version", fmt.Sprintf("unsupported export version: %s", export.Version))
-	}
-
-	// Resolve final workspace ID and branch name
-	workspaceID, branchName := s.resolveImportOverrides(export, idOverride, branchOverride)
-
-	// Handle existing workspace
-	if err := s.prepareForImport(ctx, workspaceID, force); err != nil {
-		return "", err
-	}
-
-	// Resolve repos from export
-	repos, err := s.resolveExportedRepos(export.Repos, workspaceID)
-	if err != nil {
-		return "", err
-	}
-
-	// Create the workspace
-	return s.CreateWorkspace(ctx, workspaceID, branchName, repos)
-}
-
-// resolveImportOverrides determines the final workspace ID and branch name for import.
-func (s *Service) resolveImportOverrides(export *domain.WorkspaceExport, idOverride, branchOverride string) (string, string) {
-	workspaceID := export.ID
-	if idOverride != "" {
-		workspaceID = idOverride
-	}
-
-	branchName := export.Branch
-	if branchOverride != "" {
-		branchName = branchOverride
-	}
-
-	// Default branch to workspace ID if not specified (consistent with workspace new)
-	if branchName == "" {
-		branchName = workspaceID
-	}
-
-	return workspaceID, branchName
-}
-
-// prepareForImport checks for existing workspace and removes it if force is set.
-func (s *Service) prepareForImport(ctx context.Context, workspaceID string, force bool) error {
-	_, _, findErr := s.findWorkspace(workspaceID)
-	if findErr == nil {
-		// Workspace exists
-		if !force {
-			return cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to overwrite or --id to specify a different ID")
-		}
-		// Force mode: delete existing workspace
-		if err := s.CloseWorkspace(ctx, workspaceID, true); err != nil {
-			return cerrors.NewIOFailed("remove existing workspace", err)
-		}
-
-		return nil
-	}
-
-	if !errors.Is(findErr, cerrors.WorkspaceNotFound) {
-		// Unexpected error (IO failure, etc.) - propagate it
-		return findErr
-	}
-
-	// Workspace not found, proceed with import
-	return nil
-}
-
-// resolveExportedRepos converts exported repo definitions to domain.Repo objects.
-func (s *Service) resolveExportedRepos(exportedRepos []domain.RepoExport, workspaceID string) ([]domain.Repo, error) {
-	repos := make([]domain.Repo, 0, len(exportedRepos))
-
-	for _, exported := range exportedRepos {
-		var repo domain.Repo
-
-		var resolved bool
-
-		// Try registry alias first if available.
-		// When alias resolves, we use the registry's canonical name (entry.Alias) rather than
-		// the exported name. This ensures consistency with the local registry and handles cases
-		// where the exporting machine used a different alias for the same repo.
-		if exported.Alias != "" {
-			if registry := s.config.GetRegistry(); registry != nil {
-				if entry, ok := registry.Resolve(exported.Alias); ok {
-					repo = domain.Repo{Name: entry.Alias, URL: entry.URL}
-					resolved = true
-				}
-			}
-		}
-
-		// Fall back to URL
-		if !resolved && exported.URL != "" {
-			repo = domain.Repo{Name: exported.Name, URL: exported.URL}
-			resolved = true
-		}
-
-		if !resolved {
-			return nil, cerrors.NewUnknownRepository(exported.Name, true).WithContext("workspace_id", workspaceID)
-		}
-
-		repos = append(repos, repo)
-	}
-
-	return repos, nil
+	return s.exportService.ImportWorkspace(ctx, export, idOverride, branchOverride, force)
 }
