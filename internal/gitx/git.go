@@ -119,47 +119,71 @@ func (g *GitEngine) EnsureCanonical(ctx context.Context, repoURL, repoName strin
 		return nil, cerrors.WrapGitError(err, fmt.Sprintf("clone %s", repoURL))
 	}
 
+	// Store the upstream URL in the canonical repo's config for worktree remote setup
+	if err := g.storeUpstreamURL(r, repoURL); err != nil {
+		log.Warn("failed to store upstream URL in config", "repo", repoName, "error", err)
+		// Non-fatal: worktrees will still work, but may have incorrect remote
+	}
+
 	return r, nil
 }
 
-// CreateWorktree creates a worktree for a workspace branch
+// CreateWorktree creates a true git worktree for a workspace branch.
+// Uses git CLI via RunCommand as go-git's worktree API doesn't support
+// creating worktrees for non-existent branches.
 func (g *GitEngine) CreateWorktree(repoName, worktreePath, branchName string) error {
 	canonicalPath := filepath.Join(g.ProjectsRoot, repoName)
 
-	// Open the canonical (bare) repository
-	canonicalRepo, err := git.PlainOpen(canonicalPath)
-	if err != nil {
+	// Ensure canonical repo exists
+	if _, err := git.PlainOpen(canonicalPath); err != nil {
 		return cerrors.WrapGitError(err, "open canonical repo")
 	}
 
-	// Clone from the canonical repo to the worktree path (non-bare)
-	repo, err := git.PlainClone(worktreePath, false, &git.CloneOptions{
-		URL: canonicalPath,
-	})
+	// Create the worktree with a new branch using git worktree add
+	// git worktree add -b <branch> <path>
+	result, err := g.RunCommand(context.Background(), canonicalPath, "worktree", "add", "-b", branchName, worktreePath)
 	if err != nil {
-		return cerrors.WrapGitError(err, "clone")
+		return cerrors.WrapGitError(err, "git worktree add")
 	}
 
-	// Get the worktree
-	wt, err := repo.Worktree()
-	if err != nil {
-		return cerrors.WrapGitError(err, "get worktree")
+	if result.ExitCode != 0 {
+		return cerrors.NewCommandFailed(
+			fmt.Sprintf("git worktree add -b %s %s", branchName, worktreePath),
+			fmt.Errorf("exit code %d: %s", result.ExitCode, result.Stderr),
+		)
 	}
 
-	// Get the HEAD reference to use as the starting point for the new branch
-	head, err := canonicalRepo.Head()
+	// Configure the worktree's origin remote to point to the upstream URL
+	upstreamURL, err := g.GetUpstreamURL(repoName)
 	if err != nil {
-		return cerrors.WrapGitError(err, "get HEAD")
+		// Fall back to default behavior if upstream URL not stored
+		log.Warn("upstream URL not found, worktree will use canonical as origin", "repo", repoName)
+
+		return nil
 	}
 
-	// Create and checkout a new branch
-	err = wt.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.NewBranchReferenceName(branchName),
-		Hash:   head.Hash(),
-		Create: true,
-	})
+	// Set the origin remote URL in the worktree
+	result, err = g.RunCommand(context.Background(), worktreePath, "remote", "set-url", "origin", upstreamURL)
 	if err != nil {
-		return cerrors.WrapGitError(err, "checkout -b")
+		return cerrors.WrapGitError(err, "set worktree remote URL")
+	}
+
+	if result.ExitCode != 0 {
+		// Non-fatal: worktree exists but may have wrong remote
+		log.Warn("failed to set worktree remote URL", "error", result.Stderr)
+	}
+
+	// Set up branch tracking for proper push/pull behavior
+	result, err = g.RunCommand(context.Background(), worktreePath,
+		"config", fmt.Sprintf("branch.%s.remote", branchName), "origin")
+	if err != nil {
+		log.Warn("failed to set branch remote", "error", err)
+	}
+
+	result, err = g.RunCommand(context.Background(), worktreePath,
+		"config", fmt.Sprintf("branch.%s.merge", branchName), fmt.Sprintf("refs/heads/%s", branchName))
+	if err != nil {
+		log.Warn("failed to set branch merge config", "error", err)
 	}
 
 	return nil
@@ -657,4 +681,109 @@ func (g *GitEngine) withDefaultTimeout(ctx context.Context) (context.Context, co
 	}
 
 	return context.WithTimeout(ctx, DefaultNetworkTimeout)
+}
+
+// canopyUpstreamURLKey is the git config key for storing the upstream URL.
+const canopyUpstreamURLKey = "canopy.upstreamUrl"
+
+// storeUpstreamURL stores the upstream URL in the repository's git config.
+// This allows worktrees to be configured with the correct remote.
+func (g *GitEngine) storeUpstreamURL(repo *git.Repository, url string) error {
+	cfg, err := repo.Config()
+	if err != nil {
+		return cerrors.WrapGitError(err, "get repo config")
+	}
+
+	// Store the URL in a custom canopy section
+	cfg.Raw.SetOption("canopy", "", "upstreamUrl", url)
+
+	if err := repo.SetConfig(cfg); err != nil {
+		return cerrors.WrapGitError(err, "set repo config")
+	}
+
+	return nil
+}
+
+// GetUpstreamURL retrieves the upstream URL from a canonical repository's config.
+func (g *GitEngine) GetUpstreamURL(repoName string) (string, error) {
+	path := filepath.Join(g.ProjectsRoot, repoName)
+
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		return "", cerrors.WrapGitError(err, "open canonical repo")
+	}
+
+	cfg, err := repo.Config()
+	if err != nil {
+		return "", cerrors.WrapGitError(err, "get repo config")
+	}
+
+	// Retrieve from the canopy section
+	section := cfg.Raw.Section("canopy")
+	if section == nil {
+		return "", cerrors.NewInvalidArgument("config", "canopy section not found in config")
+	}
+
+	url := section.Option("upstreamUrl")
+	if url == "" {
+		return "", cerrors.NewInvalidArgument("config", "upstreamUrl not set in canopy config")
+	}
+
+	return url, nil
+}
+
+// RemoveWorktree removes a git worktree from the canonical repository.
+// Uses git CLI as go-git doesn't support worktree removal.
+func (g *GitEngine) RemoveWorktree(ctx context.Context, repoName, worktreePath string) error {
+	canonicalPath := filepath.Join(g.ProjectsRoot, repoName)
+
+	// Check if canonical repo exists
+	if _, err := os.Stat(canonicalPath); os.IsNotExist(err) {
+		// Canonical repo doesn't exist, nothing to remove from
+		return nil
+	}
+
+	// Use --force to remove even if there are uncommitted changes
+	// The force flag is appropriate here because workspace close already
+	// checks for dirty state (unless --force is passed)
+	result, err := g.RunCommand(ctx, canonicalPath, "worktree", "remove", "--force", worktreePath)
+	if err != nil {
+		return cerrors.WrapGitError(err, "git worktree remove")
+	}
+
+	// Exit code 128 typically means the worktree doesn't exist or path is invalid,
+	// which is fine - the worktree is already gone
+	if result.ExitCode != 0 && result.ExitCode != 128 {
+		return cerrors.NewCommandFailed(
+			fmt.Sprintf("git worktree remove %s", worktreePath),
+			fmt.Errorf("exit code %d: %s", result.ExitCode, result.Stderr),
+		)
+	}
+
+	return nil
+}
+
+// PruneWorktrees cleans up stale worktree references from a canonical repository.
+// Uses git CLI as go-git doesn't support worktree pruning.
+func (g *GitEngine) PruneWorktrees(ctx context.Context, repoName string) error {
+	canonicalPath := filepath.Join(g.ProjectsRoot, repoName)
+
+	// Check if canonical repo exists
+	if _, err := os.Stat(canonicalPath); os.IsNotExist(err) {
+		return cerrors.NewRepoNotFound(repoName)
+	}
+
+	result, err := g.RunCommand(ctx, canonicalPath, "worktree", "prune")
+	if err != nil {
+		return cerrors.WrapGitError(err, "git worktree prune")
+	}
+
+	if result.ExitCode != 0 {
+		return cerrors.NewCommandFailed(
+			"git worktree prune",
+			fmt.Errorf("exit code %d: %s", result.ExitCode, result.Stderr),
+		)
+	}
+
+	return nil
 }

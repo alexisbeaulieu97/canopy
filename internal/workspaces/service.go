@@ -701,6 +701,9 @@ func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts
 		}
 	}
 
+	// Remove worktrees from canonical repos before deleting workspace directory
+	s.removeWorkspaceWorktrees(targetWorkspace, dirName)
+
 	// Delete workspace
 	if err := s.wsEngine.Delete(dirName); err != nil {
 		return err
