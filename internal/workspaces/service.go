@@ -249,7 +249,7 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 
 	// Manual cleanup helper
 	cleanup := func() {
-		path := fmt.Sprintf("%s/%s", s.config.GetWorkspacesRoot(), dirName)
+		path := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
 		_ = os.RemoveAll(path)
 	}
 
@@ -285,7 +285,7 @@ func (s *Service) cloneWorkspaceRepos(ctx context.Context, repos []domain.Repo, 
 		}
 
 		// Create worktree
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		if err := s.gitEngine.CreateWorktree(ctx, repo.Name, worktreePath, branchName); err != nil {
 			return cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
 		}
@@ -598,7 +598,7 @@ func (s *Service) ensureWorkspaceWorktree(ctx context.Context, repo domain.Repo,
 		return cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
 	}
 
-	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
+	worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 	if err := s.gitEngine.CreateWorktree(ctx, repo.Name, worktreePath, branchName); err != nil {
 		return cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
 	}
@@ -637,7 +637,7 @@ func (s *Service) RemoveRepoFromWorkspace(_ context.Context, workspaceID, repoNa
 	}
 
 	// 3. Remove worktree directory
-	worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repoName)
+	worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repoName)
 	if err := os.RemoveAll(worktreePath); err != nil {
 		return cerrors.NewIOFailed(fmt.Sprintf("remove worktree %s", worktreePath), err)
 	}
@@ -907,7 +907,7 @@ func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error)
 	var repoStatuses []domain.RepoStatus
 
 	for _, repo := range targetWorkspace.Repos {
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		isDirty, unpushed, behind, branch, err := s.gitEngine.Status(context.Background(), worktreePath)
 		if err != nil {
@@ -1087,7 +1087,7 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, act
 	}
 
 	for _, repo := range workspace.Repos {
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		isDirty, _, _, _, err := s.gitEngine.Status(context.Background(), worktreePath)
 		if err != nil {
