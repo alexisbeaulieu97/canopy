@@ -1,6 +1,7 @@
 package workspaces
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -49,7 +50,7 @@ func TestWorkspaceOrphanService_DetectOrphans(t *testing.T) {
 			t.Parallel()
 
 			mockGit := mocks.NewMockGitOperations()
-			mockGit.ListFunc = func() ([]string, error) {
+			mockGit.ListFunc = func(_ context.Context) ([]string, error) {
 				return tt.canonicalList, tt.canonicalErr
 			}
 
@@ -123,7 +124,7 @@ func TestWorkspaceOrphanService_DetectOrphansForWorkspace(t *testing.T) {
 			t.Parallel()
 
 			mockGit := mocks.NewMockGitOperations()
-			mockGit.ListFunc = func() ([]string, error) {
+			mockGit.ListFunc = func(_ context.Context) ([]string, error) {
 				return tt.canonicalList, tt.canonicalErr
 			}
 

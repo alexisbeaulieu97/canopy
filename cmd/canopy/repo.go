@@ -38,7 +38,7 @@ var repoListCmd = &cobra.Command{
 		svc := app.Service
 		jsonOutput, _ := cmd.Flags().GetBool("json")
 
-		repos, err := svc.ListCanonicalRepos()
+		repos, err := svc.ListCanonicalRepos(cmd.Context())
 		if err != nil {
 			return err
 		}

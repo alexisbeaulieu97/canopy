@@ -272,7 +272,7 @@ func TestWorkspaceGitService_SwitchBranch(t *testing.T) {
 			t.Parallel()
 
 			mockGit := mocks.NewMockGitOperations()
-			mockGit.CheckoutFunc = func(_, _ string, _ bool) error {
+			mockGit.CheckoutFunc = func(_ context.Context, _, _ string, _ bool) error {
 				return tt.checkoutErr
 			}
 

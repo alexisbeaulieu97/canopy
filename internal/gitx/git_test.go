@@ -178,14 +178,14 @@ func TestGitEngine_CreateWorktree(t *testing.T) {
 		engine := New(projectsRoot)
 
 		// Create worktree
-		err := engine.CreateWorktree("test-repo", worktreePath, "feature-branch")
+		err := engine.CreateWorktree(context.Background(), "test-repo", worktreePath, "feature-branch")
 		if err != nil {
 			t.Fatalf("CreateWorktree failed: %v", err)
 		}
 
 		// Verify worktree exists and is on the correct branch using git CLI
 		// (go-git doesn't fully support worktrees)
-		_, _, _, branchName, err := engine.Status(worktreePath)
+		_, _, _, branchName, err := engine.Status(context.Background(), worktreePath)
 		if err != nil {
 			t.Fatalf("failed to get worktree status: %v", err)
 		}
@@ -214,7 +214,7 @@ func TestGitEngine_Status(t *testing.T) {
 
 		engine := New("")
 
-		isDirty, unpushed, behind, branch, err := engine.Status(repoPath)
+		isDirty, unpushed, behind, branch, err := engine.Status(context.Background(), repoPath)
 		if err != nil {
 			t.Fatalf("Status failed: %v", err)
 		}
@@ -251,7 +251,7 @@ func TestGitEngine_Status(t *testing.T) {
 
 		engine := New("")
 
-		isDirty, _, _, _, err := engine.Status(repoPath)
+		isDirty, _, _, _, err := engine.Status(context.Background(), repoPath)
 		if err != nil {
 			t.Fatalf("Status failed: %v", err)
 		}
@@ -274,7 +274,7 @@ func TestGitEngine_Checkout(t *testing.T) {
 
 		engine := New("")
 
-		err := engine.Checkout(repoPath, "new-branch", true)
+		err := engine.Checkout(context.Background(), repoPath, "new-branch", true)
 		if err != nil {
 			t.Fatalf("Checkout failed: %v", err)
 		}
@@ -324,7 +324,7 @@ func TestGitEngine_Checkout(t *testing.T) {
 		engine := New("")
 
 		// Use engine to checkout other-branch
-		err = engine.Checkout(repoPath, "other-branch", false)
+		err = engine.Checkout(context.Background(), repoPath, "other-branch", false)
 		if err != nil {
 			t.Fatalf("Checkout failed: %v", err)
 		}
@@ -409,7 +409,7 @@ func TestGitEngine_List(t *testing.T) {
 
 		engine := New(projectsRoot)
 
-		repos, err := engine.List()
+		repos, err := engine.List(context.Background())
 		if err != nil {
 			t.Fatalf("List failed: %v", err)
 		}
@@ -434,7 +434,7 @@ func TestGitEngine_List(t *testing.T) {
 
 		engine := New(projectsRoot)
 
-		repos, err := engine.List()
+		repos, err := engine.List(context.Background())
 		if err != nil {
 			t.Fatalf("List failed: %v", err)
 		}
@@ -453,7 +453,7 @@ func TestGitEngine_List(t *testing.T) {
 
 		engine := New("/non/existent/path")
 
-		repos, err := engine.List()
+		repos, err := engine.List(context.Background())
 		if err != nil {
 			t.Fatalf("List failed: %v", err)
 		}
@@ -634,6 +634,99 @@ func TestGitEngine_EnsureCanonical(t *testing.T) {
 
 		if repo == nil {
 			t.Fatal("expected repo, got nil")
+		}
+	})
+}
+
+func TestGitEngine_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Status respects context cancellation", func(t *testing.T) {
+		t.Parallel()
+
+		// Create a repo
+		repoPath := t.TempDir()
+		createTestRepo(t, repoPath, false)
+
+		engine := New("")
+
+		// Create already canceled context
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		_, _, _, _, err := engine.Status(ctx, repoPath)
+		if err == nil {
+			t.Error("expected error with canceled context, got nil")
+		}
+	})
+
+	t.Run("Checkout respects context cancellation", func(t *testing.T) {
+		t.Parallel()
+
+		// Create repo
+		repoPath := t.TempDir()
+		createTestRepo(t, repoPath, false)
+
+		engine := New("")
+
+		// Create already canceled context
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		err := engine.Checkout(ctx, repoPath, "new-branch", true)
+		if err == nil {
+			t.Error("expected error with canceled context, got nil")
+		}
+	})
+
+	t.Run("List respects context cancellation", func(t *testing.T) {
+		t.Parallel()
+
+		projectsRoot := t.TempDir()
+
+		// Create some bare repo dirs
+		repoA := filepath.Join(projectsRoot, "repo-a")
+		_ = os.MkdirAll(repoA, 0o755)
+		_ = os.WriteFile(filepath.Join(repoA, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644)
+
+		engine := New(projectsRoot)
+
+		// Create already canceled context
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		_, err := engine.List(ctx)
+		if err == nil {
+			t.Error("expected error with canceled context, got nil")
+		}
+	})
+
+	t.Run("CreateWorktree respects context cancellation", func(t *testing.T) {
+		t.Parallel()
+
+		// Create source repo
+		sourceDir := t.TempDir()
+		sourcePath := filepath.Join(sourceDir, "source")
+		sourceRepo := createTestRepo(t, sourcePath, false)
+
+		// Create bare clone in projects root
+		projectsRoot := t.TempDir()
+		canonicalPath := filepath.Join(projectsRoot, "test-repo")
+		cloneToBare(t, sourceRepo, canonicalPath)
+
+		// Create worktree destination
+		worktreeDir := t.TempDir()
+		worktreePath := filepath.Join(worktreeDir, "workspace")
+
+		engine := New(projectsRoot)
+
+		// Create already canceled context
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		err := engine.CreateWorktree(ctx, "test-repo", worktreePath, "feature-branch")
+		if err == nil {
+			t.Error("expected error with canceled context, got nil")
 		}
 	})
 }
