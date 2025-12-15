@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
@@ -74,7 +75,7 @@ func (e *Executor) executeHook(hook config.Hook, ctx domain.HookContext, index i
 	// If repos filter specified, run once per matching repo
 	if len(hook.Repos) > 0 {
 		for _, repo := range repos {
-			repoPath := fmt.Sprintf("%s/%s", ctx.WorkspacePath, repo.Name)
+			repoPath := filepath.Join(ctx.WorkspacePath, repo.Name)
 			if err := e.runCommand(hook, ctx, repoPath, &repo, index); err != nil {
 				return err
 			}
@@ -171,7 +172,7 @@ func (e *Executor) buildEnvVars(ctx HookContext, repo *domain.Repo) []string {
 	if repo != nil {
 		env = append(env,
 			fmt.Sprintf("CANOPY_REPO_NAME=%s", repo.Name),
-			fmt.Sprintf("CANOPY_REPO_PATH=%s/%s", ctx.WorkspacePath, repo.Name),
+			fmt.Sprintf("CANOPY_REPO_PATH=%s", filepath.Join(ctx.WorkspacePath, repo.Name)),
 		)
 	}
 

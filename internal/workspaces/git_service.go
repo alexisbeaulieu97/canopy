@@ -4,6 +4,7 @@ package workspaces
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -74,7 +75,7 @@ func (s *WorkspaceGitService) PushWorkspace(ctx context.Context, workspaceID str
 			return cerrors.NewContextError(ctx, "push workspace", workspaceID)
 		}
 
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		branchName := targetWorkspace.BranchName
 
 		if branchName == "" {
@@ -118,7 +119,7 @@ func (s *WorkspaceGitService) runGitSequential(ctx context.Context, workspace *d
 			return results, cerrors.NewContextError(ctx, "git command", "sequential execution")
 		}
 
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		cmdResult, err := s.gitEngine.RunCommand(ctx, worktreePath, args...)
 
@@ -196,7 +197,7 @@ func (s *WorkspaceGitService) runGitParallel(ctx context.Context, workspace *dom
 
 			defer func() { <-sem }()
 
-			worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, r.Name)
+			worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, r.Name)
 
 			result := RepoGitResult{
 				RepoName: r.Name,
@@ -254,7 +255,7 @@ func (s *WorkspaceGitService) SwitchBranch(ctx context.Context, workspaceID, bra
 
 	// Iterate through repos and checkout
 	for _, repo := range targetWorkspace.Repos {
-		worktreePath := fmt.Sprintf("%s/%s/%s", s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		if s.logger != nil {
 			s.logger.Info("Switching branch", "repo", repo.Name, "branch", branchName)
