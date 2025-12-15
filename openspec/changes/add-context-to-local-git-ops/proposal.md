@@ -1,7 +1,7 @@
 # Change: Add Context Support to Local Git Operations
 
 ## Why
-Several `GitOperations` methods don't accept `context.Context`, making them impossible to cancel or timeout. This is inconsistent with network operations (Clone, Fetch, Push, Pull) which already support context. A hung filesystem or git operation can stall the CLI/TUI indefinitely.
+Several `GitOperations` methods don't accept `context.Context`, making them impossible to cancel or time out. This is inconsistent with network operations (Clone, Fetch, Push, Pull) which already support context. A hung filesystem or git operation can stall the CLI/TUI indefinitely.
 
 Affected methods without context:
 - `CreateWorktree(repoName, worktreePath, branchName string)`
