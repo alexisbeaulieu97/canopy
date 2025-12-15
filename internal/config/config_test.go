@@ -1,10 +1,13 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
 
 // validGitConfig returns a GitConfig with valid default values for testing.
@@ -144,6 +147,7 @@ func TestValidateValues(t *testing.T) {
 		cfg       *Config
 		wantErr   bool
 		errSubstr string
+		errType   error // optional: use errors.Is() to check error type
 	}{
 		{
 			name: "valid config",
@@ -168,7 +172,8 @@ func TestValidateValues(t *testing.T) {
 				Git:                validGitConfig(),
 			},
 			wantErr:   true,
-			errSubstr: "projects_root is required",
+			errSubstr: "projects_root",
+			errType:   cerrors.ConfigValidation,
 		},
 		{
 			name: "empty workspaces_root",
@@ -181,7 +186,8 @@ func TestValidateValues(t *testing.T) {
 				Git:                validGitConfig(),
 			},
 			wantErr:   true,
-			errSubstr: "workspaces_root is required",
+			errSubstr: "workspaces_root",
+			errType:   cerrors.ConfigValidation,
 		},
 		{
 			name: "empty closed_root",
@@ -194,7 +200,8 @@ func TestValidateValues(t *testing.T) {
 				Git:                validGitConfig(),
 			},
 			wantErr:   true,
-			errSubstr: "closed_root is required",
+			errSubstr: "closed_root",
+			errType:   cerrors.ConfigValidation,
 		},
 		{
 			name: "invalid close_default",
@@ -207,7 +214,8 @@ func TestValidateValues(t *testing.T) {
 				Git:                validGitConfig(),
 			},
 			wantErr:   true,
-			errSubstr: "workspace_close_default must be either",
+			errSubstr: "workspace_close_default",
+			errType:   cerrors.ConfigValidation,
 		},
 		{
 			name: "empty close_default defaults to delete",
@@ -244,7 +252,8 @@ func TestValidateValues(t *testing.T) {
 				Git:                validGitConfig(),
 			},
 			wantErr:   true,
-			errSubstr: "stale_threshold_days must be zero or positive",
+			errSubstr: "stale_threshold_days",
+			errType:   cerrors.ConfigValidation,
 		},
 		{
 			name: "zero stale_threshold_days is valid",
@@ -329,7 +338,8 @@ func TestValidateValues(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "post_create hook[0] command cannot be empty",
+			errSubstr: "post_create hook[0]",
+			errType:   cerrors.ConfigValidation,
 		},
 		{
 			name: "pre_close hook with empty command",
@@ -348,7 +358,8 @@ func TestValidateValues(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "pre_close hook[1] command cannot be empty",
+			errSubstr: "pre_close hook[1]",
+			errType:   cerrors.ConfigValidation,
 		},
 		{
 			name: "hook command with only whitespace",
@@ -366,7 +377,8 @@ func TestValidateValues(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "post_create hook[0] command cannot be empty",
+			errSubstr: "post_create hook[0]",
+			errType:   cerrors.ConfigValidation,
 		},
 		{
 			name: "hook command with newline",
@@ -384,7 +396,8 @@ func TestValidateValues(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "pre_close hook[0] command cannot contain newlines",
+			errSubstr: "pre_close hook[0]",
+			errType:   cerrors.ConfigValidation,
 		},
 		{
 			name: "hook with negative timeout",
@@ -402,7 +415,8 @@ func TestValidateValues(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "post_create hook[0] timeout must be non-negative",
+			errSubstr: "post_create hook[0]",
+			errType:   cerrors.ConfigValidation,
 		},
 	}
 
@@ -418,6 +432,10 @@ func TestValidateValues(t *testing.T) {
 
 				if tt.errSubstr != "" && !contains(err.Error(), tt.errSubstr) {
 					t.Errorf("ValidateValues() error = %q, want substring %q", err.Error(), tt.errSubstr)
+				}
+
+				if tt.errType != nil && !errors.Is(err, tt.errType) {
+					t.Errorf("ValidateValues() error does not match expected sentinel: got %v, want %v", err, tt.errType)
 				}
 			} else if err != nil {
 				t.Errorf("ValidateValues() unexpected error: %v", err)
@@ -502,7 +520,7 @@ func TestValidateEnvironment(t *testing.T) {
 				ClosedRoot:     closedDir,
 			},
 			wantErr:   true,
-			errSubstr: "must be a directory",
+			errSubstr: "not a directory",
 		},
 	}
 
@@ -583,7 +601,7 @@ func TestValidate(t *testing.T) {
 				Git:                validGitConfig(),
 			},
 			wantErr:   true,
-			errSubstr: "projects_root is required",
+			errSubstr: "projects_root",
 		},
 		{
 			name: "value errors take precedence over environment errors",
@@ -596,7 +614,7 @@ func TestValidate(t *testing.T) {
 				Git:                validGitConfig(),
 			},
 			wantErr:   true,
-			errSubstr: "workspace_close_default must be either",
+			errSubstr: "workspace_close_default",
 		},
 	}
 
@@ -807,7 +825,7 @@ func TestConfigValidateKeybindings(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "keybinding validation errors",
+			errSubstr: "tui.keybindings",
 		},
 		{
 			name: "invalid config with bad key name",
@@ -916,7 +934,7 @@ func TestValidateGitRetry(t *testing.T) {
 				c.Git.Retry.InitialDelay = "not-a-duration"
 			},
 			wantErr:   true,
-			errSubstr: "initial_delay is invalid",
+			errSubstr: "git.retry.initial_delay",
 		},
 		{
 			name: "initial_delay zero",
@@ -940,7 +958,7 @@ func TestValidateGitRetry(t *testing.T) {
 				c.Git.Retry.MaxDelay = "invalid"
 			},
 			wantErr:   true,
-			errSubstr: "max_delay is invalid",
+			errSubstr: "git.retry.max_delay",
 		},
 		{
 			name: "max_delay zero",

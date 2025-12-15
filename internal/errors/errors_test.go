@@ -3,6 +3,7 @@ package errors_test
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
@@ -497,5 +498,69 @@ func TestNewMissingBranchConfig(t *testing.T) {
 
 	if !errors.Is(err, cerrors.MissingBranchConfig) {
 		t.Error("MissingBranchConfig sentinel should match")
+	}
+}
+
+func TestNewConfigValidation(t *testing.T) {
+	err := cerrors.NewConfigValidation("workspace_root", "value cannot be empty")
+
+	if err.Code != cerrors.ErrConfigValidation {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrConfigValidation)
+	}
+
+	if !strings.Contains(err.Message, "workspace_root") {
+		t.Errorf("Message should contain field name, got %q", err.Message)
+	}
+
+	if !strings.Contains(err.Message, "value cannot be empty") {
+		t.Errorf("Message should contain detail, got %q", err.Message)
+	}
+
+	if !errors.Is(err, cerrors.ConfigValidation) {
+		t.Error("ConfigValidation sentinel should match")
+	}
+}
+
+func TestNewPathInvalid(t *testing.T) {
+	err := cerrors.NewPathInvalid("/invalid/path", "path contains invalid characters")
+
+	if err.Code != cerrors.ErrPathInvalid {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrPathInvalid)
+	}
+
+	if !strings.Contains(err.Message, "/invalid/path") {
+		t.Errorf("Message should contain path, got %q", err.Message)
+	}
+
+	if !strings.Contains(err.Message, "path contains invalid characters") {
+		t.Errorf("Message should contain reason, got %q", err.Message)
+	}
+
+	if err.Context["path"] != "/invalid/path" {
+		t.Errorf("Context[path] = %q, want %q", err.Context["path"], "/invalid/path")
+	}
+
+	if !errors.Is(err, cerrors.PathInvalid) {
+		t.Error("PathInvalid sentinel should match")
+	}
+}
+
+func TestNewPathNotDirectory(t *testing.T) {
+	err := cerrors.NewPathNotDirectory("/some/file.txt")
+
+	if err.Code != cerrors.ErrPathNotDirectory {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrPathNotDirectory)
+	}
+
+	if !strings.Contains(err.Message, "/some/file.txt") {
+		t.Errorf("Message should contain path, got %q", err.Message)
+	}
+
+	if err.Context["path"] != "/some/file.txt" {
+		t.Errorf("Context[path] = %q, want %q", err.Context["path"], "/some/file.txt")
+	}
+
+	if !errors.Is(err, cerrors.PathNotDirectory) {
+		t.Error("PathNotDirectory sentinel should match")
 	}
 }

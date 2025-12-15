@@ -342,7 +342,7 @@ func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspac
 				)
 			}
 
-			rollbackErrors = append(rollbackErrors, fmt.Errorf("branch rollback failed: %w", branchRollbackErr))
+			rollbackErrors = append(rollbackErrors, cerrors.NewInternalError("branch rollback failed", branchRollbackErr))
 		}
 
 		// Then rollback directory rename.
@@ -355,7 +355,7 @@ func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspac
 				)
 			}
 
-			rollbackErrors = append(rollbackErrors, fmt.Errorf("workspace rename rollback failed: %w", dirRollbackErr))
+			rollbackErrors = append(rollbackErrors, cerrors.NewInternalError("workspace rename rollback failed", dirRollbackErr))
 		}
 
 		if len(rollbackErrors) > 0 {
