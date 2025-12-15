@@ -19,6 +19,7 @@ const appContextKey contextKey = "app"
 var (
 	debug       bool
 	showVersion bool
+	configPath  string
 	rootCmd     = &cobra.Command{
 		Use:   "canopy",
 		Short: "Workspace-centric development",
@@ -28,7 +29,7 @@ var (
 				return nil
 			}
 
-			appInstance, err := app.New(debug)
+			appInstance, err := app.New(debug, app.WithConfigPath(configPath))
 			if err != nil {
 				return err
 			}
@@ -52,6 +53,7 @@ var (
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging")
+	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "Path to config file (overrides CANOPY_CONFIG and default locations)")
 	rootCmd.Flags().BoolVarP(&showVersion, "version", "V", false, "Print version information and exit")
 }
 

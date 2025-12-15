@@ -170,18 +170,32 @@ type Defaults struct {
 	WorkspacePatterns []WorkspacePattern `mapstructure:"workspace_patterns"`
 }
 
-// Load initializes and loads the configuration
-func Load() (*Config, error) {
+// Load initializes and loads the configuration.
+// If configPath is provided (non-empty), it takes precedence over all other config locations.
+// Otherwise, CANOPY_CONFIG environment variable is checked, then default locations.
+// Priority order: configPath parameter > CANOPY_CONFIG env > default locations.
+func Load(configPath string) (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, cerrors.NewIOFailed("get user home dir", err)
 	}
 
-	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath(filepath.Join(home, ".canopy"))
-	viper.AddConfigPath(filepath.Join(home, ".config", "canopy"))
+
+	// Determine config path with priority: parameter > env > default search paths
+	if configPath != "" {
+		// Explicit path provided via flag
+		viper.SetConfigFile(configPath)
+	} else if envPath := os.Getenv("CANOPY_CONFIG"); envPath != "" {
+		// Environment variable specified
+		viper.SetConfigFile(envPath)
+	} else {
+		// Use default search paths
+		viper.SetConfigName("config")
+		viper.AddConfigPath(".")
+		viper.AddConfigPath(filepath.Join(home, ".canopy"))
+		viper.AddConfigPath(filepath.Join(home, ".config", "canopy"))
+	}
 
 	viper.SetDefault("projects_root", filepath.Join(home, ".canopy", "projects"))
 	viper.SetDefault("workspaces_root", filepath.Join(home, ".canopy", "workspaces"))

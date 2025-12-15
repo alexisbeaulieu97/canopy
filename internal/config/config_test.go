@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
+
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
 
@@ -24,6 +26,10 @@ func validGitConfig() GitConfig {
 }
 
 func TestLoad(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
 	// Create a temporary config file
 	tmpDir, err := os.MkdirTemp("", "canopy-config-test")
 	if err != nil {
@@ -91,7 +97,7 @@ defaults:
 		t.Fatalf("failed to write local config file: %v", err)
 	}
 
-	cfg, err := Load()
+	cfg, err := Load("")
 	if err != nil {
 		t.Fatalf("Load() failed: %v", err)
 	}
@@ -110,6 +116,151 @@ defaults:
 
 	if cfg.CloseDefault != "archive" {
 		t.Errorf("expected CloseDefault archive, got %s", cfg.CloseDefault)
+	}
+}
+
+func TestLoadWithConfigPath(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	tmpDir, err := os.MkdirTemp("", "canopy-config-path-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	configContent := `
+projects_root: /custom/projects
+workspaces_root: /custom/workspaces
+closed_root: /custom/closed
+workspace_close_default: archive
+`
+
+	configPath := filepath.Join(tmpDir, "custom-config.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load(configPath) failed: %v", err)
+	}
+
+	if cfg.ProjectsRoot != "/custom/projects" {
+		t.Errorf("expected ProjectsRoot /custom/projects, got %s", cfg.ProjectsRoot)
+	}
+
+	if cfg.WorkspacesRoot != "/custom/workspaces" {
+		t.Errorf("expected WorkspacesRoot /custom/workspaces, got %s", cfg.WorkspacesRoot)
+	}
+
+	if cfg.ClosedRoot != "/custom/closed" {
+		t.Errorf("expected ClosedRoot /custom/closed, got %s", cfg.ClosedRoot)
+	}
+}
+
+func TestLoadWithEnvVar(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	tmpDir, err := os.MkdirTemp("", "canopy-config-env-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	configContent := `
+projects_root: /env/projects
+workspaces_root: /env/workspaces
+closed_root: /env/closed
+workspace_close_default: delete
+`
+
+	configPath := filepath.Join(tmpDir, "env-config.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	// Set environment variable
+	t.Setenv("CANOPY_CONFIG", configPath)
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load(\"\") with CANOPY_CONFIG failed: %v", err)
+	}
+
+	if cfg.ProjectsRoot != "/env/projects" {
+		t.Errorf("expected ProjectsRoot /env/projects, got %s", cfg.ProjectsRoot)
+	}
+
+	if cfg.WorkspacesRoot != "/env/workspaces" {
+		t.Errorf("expected WorkspacesRoot /env/workspaces, got %s", cfg.WorkspacesRoot)
+	}
+}
+
+func TestLoadConfigPriority(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	tmpDir, err := os.MkdirTemp("", "canopy-config-priority-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	// Config for environment variable
+	envConfigContent := `
+projects_root: /env/projects
+workspaces_root: /env/workspaces
+closed_root: /env/closed
+workspace_close_default: delete
+`
+
+	envConfigPath := filepath.Join(tmpDir, "env-config.yaml")
+	if err := os.WriteFile(envConfigPath, []byte(envConfigContent), 0o644); err != nil {
+		t.Fatalf("failed to write env config file: %v", err)
+	}
+
+	// Config for flag override
+	flagConfigContent := `
+projects_root: /flag/projects
+workspaces_root: /flag/workspaces
+closed_root: /flag/closed
+workspace_close_default: archive
+`
+
+	flagConfigPath := filepath.Join(tmpDir, "flag-config.yaml")
+	if err := os.WriteFile(flagConfigPath, []byte(flagConfigContent), 0o644); err != nil {
+		t.Fatalf("failed to write flag config file: %v", err)
+	}
+
+	// Set environment variable
+	t.Setenv("CANOPY_CONFIG", envConfigPath)
+
+	// Load with explicit path - should take precedence over env var
+	cfg, err := Load(flagConfigPath)
+	if err != nil {
+		t.Fatalf("Load(flagConfigPath) failed: %v", err)
+	}
+
+	if cfg.ProjectsRoot != "/flag/projects" {
+		t.Errorf("expected flag path to take precedence, got ProjectsRoot %s", cfg.ProjectsRoot)
+	}
+
+	if cfg.CloseDefault != "archive" {
+		t.Errorf("expected flag config close_default archive, got %s", cfg.CloseDefault)
 	}
 }
 

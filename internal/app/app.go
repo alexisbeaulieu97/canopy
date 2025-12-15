@@ -22,10 +22,11 @@ type Option func(*appOptions)
 
 // appOptions holds optional dependencies that can be injected.
 type appOptions struct {
-	gitOps    ports.GitOperations
-	wsStorage ports.WorkspaceStorage
-	configPrv ports.ConfigProvider
-	logger    *logging.Logger
+	gitOps     ports.GitOperations
+	wsStorage  ports.WorkspaceStorage
+	configPrv  ports.ConfigProvider
+	configPath string
+	logger     *logging.Logger
 }
 
 // WithGitOperations sets a custom GitOperations implementation.
@@ -46,6 +47,14 @@ func WithWorkspaceStorage(s ports.WorkspaceStorage) Option {
 func WithConfigProvider(c ports.ConfigProvider) Option {
 	return func(o *appOptions) {
 		o.configPrv = c
+	}
+}
+
+// WithConfigPath sets a custom path for loading configuration.
+// This takes precedence over CANOPY_CONFIG environment variable and default locations.
+func WithConfigPath(path string) Option {
+	return func(o *appOptions) {
+		o.configPath = path
 	}
 }
 
@@ -70,7 +79,7 @@ func New(debug bool, opts ...Option) (*App, error) {
 	if options.configPrv != nil {
 		cfg = options.configPrv
 	} else {
-		loadedCfg, err := config.Load()
+		loadedCfg, err := config.Load(options.configPath)
 		if err != nil {
 			return nil, err
 		}
