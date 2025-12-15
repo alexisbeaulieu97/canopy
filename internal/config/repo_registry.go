@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/giturl"
 )
 
@@ -84,16 +85,16 @@ func (r *RepoRegistry) Save() error {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(r.path), 0o750); err != nil {
-		return fmt.Errorf("failed to create registry directory: %w", err)
+		return cerrors.NewRegistryError("save", "create registry directory", err)
 	}
 
 	data, err := yaml.Marshal(r)
 	if err != nil {
-		return fmt.Errorf("failed to marshal registry: %w", err)
+		return cerrors.NewRegistryError("save", "marshal registry", err)
 	}
 
 	if err := os.WriteFile(r.path, data, 0o600); err != nil {
-		return fmt.Errorf("failed to write registry: %w", err)
+		return cerrors.NewRegistryError("save", "write registry", err)
 	}
 
 	return nil
@@ -133,17 +134,17 @@ func (r *RepoRegistry) Register(alias string, entry RegistryEntry, force bool) e
 
 	alias = strings.TrimSpace(alias)
 	if alias == "" {
-		return fmt.Errorf("alias is required")
+		return cerrors.NewInvalidArgument("alias", "is required")
 	}
 
 	entry.URL = strings.TrimSpace(entry.URL)
 	if !giturl.IsURL(entry.URL) {
-		return fmt.Errorf("invalid repository URL: %s", entry.URL)
+		return cerrors.NewInvalidArgument("url", fmt.Sprintf("invalid repository URL: %s", entry.URL))
 	}
 
 	if _, exists := r.Repos[alias]; exists && !force {
 		existing := r.Repos[alias]
-		return fmt.Errorf("alias '%s' already exists for %s", alias, existing.URL)
+		return cerrors.NewRegistryError("register", fmt.Sprintf("alias '%s' already exists for %s", alias, existing.URL), nil)
 	}
 
 	entry.Alias = alias
@@ -158,12 +159,12 @@ func (r *RepoRegistry) RegisterWithSuffix(alias string, entry RegistryEntry) (st
 
 	alias = strings.TrimSpace(alias)
 	if alias == "" {
-		return "", fmt.Errorf("alias is required")
+		return "", cerrors.NewInvalidArgument("alias", "is required")
 	}
 
 	entry.URL = strings.TrimSpace(entry.URL)
 	if !giturl.IsURL(entry.URL) {
-		return "", fmt.Errorf("invalid repository URL: %s", entry.URL)
+		return "", cerrors.NewInvalidArgument("url", fmt.Sprintf("invalid repository URL: %s", entry.URL))
 	}
 
 	target := alias
@@ -186,7 +187,7 @@ func (r *RepoRegistry) Unregister(alias string) error {
 	r.ensureMap()
 
 	if _, exists := r.Repos[alias]; !exists {
-		return fmt.Errorf("alias '%s' not found", alias)
+		return cerrors.NewRepoNotFound(alias)
 	}
 
 	delete(r.Repos, alias)
@@ -232,7 +233,7 @@ func DeriveAliasFromURL(url string) string {
 func defaultRegistryPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("failed to get user home dir: %w", err)
+		return "", cerrors.NewIOFailed("get user home dir", err)
 	}
 
 	return filepath.Join(home, ".canopy", "repos.yaml"), nil

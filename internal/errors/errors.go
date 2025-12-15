@@ -21,6 +21,7 @@ const (
 	ErrRepoAlreadyExists   ErrorCode = "REPO_ALREADY_EXISTS"
 	ErrGitOperationFailed  ErrorCode = "GIT_OPERATION_FAILED"
 	ErrConfigInvalid       ErrorCode = "CONFIG_INVALID"
+	ErrConfigValidation    ErrorCode = "CONFIG_VALIDATION"
 	ErrUnknownRepository   ErrorCode = "UNKNOWN_REPOSITORY"
 	ErrNotInWorkspace      ErrorCode = "NOT_IN_WORKSPACE"
 	ErrCommandFailed       ErrorCode = "COMMAND_FAILED"
@@ -36,6 +37,8 @@ const (
 	ErrMissingBranchConfig ErrorCode = "MISSING_BRANCH_CONFIG"
 	ErrHookFailed          ErrorCode = "HOOK_FAILED"
 	ErrHookTimeout         ErrorCode = "HOOK_TIMEOUT"
+	ErrPathInvalid         ErrorCode = "PATH_INVALID"
+	ErrPathNotDirectory    ErrorCode = "PATH_NOT_DIRECTORY"
 )
 
 // CanopyError is a typed error with code, message, cause, and context.
@@ -381,6 +384,33 @@ func NewHookTimeout(index int, command string, timeout time.Duration) *CanopyErr
 	}
 }
 
+// NewConfigValidation creates an error for configuration validation failures.
+func NewConfigValidation(field, detail string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrConfigValidation,
+		Message: fmt.Sprintf("configuration validation failed for %s: %s", field, detail),
+		Context: map[string]string{"field": field, "detail": detail},
+	}
+}
+
+// NewPathInvalid creates an error for invalid path values.
+func NewPathInvalid(path, reason string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrPathInvalid,
+		Message: fmt.Sprintf("invalid path %q: %s", path, reason),
+		Context: map[string]string{"path": path, "reason": reason},
+	}
+}
+
+// NewPathNotDirectory creates an error for paths that should be directories but aren't.
+func NewPathNotDirectory(path string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrPathNotDirectory,
+		Message: fmt.Sprintf("path is not a directory: %s", path),
+		Context: map[string]string{"path": path},
+	}
+}
+
 // Sentinel errors for use with errors.Is().
 var (
 	WorkspaceNotFound   = &CanopyError{Code: ErrWorkspaceNotFound}
@@ -390,6 +420,7 @@ var (
 	RepoAlreadyExists   = &CanopyError{Code: ErrRepoAlreadyExists}
 	GitOperationFailed  = &CanopyError{Code: ErrGitOperationFailed}
 	ConfigInvalid       = &CanopyError{Code: ErrConfigInvalid}
+	ConfigValidation    = &CanopyError{Code: ErrConfigValidation}
 	UnknownRepository   = &CanopyError{Code: ErrUnknownRepository}
 	NotInWorkspace      = &CanopyError{Code: ErrNotInWorkspace}
 	CommandFailed       = &CanopyError{Code: ErrCommandFailed}
@@ -405,4 +436,6 @@ var (
 	MissingBranchConfig = &CanopyError{Code: ErrMissingBranchConfig}
 	HookFailed          = &CanopyError{Code: ErrHookFailed}
 	HookTimeout         = &CanopyError{Code: ErrHookTimeout}
+	PathInvalid         = &CanopyError{Code: ErrPathInvalid}
+	PathNotDirectory    = &CanopyError{Code: ErrPathNotDirectory}
 )

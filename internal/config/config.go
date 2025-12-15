@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
 
 // Default keybindings for TUI actions.
@@ -81,12 +83,12 @@ type ParsedRetryConfig struct {
 func (r GitRetrySettings) Parse() (ParsedRetryConfig, error) {
 	initialDelay, err := time.ParseDuration(r.InitialDelay)
 	if err != nil {
-		return ParsedRetryConfig{}, fmt.Errorf("invalid initial_delay %q: %w", r.InitialDelay, err)
+		return ParsedRetryConfig{}, cerrors.NewConfigValidation("git.retry.initial_delay", fmt.Sprintf("invalid duration %q: %v", r.InitialDelay, err))
 	}
 
 	maxDelay, err := time.ParseDuration(r.MaxDelay)
 	if err != nil {
-		return ParsedRetryConfig{}, fmt.Errorf("invalid max_delay %q: %w", r.MaxDelay, err)
+		return ParsedRetryConfig{}, cerrors.NewConfigValidation("git.retry.max_delay", fmt.Sprintf("invalid duration %q: %v", r.MaxDelay, err))
 	}
 
 	return ParsedRetryConfig{
@@ -133,7 +135,7 @@ type Defaults struct {
 func Load() (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user home dir: %w", err)
+		return nil, cerrors.NewIOFailed("get user home dir", err)
 	}
 
 	viper.SetConfigName("config")
@@ -161,14 +163,14 @@ func Load() (*Config, error) {
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
+			return nil, cerrors.NewIOFailed("read config file", err)
 		}
 		// Config file not found is okay, use defaults
 	}
 
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+		return nil, cerrors.NewConfigInvalid(fmt.Sprintf("failed to unmarshal: %v", err))
 	}
 
 	// Expand tilde
@@ -179,7 +181,7 @@ func Load() (*Config, error) {
 
 	registry, err := LoadRepoRegistry("")
 	if err != nil {
-		return nil, fmt.Errorf("failed to load repository registry: %w", err)
+		return nil, cerrors.NewRegistryError("load", "repository registry", err)
 	}
 
 	cfg.Registry = registry
@@ -281,7 +283,7 @@ func (c *Config) validateCloseDefault() error {
 	}
 
 	if c.CloseDefault != "delete" && c.CloseDefault != "archive" {
-		return fmt.Errorf("workspace_close_default must be either 'delete' or 'archive', got %q", c.CloseDefault)
+		return cerrors.NewConfigValidation("workspace_close_default", fmt.Sprintf("must be either 'delete' or 'archive', got %q", c.CloseDefault))
 	}
 
 	return nil
@@ -291,7 +293,7 @@ func (c *Config) validateCloseDefault() error {
 func (c *Config) validatePatterns() error {
 	for _, p := range c.Defaults.WorkspacePatterns {
 		if _, err := regexp.Compile(p.Pattern); err != nil {
-			return fmt.Errorf("invalid regex pattern '%s': %w", p.Pattern, err)
+			return cerrors.NewConfigValidation("workspace_patterns", fmt.Sprintf("invalid regex pattern '%s': %v", p.Pattern, err))
 		}
 	}
 
@@ -301,7 +303,7 @@ func (c *Config) validatePatterns() error {
 // validateStaleThreshold checks that the stale threshold is non-negative.
 func (c *Config) validateStaleThreshold() error {
 	if c.StaleThresholdDays < 0 {
-		return fmt.Errorf("stale_threshold_days must be zero or positive, got %d", c.StaleThresholdDays)
+		return cerrors.NewConfigValidation("stale_threshold_days", fmt.Sprintf("must be zero or positive, got %d", c.StaleThresholdDays))
 	}
 
 	return nil
@@ -317,41 +319,41 @@ func (c *Config) validateGitRetry() error {
 	retry := c.Git.Retry
 
 	if retry.MaxAttempts < 1 {
-		return fmt.Errorf("git.retry.max_attempts must be at least 1, got %d", retry.MaxAttempts)
+		return cerrors.NewConfigValidation("git.retry.max_attempts", fmt.Sprintf("must be at least 1, got %d", retry.MaxAttempts))
 	}
 
 	if retry.MaxAttempts > maxRetryAttempts {
-		return fmt.Errorf("git.retry.max_attempts must not exceed %d, got %d", maxRetryAttempts, retry.MaxAttempts)
+		return cerrors.NewConfigValidation("git.retry.max_attempts", fmt.Sprintf("must not exceed %d, got %d", maxRetryAttempts, retry.MaxAttempts))
 	}
 
 	initialDelay, err := time.ParseDuration(retry.InitialDelay)
 	if err != nil {
-		return fmt.Errorf("git.retry.initial_delay is invalid: %w", err)
+		return cerrors.NewConfigValidation("git.retry.initial_delay", fmt.Sprintf("invalid: %v", err))
 	}
 
 	if initialDelay <= 0 {
-		return fmt.Errorf("git.retry.initial_delay must be positive, got %s", retry.InitialDelay)
+		return cerrors.NewConfigValidation("git.retry.initial_delay", fmt.Sprintf("must be positive, got %s", retry.InitialDelay))
 	}
 
 	maxDelay, err := time.ParseDuration(retry.MaxDelay)
 	if err != nil {
-		return fmt.Errorf("git.retry.max_delay is invalid: %w", err)
+		return cerrors.NewConfigValidation("git.retry.max_delay", fmt.Sprintf("invalid: %v", err))
 	}
 
 	if maxDelay <= 0 {
-		return fmt.Errorf("git.retry.max_delay must be positive, got %s", retry.MaxDelay)
+		return cerrors.NewConfigValidation("git.retry.max_delay", fmt.Sprintf("must be positive, got %s", retry.MaxDelay))
 	}
 
 	if initialDelay > maxDelay {
-		return fmt.Errorf("git.retry.initial_delay (%s) must not exceed max_delay (%s)", retry.InitialDelay, retry.MaxDelay)
+		return cerrors.NewConfigValidation("git.retry.initial_delay", fmt.Sprintf("(%s) must not exceed max_delay (%s)", retry.InitialDelay, retry.MaxDelay))
 	}
 
 	if retry.Multiplier < 1.0 {
-		return fmt.Errorf("git.retry.multiplier must be at least 1.0, got %f", retry.Multiplier)
+		return cerrors.NewConfigValidation("git.retry.multiplier", fmt.Sprintf("must be at least 1.0, got %f", retry.Multiplier))
 	}
 
 	if retry.JitterFactor < 0 || retry.JitterFactor > 1 {
-		return fmt.Errorf("git.retry.jitter_factor must be between 0 and 1, got %f", retry.JitterFactor)
+		return cerrors.NewConfigValidation("git.retry.jitter_factor", fmt.Sprintf("must be between 0 and 1, got %f", retry.JitterFactor))
 	}
 
 	return nil
@@ -376,20 +378,22 @@ func (c *Config) validateHooks() error {
 
 // validateHook checks that a hook has valid configuration.
 func validateHook(h Hook, hookType string, index int) error {
+	field := fmt.Sprintf("%s hook[%d]", hookType, index)
+
 	if strings.TrimSpace(h.Command) == "" {
-		return fmt.Errorf("%s hook[%d] command cannot be empty", hookType, index)
+		return cerrors.NewConfigValidation(field, "command cannot be empty")
 	}
 
 	if strings.Contains(h.Command, "\x00") {
-		return fmt.Errorf("%s hook[%d] command contains invalid null byte", hookType, index)
+		return cerrors.NewConfigValidation(field, "command contains invalid null byte")
 	}
 
 	if strings.ContainsAny(h.Command, "\n\r") {
-		return fmt.Errorf("%s hook[%d] command cannot contain newlines", hookType, index)
+		return cerrors.NewConfigValidation(field, "command cannot contain newlines")
 	}
 
 	if h.Timeout < 0 {
-		return fmt.Errorf("%s hook[%d] timeout must be non-negative, got %d", hookType, index, h.Timeout)
+		return cerrors.NewConfigValidation(field, fmt.Sprintf("timeout must be non-negative, got %d", h.Timeout))
 	}
 
 	return nil
@@ -417,7 +421,7 @@ func (c *Config) ValidateEnvironment() error {
 // validateRequiredField checks that a field value is non-empty.
 func validateRequiredField(label, value string) error {
 	if value == "" {
-		return fmt.Errorf("%s is required", label)
+		return cerrors.NewConfigValidation(label, "is required")
 	}
 
 	return nil
@@ -431,7 +435,7 @@ func validateRootPath(label, path string) error {
 	if err != nil {
 		if os.IsNotExist(err) {
 			if !filepath.IsAbs(path) {
-				return fmt.Errorf("%s must be an absolute path: %s", label, path)
+				return cerrors.NewPathInvalid(path, fmt.Sprintf("%s must be an absolute path", label))
 			}
 
 			return nil
@@ -441,7 +445,7 @@ func validateRootPath(label, path string) error {
 	}
 
 	if !info.IsDir() {
-		return fmt.Errorf("%s must be a directory: %s", label, path)
+		return cerrors.NewPathNotDirectory(path)
 	}
 
 	return nil
@@ -666,7 +670,7 @@ func (k Keybindings) ValidateKeybindings() error {
 	}
 
 	if len(errors) > 0 {
-		return fmt.Errorf("keybinding validation errors:\n  %s", strings.Join(errors, "\n  "))
+		return cerrors.NewConfigValidation("tui.keybindings", strings.Join(errors, "; "))
 	}
 
 	return nil

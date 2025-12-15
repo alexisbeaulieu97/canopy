@@ -2,12 +2,13 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
 
 // loadWorkspaces creates a command to load all workspaces.
@@ -69,7 +70,7 @@ func (m Model) loadWorkspaceDetails(id string) tea.Cmd {
 	return func() tea.Msg {
 		wsItem, ok := m.workspaceItemByID(id)
 		if !ok {
-			return workspaceDetailsErrMsg{id: id, err: fmt.Errorf("workspace not found")}
+			return workspaceDetailsErrMsg{id: id, err: cerrors.NewWorkspaceNotFound(id)}
 		}
 
 		status, err := m.svc.GetStatus(id)
@@ -122,12 +123,12 @@ func (m Model) openWorkspace(id string) tea.Cmd {
 		}
 
 		if editor == "" {
-			return openEditorResultMsg{err: fmt.Errorf("set $EDITOR or $VISUAL to open workspaces")}
+			return openEditorResultMsg{err: cerrors.NewConfigInvalid("set $EDITOR or $VISUAL to open workspaces")}
 		}
 
 		parts := strings.Fields(editor)
 		if len(parts) == 0 {
-			return openEditorResultMsg{err: fmt.Errorf("set $EDITOR or $VISUAL to open workspaces")}
+			return openEditorResultMsg{err: cerrors.NewConfigInvalid("set $EDITOR or $VISUAL to open workspaces")}
 		}
 
 		cmd := exec.Command(parts[0], append(parts[1:], path)...) //nolint:gosec // editor command is user-provided
