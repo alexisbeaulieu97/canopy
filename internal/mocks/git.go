@@ -25,6 +25,9 @@ type MockGitOperations struct {
 	CheckoutFunc        func(path, branchName string, create bool) error
 	RenameBranchFunc    func(ctx context.Context, repoPath, oldName, newName string) error
 	RunCommandFunc      func(ctx context.Context, repoPath string, args ...string) (*ports.CommandResult, error)
+	GetUpstreamURLFunc  func(repoName string) (string, error)
+	RemoveWorktreeFunc  func(ctx context.Context, repoName, worktreePath string) error
+	PruneWorktreesFunc  func(ctx context.Context, repoName string) error
 }
 
 // NewMockGitOperations creates a new MockGitOperations with default no-op behavior.
@@ -129,4 +132,31 @@ func (m *MockGitOperations) RunCommand(ctx context.Context, repoPath string, arg
 	}
 
 	return &ports.CommandResult{}, nil
+}
+
+// GetUpstreamURL calls the mock function if set, otherwise returns empty string.
+func (m *MockGitOperations) GetUpstreamURL(repoName string) (string, error) {
+	if m.GetUpstreamURLFunc != nil {
+		return m.GetUpstreamURLFunc(repoName)
+	}
+
+	return "", nil
+}
+
+// RemoveWorktree calls the mock function if set, otherwise returns nil.
+func (m *MockGitOperations) RemoveWorktree(ctx context.Context, repoName, worktreePath string) error {
+	if m.RemoveWorktreeFunc != nil {
+		return m.RemoveWorktreeFunc(ctx, repoName, worktreePath)
+	}
+
+	return nil
+}
+
+// PruneWorktrees calls the mock function if set, otherwise returns nil.
+func (m *MockGitOperations) PruneWorktrees(ctx context.Context, repoName string) error {
+	if m.PruneWorktreesFunc != nil {
+		return m.PruneWorktreesFunc(ctx, repoName)
+	}
+
+	return nil
 }

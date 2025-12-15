@@ -2,6 +2,7 @@
 package workspaces
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
@@ -18,6 +19,9 @@ type OrphanService interface {
 
 	// DetectOrphansForWorkspace returns orphans for a specific workspace.
 	DetectOrphansForWorkspace(workspaceID string) ([]domain.OrphanedWorktree, error)
+
+	// PruneAllWorktrees cleans up stale worktree references from all canonical repos.
+	PruneAllWorktrees(ctx context.Context) error
 }
 
 // WorkspaceOrphanService handles orphan detection for workspaces.
@@ -176,6 +180,35 @@ func (s *WorkspaceOrphanService) checkRepoForOrphan(
 		}
 
 		return nil
+	}
+
+	return nil
+}
+
+// PruneAllWorktrees cleans up stale worktree references from all canonical repos.
+// This removes worktree entries that point to non-existent directories.
+func (s *WorkspaceOrphanService) PruneAllWorktrees(ctx context.Context) error {
+	repos, err := s.gitEngine.List()
+	if err != nil {
+		return cerrors.NewIOFailed("list canonical repos", err)
+	}
+
+	var pruneErrors []error
+
+	for _, repoName := range repos {
+		if err := s.gitEngine.PruneWorktrees(ctx, repoName); err != nil {
+			if s.logger != nil {
+				s.logger.Warn("Failed to prune worktrees",
+					"repo", repoName,
+					"error", err)
+			}
+
+			pruneErrors = append(pruneErrors, err)
+		}
+	}
+
+	if len(pruneErrors) > 0 {
+		return cerrors.NewInternalError("some worktree prune operations failed", pruneErrors[0])
 	}
 
 	return nil

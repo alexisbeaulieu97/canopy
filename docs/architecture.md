@@ -191,16 +191,49 @@ type WorkspaceStorage interface {
 ├── registry.yaml         # Repository aliases
 ├── projects/             # Canonical bare repositories
 │   ├── backend/          # Bare clone of backend repo
+│   │   └── worktrees/    # Git worktree tracking
 │   └── frontend/         # Bare clone of frontend repo
+│       └── worktrees/    # Git worktree tracking
 ├── workspaces/           # Active workspaces
 │   └── TICKET-123/       # Workspace directory
 │       ├── .canopy.yaml  # Workspace metadata
-│       ├── backend/      # Git worktree
-│       └── frontend/     # Git worktree
+│       ├── backend/      # Git worktree (linked to canonical)
+│       └── frontend/     # Git worktree (linked to canonical)
 └── closed/               # Archived workspace metadata
     └── TICKET-100/
         └── .canopy.yaml
 ```
+
+## Git Worktree Architecture
+
+Canopy uses **true git worktrees** to share git objects between the canonical repository and workspace checkouts. This provides:
+
+- **Disk Efficiency**: Worktrees share git objects with the canonical repo, avoiding duplicate storage
+- **Correct Remotes**: Each worktree's origin points to the real upstream URL for push/pull operations
+
+### How It Works
+
+1. **Canonical Repository Setup**
+   - When a repository is first cloned, Canopy stores the upstream URL in the git config
+   - The URL is stored under `canopy.upstreamUrl` in the bare repo's config
+
+2. **Worktree Creation**
+   - Uses `git worktree add -b <branch> <path>` to create true worktrees
+   - After creation, the worktree's origin remote is configured to point to the upstream URL
+   - Branch tracking is set up for proper push/pull behavior
+
+3. **Worktree Cleanup**
+   - When closing a workspace, `git worktree remove` is called for each repo
+   - Orphan detection includes `git worktree prune` to clean up stale references
+
+### Migration Notes
+
+Workspaces created before this implementation used full clones instead of true worktrees. To benefit from disk savings, users should:
+
+1. Close the old workspace
+2. Create a new workspace with the same repositories
+
+Existing workspaces continue to function normally.
 
 ## Error Handling
 

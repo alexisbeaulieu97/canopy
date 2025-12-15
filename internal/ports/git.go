@@ -48,4 +48,13 @@ type GitOperations interface {
 
 	// RunCommand executes an arbitrary git command in the specified repository path.
 	RunCommand(ctx context.Context, repoPath string, args ...string) (*CommandResult, error)
+
+	// GetUpstreamURL retrieves the upstream URL from a canonical repository's config.
+	GetUpstreamURL(repoName string) (string, error)
+
+	// RemoveWorktree removes a git worktree from the canonical repository.
+	RemoveWorktree(ctx context.Context, repoName, worktreePath string) error
+
+	// PruneWorktrees cleans up stale worktree references from a canonical repository.
+	PruneWorktrees(ctx context.Context, repoName string) error
 }
