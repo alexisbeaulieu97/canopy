@@ -25,15 +25,15 @@ type Service struct {
 	gitEngine    ports.GitOperations
 	wsEngine     ports.WorkspaceStorage
 	logger       *logging.Logger
-	hookExecutor *hooks.Executor
+	hookExecutor ports.HookExecutor
 
 	// Sub-services for specific responsibilities
 	resolver  *RepoResolver
-	diskUsage *DiskUsageCalculator
+	diskUsage ports.DiskUsage
 	canonical *CanonicalRepoService
 
 	// cache provides in-memory caching of workspace metadata
-	cache *WorkspaceCache
+	cache ports.WorkspaceCache
 }
 
 // ErrNoReposConfigured indicates no repos were specified and none matched configuration.
@@ -49,20 +49,74 @@ const (
 	HookPhasePreClose HookPhase = "pre_close"
 )
 
-// NewService creates a new workspace service
-func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngine ports.WorkspaceStorage, logger *logging.Logger) *Service {
-	diskUsage := DefaultDiskUsageCalculator()
+// ServiceOption is a functional option for configuring the Service.
+type ServiceOption func(*serviceOptions)
+
+// serviceOptions holds optional dependencies that can be injected.
+type serviceOptions struct {
+	hookExecutor ports.HookExecutor
+	diskUsage    ports.DiskUsage
+	cache        ports.WorkspaceCache
+}
+
+// WithHookExecutor sets a custom HookExecutor implementation.
+func WithHookExecutor(h ports.HookExecutor) ServiceOption {
+	return func(o *serviceOptions) {
+		o.hookExecutor = h
+	}
+}
+
+// WithDiskUsage sets a custom DiskUsage implementation.
+func WithDiskUsage(d ports.DiskUsage) ServiceOption {
+	return func(o *serviceOptions) {
+		o.diskUsage = d
+	}
+}
+
+// WithCache sets a custom WorkspaceCache implementation.
+func WithCache(c ports.WorkspaceCache) ServiceOption {
+	return func(o *serviceOptions) {
+		o.cache = c
+	}
+}
+
+// NewService creates a new workspace service.
+// Options can be provided to override default implementations for testing.
+func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngine ports.WorkspaceStorage, logger *logging.Logger, opts ...ServiceOption) *Service {
+	// Apply all options
+	options := &serviceOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	// Use provided hook executor or create default
+	hookExecutor := options.hookExecutor
+	if hookExecutor == nil {
+		hookExecutor = hooks.NewExecutor(logger)
+	}
+
+	// Use provided disk usage or create default
+	diskUsage := options.diskUsage
+	if diskUsage == nil {
+		diskUsage = DefaultDiskUsageCalculator()
+	}
+
+	// Use provided cache or create default
+	cache := options.cache
+	if cache == nil {
+		cache = NewWorkspaceCache(DefaultCacheTTL)
+	}
 
 	return &Service{
 		config:       cfg,
 		gitEngine:    gitEngine,
 		wsEngine:     wsEngine,
 		logger:       logger,
-		hookExecutor: hooks.NewExecutor(logger),
+		hookExecutor: hookExecutor,
 		resolver:     NewRepoResolver(cfg.GetRegistry()),
 		diskUsage:    diskUsage,
 		canonical:    NewCanonicalRepoService(gitEngine, wsEngine, cfg.GetProjectsRoot(), logger, diskUsage),
-		cache:        NewWorkspaceCache(DefaultCacheTTL),
+		cache:        cache,
 	}
 }
 

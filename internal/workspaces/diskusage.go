@@ -7,7 +7,12 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
+
+// Compile-time check that DiskUsageCalculator implements ports.DiskUsage.
+var _ ports.DiskUsage = (*DiskUsageCalculator)(nil)
 
 // usageEntry caches disk usage data for a directory.
 type usageEntry struct {
