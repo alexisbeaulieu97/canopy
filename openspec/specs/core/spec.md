@@ -1,7 +1,7 @@
 # core Specification
 
 ## Purpose
-Defines core domain behaviors for Canopy including canonical repository management, worktree creation, safe deletion with dirty-state protection, and configuration validation. These are foundational capabilities that underpin workspace and repository operations.
+Defines core **domain rules and behaviors** for Canopy including canonical repository management, worktree creation, safe deletion with dirty-state protection, and configuration validation. These are foundational business rules that govern **what** the system does, independent of architectural patterns or implementation details. For architectural patterns, dependency injection, and structural organization, see `core-architecture`.
 ## Requirements
 ### Requirement: Manage Canonical Repos
 The system SHALL maintain a directory of canonical git repositories (bare clones) to serve as the source for worktrees.

@@ -1,7 +1,7 @@
 # core-architecture Specification
 
 ## Purpose
-Defines the core architecture patterns for Canopy including service initialization, dependency injection via App context, command registration, hexagonal architecture, and project branding conventions.
+Defines the core **architectural patterns and structural organization** for Canopy including service initialization, dependency injection via App context, command registration, hexagonal architecture, interface-based dependencies, error handling patterns, retry strategies, and project branding conventions. This specification governs **how** the system is structured and organized, independent of specific business rules. For domain rules and behaviors, see `core`.
 ## Requirements
 ### Requirement: Hexagonal Architecture with Port Interfaces
 The system SHALL use hexagonal architecture with interface-defined ports to decouple the service layer from infrastructure implementations.
