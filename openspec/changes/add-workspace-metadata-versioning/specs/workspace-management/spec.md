@@ -10,7 +10,7 @@ Workspace metadata files SHALL include a version field to enable schema evolutio
 - **WHEN** loading a workspace.yaml without a version field, **THEN** the version SHALL default to 0, the workspace SHALL be treated as compatible, and an automatic migration SHALL be applied to upgrade to the current version (migration failure SHALL abort load and surface an error)
 
 #### Scenario: Load workspace with unknown future version
-- **WHEN** loading a workspace.yaml with version higher than current, **THEN** a warning SHALL be logged including the version, read operations SHALL succeed, write operations SHALL preserve the original version and unknown fields (read-only for unknown fields), and known fields SHALL be validated as usual
+- **WHEN** loading a workspace.yaml with version higher than current, **THEN** a warning SHALL be logged including the version, read operations SHALL return all fields including unknown/future fields, write operations SHALL only modify known fields and MUST reject attempts to modify unknown fields, the original workspace version and any unknown fields MUST be preserved unchanged when persisting writes, and known fields SHALL be validated normally
 
 #### Scenario: Save workspace after migration
 - **WHEN** saving a workspace that was migrated from an older version (0 or lower than current), **THEN** the workspace SHALL be saved with the current schema version

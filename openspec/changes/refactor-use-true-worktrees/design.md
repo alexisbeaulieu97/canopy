@@ -30,11 +30,21 @@ During `EnsureCanonical`, store the original URL in the canonical repo's git con
 ```
 This allows worktrees to be configured with the correct remote.
 
+**Alternatives considered**:
+- Separate metadata file: Rejected; adds another file to manage and risks desync with repo state
+- Rely on existing git remotes: Rejected; bare repos don't have a working origin remote by default
+- Embed URL in branch names: Rejected; branch names have character/length limits and would break existing workflows
+
 ### Decision 3: Configure worktree remotes post-creation
 After `git worktree add`, update the worktree's origin remote:
 ```bash
 git -C <worktree> remote set-url origin <upstream-url>
 ```
+
+**Alternatives considered**:
+- Pre-configure remotes at worktree creation: Rejected; `git worktree add` doesn't support custom remote configuration
+- Centralized remote mapping service: Rejected; over-engineered for this use case, adds external dependency
+- Keep origin pointing to canonical, fetch from upstream: Rejected; breaks push workflows and confuses users
 
 ## Risks / Trade-offs
 - **Risk**: Shelling out to git CLI reduces portability
