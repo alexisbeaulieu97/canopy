@@ -19,7 +19,7 @@ type CanonicalRepoService struct {
 	wsStorage    ports.WorkspaceStorage
 	projectsRoot string
 	logger       *logging.Logger
-	diskUsage    *DiskUsageCalculator
+	diskUsage    ports.DiskUsage
 }
 
 // NewCanonicalRepoService creates a new CanonicalRepoService.
@@ -29,7 +29,7 @@ func NewCanonicalRepoService(
 	wsStorage ports.WorkspaceStorage,
 	projectsRoot string,
 	logger *logging.Logger,
-	diskUsage *DiskUsageCalculator,
+	diskUsage ports.DiskUsage,
 ) *CanonicalRepoService {
 	if gitEngine == nil {
 		panic("CanonicalRepoService: gitEngine is required but was nil")

@@ -6,7 +6,11 @@ import (
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
+
+// Compile-time check that WorkspaceCache implements ports.WorkspaceCache.
+var _ ports.WorkspaceCache = (*WorkspaceCache)(nil)
 
 // DefaultCacheTTL is the default time-to-live for cache entries.
 const DefaultCacheTTL = 30 * time.Second

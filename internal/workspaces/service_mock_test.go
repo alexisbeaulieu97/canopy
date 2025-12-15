@@ -472,3 +472,117 @@ func TestRunGitInWorkspace(t *testing.T) {
 		}
 	})
 }
+
+// TestServiceWithNewMockInterfaces demonstrates using the new mock interfaces
+// for HookExecutor, DiskUsage, and WorkspaceCache.
+func TestServiceWithNewMockInterfaces(t *testing.T) {
+	t.Parallel()
+
+	t.Run("service with mock hook executor", func(t *testing.T) {
+		t.Parallel()
+
+		mockHooks := mocks.NewMockHookExecutor()
+		mockConfig := mocks.NewMockConfigProvider()
+		mockGit := mocks.NewMockGitOperations()
+		mockStorage := mocks.NewMockWorkspaceStorage()
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil,
+			WithHookExecutor(mockHooks),
+		)
+
+		// Verify the mock is used by checking it was injected
+		if svc.hookExecutor != mockHooks {
+			t.Error("mock hook executor was not injected")
+		}
+	})
+
+	t.Run("service with mock disk usage", func(t *testing.T) {
+		t.Parallel()
+
+		mockDiskUsage := mocks.NewMockDiskUsage()
+		mockDiskUsage.DefaultUsage = 1024 * 1024 // 1MB
+		mockConfig := mocks.NewMockConfigProvider()
+		mockGit := mocks.NewMockGitOperations()
+		mockStorage := mocks.NewMockWorkspaceStorage()
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil,
+			WithDiskUsage(mockDiskUsage),
+		)
+
+		// Verify the mock is used by checking it was injected
+		if svc.diskUsage != mockDiskUsage {
+			t.Error("mock disk usage was not injected")
+		}
+	})
+
+	t.Run("service with mock cache", func(t *testing.T) {
+		t.Parallel()
+
+		mockCache := mocks.NewMockWorkspaceCache()
+		mockConfig := mocks.NewMockConfigProvider()
+		mockGit := mocks.NewMockGitOperations()
+		mockStorage := mocks.NewMockWorkspaceStorage()
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil,
+			WithCache(mockCache),
+		)
+
+		// Verify the mock is used by checking it was injected
+		if svc.cache != mockCache {
+			t.Error("mock cache was not injected")
+		}
+	})
+
+	t.Run("service with all mock interfaces", func(t *testing.T) {
+		t.Parallel()
+
+		mockHooks := mocks.NewMockHookExecutor()
+		mockDiskUsage := mocks.NewMockDiskUsage()
+		mockCache := mocks.NewMockWorkspaceCache()
+		mockConfig := mocks.NewMockConfigProvider()
+		mockGit := mocks.NewMockGitOperations()
+		mockStorage := mocks.NewMockWorkspaceStorage()
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil,
+			WithHookExecutor(mockHooks),
+			WithDiskUsage(mockDiskUsage),
+			WithCache(mockCache),
+		)
+
+		// Verify all mocks are used
+		if svc.hookExecutor != mockHooks {
+			t.Error("mock hook executor was not injected")
+		}
+
+		if svc.diskUsage != mockDiskUsage {
+			t.Error("mock disk usage was not injected")
+		}
+
+		if svc.cache != mockCache {
+			t.Error("mock cache was not injected")
+		}
+	})
+
+	t.Run("default implementations when no options provided", func(t *testing.T) {
+		t.Parallel()
+
+		mockConfig := mocks.NewMockConfigProvider()
+		mockGit := mocks.NewMockGitOperations()
+		mockStorage := mocks.NewMockWorkspaceStorage()
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil)
+
+		// Verify defaults are created
+		if svc.hookExecutor == nil {
+			t.Error("default hook executor was not created")
+		}
+
+		if svc.diskUsage == nil {
+			t.Error("default disk usage was not created")
+		}
+
+		if svc.cache == nil {
+			t.Error("default cache was not created")
+		}
+	})
+}

@@ -127,3 +127,11 @@ type RepoExport struct {
 	URL   string `yaml:"url" json:"url"`
 	Alias string `yaml:"alias,omitempty" json:"alias,omitempty"`
 }
+
+// HookContext provides context for hook execution.
+type HookContext struct {
+	WorkspaceID   string
+	WorkspacePath string
+	BranchName    string
+	Repos         []Repo
+}

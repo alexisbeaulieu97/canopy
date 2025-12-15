@@ -21,18 +21,19 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
+
+// Compile-time check that Executor implements ports.HookExecutor.
+var _ ports.HookExecutor = (*Executor)(nil)
 
 // DefaultTimeout is the default hook execution timeout.
 const DefaultTimeout = 30 * time.Second
 
-// HookContext provides context for hook execution.
-type HookContext struct {
-	WorkspaceID   string
-	WorkspacePath string
-	BranchName    string
-	Repos         []domain.Repo
-}
+// HookContext is an alias for domain.HookContext for backwards compatibility.
+//
+// Deprecated: Use domain.HookContext directly.
+type HookContext = domain.HookContext
 
 // Executor executes lifecycle hooks.
 type Executor struct {
@@ -46,8 +47,8 @@ func NewExecutor(logger *logging.Logger) *Executor {
 
 // ExecuteHooks runs a list of hooks with the given context.
 // If continueOnError is true at the executor level, it continues even if a hook fails.
-func (e *Executor) ExecuteHooks(hooks []config.Hook, ctx HookContext, continueOnError bool) error {
-	for i, hook := range hooks {
+func (e *Executor) ExecuteHooks(hks []config.Hook, ctx domain.HookContext, continueOnError bool) error {
+	for i, hook := range hks {
 		err := e.executeHook(hook, ctx, i)
 		if err != nil {
 			if hook.ContinueOnError || continueOnError {
@@ -63,7 +64,7 @@ func (e *Executor) ExecuteHooks(hooks []config.Hook, ctx HookContext, continueOn
 }
 
 // executeHook runs a single hook command.
-func (e *Executor) executeHook(hook config.Hook, ctx HookContext, index int) error {
+func (e *Executor) executeHook(hook config.Hook, ctx domain.HookContext, index int) error {
 	// Determine repos to run against
 	repos := ctx.Repos
 	if len(hook.Repos) > 0 {
@@ -87,7 +88,7 @@ func (e *Executor) executeHook(hook config.Hook, ctx HookContext, index int) err
 }
 
 // runCommand executes the hook command in the specified directory.
-func (e *Executor) runCommand(hook config.Hook, ctx HookContext, workDir string, repo *domain.Repo, index int) error {
+func (e *Executor) runCommand(hook config.Hook, ctx domain.HookContext, workDir string, repo *domain.Repo, index int) error {
 	shell := resolveShell(hook.Shell)
 	timeout := resolveTimeout(hook.Timeout)
 
