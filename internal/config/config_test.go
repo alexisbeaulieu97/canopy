@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
+
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
 
@@ -24,6 +26,13 @@ func validGitConfig() GitConfig {
 }
 
 func TestLoad(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	// Clear CANOPY_CONFIG to ensure test uses fixture from current directory
+	t.Setenv("CANOPY_CONFIG", "")
+
 	// Create a temporary config file
 	tmpDir, err := os.MkdirTemp("", "canopy-config-test")
 	if err != nil {
@@ -91,7 +100,7 @@ defaults:
 		t.Fatalf("failed to write local config file: %v", err)
 	}
 
-	cfg, err := Load()
+	cfg, err := Load("")
 	if err != nil {
 		t.Fatalf("Load() failed: %v", err)
 	}
@@ -108,8 +117,312 @@ defaults:
 		t.Errorf("expected ClosedRoot /tmp/closed, got %s", cfg.ClosedRoot)
 	}
 
-	if cfg.CloseDefault != "archive" {
-		t.Errorf("expected CloseDefault archive, got %s", cfg.CloseDefault)
+	if cfg.CloseDefault != CloseDefaultArchive {
+		t.Errorf("expected CloseDefault %s, got %s", CloseDefaultArchive, cfg.CloseDefault)
+	}
+}
+
+func TestLoadWithConfigPath(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	tmpDir, err := os.MkdirTemp("", "canopy-config-path-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	configContent := `
+projects_root: /custom/projects
+workspaces_root: /custom/workspaces
+closed_root: /custom/closed
+workspace_close_default: archive
+`
+
+	configPath := filepath.Join(tmpDir, "custom-config.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load(configPath) failed: %v", err)
+	}
+
+	if cfg.ProjectsRoot != "/custom/projects" {
+		t.Errorf("expected ProjectsRoot /custom/projects, got %s", cfg.ProjectsRoot)
+	}
+
+	if cfg.WorkspacesRoot != "/custom/workspaces" {
+		t.Errorf("expected WorkspacesRoot /custom/workspaces, got %s", cfg.WorkspacesRoot)
+	}
+
+	if cfg.ClosedRoot != "/custom/closed" {
+		t.Errorf("expected ClosedRoot /custom/closed, got %s", cfg.ClosedRoot)
+	}
+}
+
+func TestLoadWithEnvVar(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	tmpDir, err := os.MkdirTemp("", "canopy-config-env-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	configContent := `
+projects_root: /env/projects
+workspaces_root: /env/workspaces
+closed_root: /env/closed
+workspace_close_default: delete
+`
+
+	configPath := filepath.Join(tmpDir, "env-config.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	// Set environment variable
+	t.Setenv("CANOPY_CONFIG", configPath)
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load(\"\") with CANOPY_CONFIG failed: %v", err)
+	}
+
+	if cfg.ProjectsRoot != "/env/projects" {
+		t.Errorf("expected ProjectsRoot /env/projects, got %s", cfg.ProjectsRoot)
+	}
+
+	if cfg.WorkspacesRoot != "/env/workspaces" {
+		t.Errorf("expected WorkspacesRoot /env/workspaces, got %s", cfg.WorkspacesRoot)
+	}
+}
+
+func TestLoadConfigPriority(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	tmpDir, err := os.MkdirTemp("", "canopy-config-priority-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	// Config for environment variable
+	envConfigContent := `
+projects_root: /env/projects
+workspaces_root: /env/workspaces
+closed_root: /env/closed
+workspace_close_default: delete
+`
+
+	envConfigPath := filepath.Join(tmpDir, "env-config.yaml")
+	if err := os.WriteFile(envConfigPath, []byte(envConfigContent), 0o644); err != nil {
+		t.Fatalf("failed to write env config file: %v", err)
+	}
+
+	// Config for flag override
+	flagConfigContent := `
+projects_root: /flag/projects
+workspaces_root: /flag/workspaces
+closed_root: /flag/closed
+workspace_close_default: archive
+`
+
+	flagConfigPath := filepath.Join(tmpDir, "flag-config.yaml")
+	if err := os.WriteFile(flagConfigPath, []byte(flagConfigContent), 0o644); err != nil {
+		t.Fatalf("failed to write flag config file: %v", err)
+	}
+
+	// Set environment variable
+	t.Setenv("CANOPY_CONFIG", envConfigPath)
+
+	// Load with explicit path - should take precedence over env var
+	cfg, err := Load(flagConfigPath)
+	if err != nil {
+		t.Fatalf("Load(flagConfigPath) failed: %v", err)
+	}
+
+	if cfg.ProjectsRoot != "/flag/projects" {
+		t.Errorf("expected flag path to take precedence, got ProjectsRoot %s", cfg.ProjectsRoot)
+	}
+
+	if cfg.CloseDefault != CloseDefaultArchive {
+		t.Errorf("expected flag config close_default %s, got %s", CloseDefaultArchive, cfg.CloseDefault)
+	}
+}
+
+func TestLoadWithMissingExplicitConfigPath(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	// Clear CANOPY_CONFIG to avoid interference
+	t.Setenv("CANOPY_CONFIG", "")
+
+	// Try to load with a non-existent explicit config path
+	_, err := Load("/nonexistent/path/to/config.yaml")
+	if err == nil {
+		t.Fatal("Load() with non-existent explicit path should return an error")
+	}
+
+	// Should fail with an IO error about the file not existing
+	if !strings.Contains(err.Error(), "no such file or directory") {
+		t.Errorf("expected error about file not existing, got: %v", err)
+	}
+}
+
+func TestLoadWithMissingEnvConfig(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	// Set CANOPY_CONFIG to a non-existent path
+	t.Setenv("CANOPY_CONFIG", "/nonexistent/env/config.yaml")
+
+	// Try to load - should fail because explicit env path is missing
+	_, err := Load("")
+	if err == nil {
+		t.Fatal("Load() with non-existent CANOPY_CONFIG should return an error")
+	}
+
+	// Should fail with an IO error about the file not existing
+	if !strings.Contains(err.Error(), "no such file or directory") {
+		t.Errorf("expected error about file not existing, got: %v", err)
+	}
+}
+
+func TestLoadWithTildeExpansion(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	// Clear CANOPY_CONFIG to avoid interference
+	t.Setenv("CANOPY_CONFIG", "")
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("failed to get home dir: %v", err)
+	}
+
+	// Create a temp config directory - use system temp but create a structure
+	// that we can reference with tilde by symlinking
+	tmpDir, err := os.MkdirTemp("", "canopy-tilde-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	configContent := `
+projects_root: /tilde/projects
+workspaces_root: /tilde/workspaces
+closed_root: /tilde/closed
+`
+
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	// Test expandPath directly since we can't easily create files in home dir
+	// The Load function uses expandPath, so testing it validates the behavior
+	expandedPath := expandPath("~/test/config.yaml", home)
+
+	expectedPath := filepath.Join(home, "test/config.yaml")
+	if expandedPath != expectedPath {
+		t.Errorf("expandPath(\"~/test/config.yaml\", home) = %q, want %q", expandedPath, expectedPath)
+	}
+
+	// Test just "~"
+	expandedHome := expandPath("~", home)
+	if expandedHome != home {
+		t.Errorf("expandPath(\"~\", home) = %q, want %q", expandedHome, home)
+	}
+
+	// Test non-tilde path stays unchanged
+	regularPath := expandPath("/absolute/path", home)
+	if regularPath != "/absolute/path" {
+		t.Errorf("expandPath(\"/absolute/path\", home) = %q, want \"/absolute/path\"", regularPath)
+	}
+
+	// Now test actual Load with the temp config using absolute path
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() with absolute path failed: %v", err)
+	}
+
+	if cfg.ProjectsRoot != "/tilde/projects" {
+		t.Errorf("expected ProjectsRoot /tilde/projects, got %s", cfg.ProjectsRoot)
+	}
+}
+
+func TestLoadWithTildeExpansionEnvVar(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("failed to get home dir: %v", err)
+	}
+
+	// Create a temp config directory
+	tmpDir, err := os.MkdirTemp("", "canopy-tilde-env-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	configContent := `
+projects_root: /tilde-env/projects
+workspaces_root: /tilde-env/workspaces
+closed_root: /tilde-env/closed
+`
+
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	// Test that expandPath works correctly for env var paths
+	expandedPath := expandPath("~/.canopy/config.yaml", home)
+
+	expectedPath := filepath.Join(home, ".canopy/config.yaml")
+	if expandedPath != expectedPath {
+		t.Errorf("expandPath(\"~/.canopy/config.yaml\", home) = %q, want %q", expandedPath, expectedPath)
+	}
+
+	// Test actual Load with absolute path through CANOPY_CONFIG
+	t.Setenv("CANOPY_CONFIG", configPath)
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load() with CANOPY_CONFIG failed: %v", err)
+	}
+
+	if cfg.ProjectsRoot != "/tilde-env/projects" {
+		t.Errorf("expected ProjectsRoot /tilde-env/projects, got %s", cfg.ProjectsRoot)
 	}
 }
 
@@ -235,7 +548,7 @@ func TestValidateValues(t *testing.T) {
 				ProjectsRoot:       "/tmp/projects",
 				WorkspacesRoot:     "/tmp/workspaces",
 				ClosedRoot:         "/tmp/closed",
-				CloseDefault:       "archive",
+				CloseDefault:       CloseDefaultArchive,
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
 			},

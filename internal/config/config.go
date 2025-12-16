@@ -1,9 +1,20 @@
 // Package config provides configuration loading and management for Canopy.
 //
-// Configuration is loaded from YAML files in standard locations:
-//   - ./config.yaml (current directory)
-//   - ~/.canopy/config.yaml
-//   - ~/.config/canopy/config.yaml
+// # Configuration Loading Priority
+//
+// Configuration is loaded with the following priority (highest to lowest):
+//  1. Explicit --config flag path
+//  2. CANOPY_CONFIG environment variable
+//  3. Default search paths (in order):
+//     - ./config.yaml (current directory)
+//     - ~/.canopy/config.yaml
+//     - ~/.config/canopy/config.yaml
+//
+// When an explicit config path is provided via --config flag or CANOPY_CONFIG
+// environment variable, the file must exist or loading will fail. Default search
+// paths are optional - if no config file is found, defaults are used.
+//
+// Paths support tilde (~) expansion to the user's home directory.
 //
 // Environment variables with the CANOPY_ prefix can override configuration values.
 //
@@ -170,23 +181,46 @@ type Defaults struct {
 	WorkspacePatterns []WorkspacePattern `mapstructure:"workspace_patterns"`
 }
 
-// Load initializes and loads the configuration
-func Load() (*Config, error) {
+// Load initializes and loads the configuration.
+// If configPath is provided (non-empty), it takes precedence over all other config locations.
+// Otherwise, CANOPY_CONFIG environment variable is checked, then default locations.
+// Priority order: configPath parameter > CANOPY_CONFIG env > default locations.
+func Load(configPath string) (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, cerrors.NewIOFailed("get user home dir", err)
 	}
 
-	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath(filepath.Join(home, ".canopy"))
-	viper.AddConfigPath(filepath.Join(home, ".config", "canopy"))
+
+	// Track whether an explicit config path was provided (flag or env var)
+	explicitConfigPath := false
+
+	// Determine config path with priority: parameter > env > default search paths
+	if configPath != "" {
+		// Explicit path provided via flag - expand tilde if present
+		expandedPath := expandPath(configPath, home)
+		viper.SetConfigFile(expandedPath)
+
+		explicitConfigPath = true
+	} else if envPath := os.Getenv("CANOPY_CONFIG"); envPath != "" {
+		// Environment variable specified - expand tilde if present
+		expandedPath := expandPath(envPath, home)
+		viper.SetConfigFile(expandedPath)
+
+		explicitConfigPath = true
+	} else {
+		// Use default search paths
+		viper.SetConfigName("config")
+		viper.AddConfigPath(".")
+		viper.AddConfigPath(filepath.Join(home, ".canopy"))
+		viper.AddConfigPath(filepath.Join(home, ".config", "canopy"))
+	}
 
 	viper.SetDefault("projects_root", filepath.Join(home, ".canopy", "projects"))
 	viper.SetDefault("workspaces_root", filepath.Join(home, ".canopy", "workspaces"))
 	viper.SetDefault("closed_root", filepath.Join(home, ".canopy", "closed"))
-	viper.SetDefault("workspace_close_default", "delete")
+	viper.SetDefault("workspace_close_default", CloseDefaultDelete)
 	viper.SetDefault("workspace_naming", "{{.ID}}")
 	viper.SetDefault("stale_threshold_days", 14)
 
@@ -201,10 +235,16 @@ func Load() (*Config, error) {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// Config file not found: fail fast if explicit path was provided,
+			// otherwise use defaults for search paths
+			if explicitConfigPath {
+				return nil, cerrors.NewIOFailed("read config file", fmt.Errorf("config file not found: %s", viper.ConfigFileUsed()))
+			}
+			// Default search paths: config file not found is okay, use defaults
+		} else {
 			return nil, cerrors.NewIOFailed("read config file", err)
 		}
-		// Config file not found is okay, use defaults
 	}
 
 	var cfg Config
@@ -318,11 +358,11 @@ func (c *Config) validateRequiredFields() error {
 // validateCloseDefault validates and applies default for the close behavior.
 func (c *Config) validateCloseDefault() error {
 	if c.CloseDefault == "" {
-		c.CloseDefault = "delete"
+		c.CloseDefault = CloseDefaultDelete
 	}
 
-	if c.CloseDefault != "delete" && c.CloseDefault != "archive" {
-		return cerrors.NewConfigValidation("workspace_close_default", fmt.Sprintf("must be either 'delete' or 'archive', got %q", c.CloseDefault))
+	if c.CloseDefault != CloseDefaultDelete && c.CloseDefault != CloseDefaultArchive {
+		return cerrors.NewConfigValidation("workspace_close_default", fmt.Sprintf("must be either '%s' or '%s', got %q", CloseDefaultDelete, CloseDefaultArchive, c.CloseDefault))
 	}
 
 	return nil
@@ -347,6 +387,12 @@ func (c *Config) validateStaleThreshold() error {
 
 	return nil
 }
+
+// Close behavior constants
+const (
+	CloseDefaultDelete  = "delete"
+	CloseDefaultArchive = "archive"
+)
 
 // maxRetryAttempts is the maximum allowed value for retry attempts to prevent misconfiguration.
 const maxRetryAttempts = 10

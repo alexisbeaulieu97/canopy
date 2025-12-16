@@ -21,13 +21,30 @@ Canopy uses a YAML configuration file for all settings.
 
 ## File Locations
 
-Configuration files are loaded in this order (first found wins):
+Configuration can be specified in multiple ways (listed in priority order):
 
-1. `./config.yaml` (current directory)
-2. `~/.canopy/config.yaml`
-3. `~/.config/canopy/config.yaml`
+1. **`--config` flag**: Explicit path to config file
+2. **`CANOPY_CONFIG` environment variable**: Path to config file
+3. **Default locations** (first found wins):
+   - `./config.yaml` (current directory)
+   - `~/.canopy/config.yaml`
+   - `~/.config/canopy/config.yaml`
 
-If no config file exists, Canopy uses sensible defaults.
+If no config file exists and no override is specified, Canopy uses sensible defaults.
+
+### Config Override Examples
+
+```bash
+# Use a specific config file
+canopy --config /path/to/config.yaml workspace list
+
+# Use environment variable
+export CANOPY_CONFIG=/path/to/config.yaml
+canopy workspace list
+
+# Per-project config (useful in CI/CD)
+CANOPY_CONFIG=./ci-config.yaml canopy workspace create PROJ-123
+```
 
 ## Core Settings
 
