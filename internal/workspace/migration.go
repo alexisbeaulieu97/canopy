@@ -2,11 +2,14 @@
 package workspace
 
 import (
+	"fmt"
+
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 )
 
 // MigrationFunc is a function that migrates a workspace from one version to the next.
-// It receives the workspace and returns the migrated workspace or an error.
+// It receives the workspace and performs structural changes only.
+// The migration loop handles version advancement after successful migration.
 type MigrationFunc func(w *domain.Workspace) error
 
 // migrationRegistry holds version-to-version migration functions.
@@ -18,11 +21,11 @@ var migrationRegistry = map[int]MigrationFunc{
 }
 
 // migrateV0ToV1 migrates a version 0 workspace to version 1.
-// This is a no-op migration since version 1 only adds the version field itself,
-// which is set automatically on save.
-func migrateV0ToV1(w *domain.Workspace) error {
-	// No structural changes needed - the version field is set on save
-	w.Version = 1
+// This is a no-op migration since version 1 only adds the version field itself.
+// Note: Version increment is handled by the migration loop, not here.
+func migrateV0ToV1(_ *domain.Workspace) error {
+	// No structural changes needed for v0 -> v1
+	// The version field is incremented by MigrateWorkspace after this returns
 	return nil
 }
 
@@ -37,16 +40,20 @@ func MigrateWorkspace(w *domain.Workspace) (bool, error) {
 	migrated := false
 
 	for w.Version < domain.CurrentWorkspaceVersion {
+		previousVersion := w.Version
+
 		migration, ok := migrationRegistry[w.Version]
 		if !ok {
-			// No migration path - this shouldn't happen with proper version management
-			break
+			return migrated, fmt.Errorf("missing migration path from version %d to %d",
+				w.Version, domain.CurrentWorkspaceVersion)
 		}
 
 		if err := migration(w); err != nil {
-			return migrated, err
+			return migrated, fmt.Errorf("migration from version %d failed: %w", previousVersion, err)
 		}
 
+		// Advance version after successful migration
+		w.Version = previousVersion + 1
 		migrated = true
 	}
 

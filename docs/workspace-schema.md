@@ -82,7 +82,12 @@ repos:
 
 ## Export Format
 
-When exporting workspaces, the export file includes both:
+When exporting workspaces, the export file uses a slightly different schema optimized for portability.
+
+**Field name differences:**
+- Workspace `branch_name` → Export `branch` (shorter, more common naming)
+
+The export file includes:
 
 - `version`: Export format version (string `"1"`)
 - `workspace_version`: The workspace schema version (integer)
@@ -98,6 +103,16 @@ repos:
     url: "https://github.com/org/backend.git"
     alias: "org/backend"  # Registry alias if available
 ```
+
+### Export-Only Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `version` | string | Export format version (currently `"1"`) |
+| `workspace_version` | integer | Workspace schema version at time of export |
+| `branch` | string | Git branch name (maps to `branch_name` in workspace) |
+| `exported_at` | string | ISO 8601 timestamp when the workspace was exported |
+| `repos[].alias` | string | Registry alias for the repository (if available) |
 
 ## Compatibility Notes
 
