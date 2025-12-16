@@ -200,7 +200,7 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("projects_root", filepath.Join(home, ".canopy", "projects"))
 	viper.SetDefault("workspaces_root", filepath.Join(home, ".canopy", "workspaces"))
 	viper.SetDefault("closed_root", filepath.Join(home, ".canopy", "closed"))
-	viper.SetDefault("workspace_close_default", "delete")
+	viper.SetDefault("workspace_close_default", CloseDefaultDelete)
 	viper.SetDefault("workspace_naming", "{{.ID}}")
 	viper.SetDefault("stale_threshold_days", 14)
 
@@ -332,11 +332,11 @@ func (c *Config) validateRequiredFields() error {
 // validateCloseDefault validates and applies default for the close behavior.
 func (c *Config) validateCloseDefault() error {
 	if c.CloseDefault == "" {
-		c.CloseDefault = "delete"
+		c.CloseDefault = CloseDefaultDelete
 	}
 
-	if c.CloseDefault != "delete" && c.CloseDefault != "archive" {
-		return cerrors.NewConfigValidation("workspace_close_default", fmt.Sprintf("must be either 'delete' or 'archive', got %q", c.CloseDefault))
+	if c.CloseDefault != CloseDefaultDelete && c.CloseDefault != CloseDefaultArchive {
+		return cerrors.NewConfigValidation("workspace_close_default", fmt.Sprintf("must be either '%s' or '%s', got %q", CloseDefaultDelete, CloseDefaultArchive, c.CloseDefault))
 	}
 
 	return nil
@@ -361,6 +361,12 @@ func (c *Config) validateStaleThreshold() error {
 
 	return nil
 }
+
+// Close behavior constants
+const (
+	CloseDefaultDelete  = "delete"
+	CloseDefaultArchive = "archive"
+)
 
 // maxRetryAttempts is the maximum allowed value for retry attempts to prevent misconfiguration.
 const maxRetryAttempts = 10
