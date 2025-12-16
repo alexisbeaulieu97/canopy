@@ -38,17 +38,19 @@ func TestWorkspaceExportService_ExportWorkspace(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		workspace    *domain.Workspace
-		dirName      string
-		finderErr    error
-		registry     *config.RepoRegistry
-		wantErr      bool
-		wantReposCnt int
+		name             string
+		workspace        *domain.Workspace
+		dirName          string
+		finderErr        error
+		registry         *config.RepoRegistry
+		wantErr          bool
+		wantReposCnt     int
+		wantWorkspaceVer int
 	}{
 		{
 			name: "export workspace successfully",
 			workspace: &domain.Workspace{
+				Version:    1,
 				ID:         "test-ws",
 				BranchName: "main",
 				Repos: []domain.Repo{
@@ -56,9 +58,25 @@ func TestWorkspaceExportService_ExportWorkspace(t *testing.T) {
 					{Name: "repo2", URL: "https://example.com/repo2.git"},
 				},
 			},
-			dirName:      "test-ws",
-			wantErr:      false,
-			wantReposCnt: 2,
+			dirName:          "test-ws",
+			wantErr:          false,
+			wantReposCnt:     2,
+			wantWorkspaceVer: 1,
+		},
+		{
+			name: "export legacy workspace (version 0)",
+			workspace: &domain.Workspace{
+				Version:    0,
+				ID:         "legacy-ws",
+				BranchName: "main",
+				Repos: []domain.Repo{
+					{Name: "repo1", URL: "https://example.com/repo1.git"},
+				},
+			},
+			dirName:          "legacy-ws",
+			wantErr:          false,
+			wantReposCnt:     1,
+			wantWorkspaceVer: 0,
 		},
 		{
 			name:      "workspace not found",
@@ -68,6 +86,7 @@ func TestWorkspaceExportService_ExportWorkspace(t *testing.T) {
 		{
 			name: "export with registry alias",
 			workspace: &domain.Workspace{
+				Version:    1,
 				ID:         "test-ws",
 				BranchName: "main",
 				Repos: []domain.Repo{
@@ -80,8 +99,9 @@ func TestWorkspaceExportService_ExportWorkspace(t *testing.T) {
 					"myorg/repo1": {Alias: "myorg/repo1", URL: "https://github.com/myorg/repo1.git"},
 				},
 			},
-			wantErr:      false,
-			wantReposCnt: 1,
+			wantErr:          false,
+			wantReposCnt:     1,
+			wantWorkspaceVer: 1,
 		},
 	}
 
@@ -114,6 +134,10 @@ func TestWorkspaceExportService_ExportWorkspace(t *testing.T) {
 
 				if export.Version != "1" {
 					t.Errorf("ExportWorkspace() version = %v, want 1", export.Version)
+				}
+
+				if export.WorkspaceVersion != tt.wantWorkspaceVer {
+					t.Errorf("ExportWorkspace() workspace_version = %v, want %v", export.WorkspaceVersion, tt.wantWorkspaceVer)
 				}
 
 				if len(export.Repos) != tt.wantReposCnt {
@@ -156,6 +180,48 @@ func TestWorkspaceExportService_ImportWorkspace(t *testing.T) {
 			},
 			finderErr: cerrors.NewWorkspaceNotFound("imported-ws"), // workspace doesn't exist
 			wantErr:   false,
+		},
+		{
+			name: "import workspace with version 0",
+			export: &domain.WorkspaceExport{
+				Version:          "1",
+				WorkspaceVersion: 0,
+				ID:               "legacy-ws",
+				Branch:           "main",
+				Repos: []domain.RepoExport{
+					{Name: "repo1", URL: "https://example.com/repo1.git"},
+				},
+			},
+			finderErr: cerrors.NewWorkspaceNotFound("legacy-ws"),
+			wantErr:   false,
+		},
+		{
+			name: "import workspace with version 1",
+			export: &domain.WorkspaceExport{
+				Version:          "1",
+				WorkspaceVersion: 1,
+				ID:               "v1-ws",
+				Branch:           "main",
+				Repos: []domain.RepoExport{
+					{Name: "repo1", URL: "https://example.com/repo1.git"},
+				},
+			},
+			finderErr: cerrors.NewWorkspaceNotFound("v1-ws"),
+			wantErr:   false,
+		},
+		{
+			name: "import workspace with future version fails",
+			export: &domain.WorkspaceExport{
+				Version:          "1",
+				WorkspaceVersion: domain.CurrentWorkspaceVersion + 1,
+				ID:               "future-ws",
+				Branch:           "main",
+				Repos: []domain.RepoExport{
+					{Name: "repo1", URL: "https://example.com/repo1.git"},
+				},
+			},
+			finderErr: cerrors.NewWorkspaceNotFound("future-ws"),
+			wantErr:   true,
 		},
 		{
 			name:    "nil export",

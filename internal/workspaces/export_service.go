@@ -55,11 +55,12 @@ func (s *WorkspaceExportService) ExportWorkspace(_ context.Context, workspaceID 
 	}
 
 	export := &domain.WorkspaceExport{
-		Version:    "1",
-		ID:         workspace.ID,
-		Branch:     workspace.BranchName,
-		ExportedAt: time.Now().UTC(),
-		Repos:      make([]domain.RepoExport, 0, len(workspace.Repos)),
+		Version:          "1",
+		WorkspaceVersion: workspace.Version,
+		ID:               workspace.ID,
+		Branch:           workspace.BranchName,
+		ExportedAt:       time.Now().UTC(),
+		Repos:            make([]domain.RepoExport, 0, len(workspace.Repos)),
 	}
 
 	for _, repo := range workspace.Repos {
@@ -87,9 +88,17 @@ func (s *WorkspaceExportService) ImportWorkspace(ctx context.Context, export *do
 		return "", cerrors.NewInvalidArgument("export", "export definition is nil")
 	}
 
-	// Validate version
+	// Validate export format version
 	if export.Version != "1" {
 		return "", cerrors.NewInvalidArgument("version", fmt.Sprintf("unsupported export version: %s", export.Version))
+	}
+
+	// Validate workspace version compatibility
+	// We can import workspaces from older versions (0, 1, etc.) but warn about future versions
+	if export.WorkspaceVersion > domain.CurrentWorkspaceVersion {
+		return "", cerrors.NewInvalidArgument("workspace_version",
+			fmt.Sprintf("workspace version %d is newer than supported version %d; upgrade canopy to import this workspace",
+				export.WorkspaceVersion, domain.CurrentWorkspaceVersion))
 	}
 
 	// Resolve final workspace ID and branch name

@@ -28,6 +28,12 @@ package domain
 
 import "time"
 
+// CurrentWorkspaceVersion is the current workspace metadata schema version.
+// Version history:
+//   - 0: Legacy workspaces without version field (implicit)
+//   - 1: First versioned schema (adds version field)
+const CurrentWorkspaceVersion = 1
+
 // Repo represents a git repository
 type Repo struct {
 	Name string `yaml:"name"`
@@ -36,6 +42,7 @@ type Repo struct {
 
 // Workspace represents a work item
 type Workspace struct {
+	Version        int        `yaml:"version"`
 	ID             string     `yaml:"id"`
 	BranchName     string     `yaml:"branch_name,omitempty"`
 	Repos          []Repo     `yaml:"repos"`
@@ -139,11 +146,12 @@ type RepoRemovePreview struct {
 
 // WorkspaceExport is the portable format for exporting/importing workspaces.
 type WorkspaceExport struct {
-	Version    string       `yaml:"version" json:"version"`
-	ID         string       `yaml:"id" json:"id"`
-	Branch     string       `yaml:"branch" json:"branch"`
-	Repos      []RepoExport `yaml:"repos" json:"repos"`
-	ExportedAt time.Time    `yaml:"exported_at" json:"exported_at"`
+	Version          string       `yaml:"version" json:"version"`
+	WorkspaceVersion int          `yaml:"workspace_version" json:"workspace_version"`
+	ID               string       `yaml:"id" json:"id"`
+	Branch           string       `yaml:"branch" json:"branch"`
+	Repos            []RepoExport `yaml:"repos" json:"repos"`
+	ExportedAt       time.Time    `yaml:"exported_at" json:"exported_at"`
 }
 
 // RepoExport is the portable format for a repository in an export.
