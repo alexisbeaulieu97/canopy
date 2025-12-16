@@ -1,9 +1,20 @@
 // Package config provides configuration loading and management for Canopy.
 //
-// Configuration is loaded from YAML files in standard locations:
-//   - ./config.yaml (current directory)
-//   - ~/.canopy/config.yaml
-//   - ~/.config/canopy/config.yaml
+// # Configuration Loading Priority
+//
+// Configuration is loaded with the following priority (highest to lowest):
+//  1. Explicit --config flag path
+//  2. CANOPY_CONFIG environment variable
+//  3. Default search paths (in order):
+//     - ./config.yaml (current directory)
+//     - ~/.canopy/config.yaml
+//     - ~/.config/canopy/config.yaml
+//
+// When an explicit config path is provided via --config flag or CANOPY_CONFIG
+// environment variable, the file must exist or loading will fail. Default search
+// paths are optional - if no config file is found, defaults are used.
+//
+// Paths support tilde (~) expansion to the user's home directory.
 //
 // Environment variables with the CANOPY_ prefix can override configuration values.
 //
@@ -182,13 +193,22 @@ func Load(configPath string) (*Config, error) {
 
 	viper.SetConfigType("yaml")
 
+	// Track whether an explicit config path was provided (flag or env var)
+	explicitConfigPath := false
+
 	// Determine config path with priority: parameter > env > default search paths
 	if configPath != "" {
-		// Explicit path provided via flag
-		viper.SetConfigFile(configPath)
+		// Explicit path provided via flag - expand tilde if present
+		expandedPath := expandPath(configPath, home)
+		viper.SetConfigFile(expandedPath)
+
+		explicitConfigPath = true
 	} else if envPath := os.Getenv("CANOPY_CONFIG"); envPath != "" {
-		// Environment variable specified
-		viper.SetConfigFile(envPath)
+		// Environment variable specified - expand tilde if present
+		expandedPath := expandPath(envPath, home)
+		viper.SetConfigFile(expandedPath)
+
+		explicitConfigPath = true
 	} else {
 		// Use default search paths
 		viper.SetConfigName("config")
@@ -215,10 +235,16 @@ func Load(configPath string) (*Config, error) {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// Config file not found: fail fast if explicit path was provided,
+			// otherwise use defaults for search paths
+			if explicitConfigPath {
+				return nil, cerrors.NewIOFailed("read config file", fmt.Errorf("config file not found: %s", viper.ConfigFileUsed()))
+			}
+			// Default search paths: config file not found is okay, use defaults
+		} else {
 			return nil, cerrors.NewIOFailed("read config file", err)
 		}
-		// Config file not found is okay, use defaults
 	}
 
 	var cfg Config
