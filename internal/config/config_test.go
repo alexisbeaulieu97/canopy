@@ -30,6 +30,9 @@ func TestLoad(t *testing.T) {
 		viper.Reset()
 	})
 
+	// Clear CANOPY_CONFIG to ensure test uses fixture from current directory
+	t.Setenv("CANOPY_CONFIG", "")
+
 	// Create a temporary config file
 	tmpDir, err := os.MkdirTemp("", "canopy-config-test")
 	if err != nil {
