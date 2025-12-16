@@ -111,6 +111,9 @@ func (e *Engine) Close(dirName string, workspace domain.Workspace, closedAt time
 }
 
 func (e *Engine) saveMetadata(path string, workspace domain.Workspace) error {
+	// Always write current schema version
+	workspace.Version = domain.CurrentWorkspaceVersion
+
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o640) //nolint:gosec // path is constructed internally
 	if err != nil {
 		return cerrors.NewIOFailed("create metadata file", err)
@@ -224,6 +227,10 @@ func (e *Engine) tryLoadMetadata(dirPath string) (domain.Workspace, bool) {
 		return domain.Workspace{}, false
 	}
 
+	// Handle version: missing version defaults to 0 (legacy)
+	// Version 0 workspaces are auto-migrated to version 1 on next save
+	// Note: Future versions are loaded as-is - callers should validate if needed
+
 	// Fallback for older metadata: infer closed time from directory name when ClosedAt is missing.
 	if w.ClosedAt == nil {
 		if ts, ok := inferClosedTimeFromPath(dirPath); ok {
@@ -267,6 +274,10 @@ func (e *Engine) Load(dirName string) (*domain.Workspace, error) {
 	if err := yaml.NewDecoder(f).Decode(&w); err != nil {
 		return nil, cerrors.NewWorkspaceMetadataError(dirName, "decode", err)
 	}
+
+	// Handle version: missing version defaults to 0 (legacy)
+	// Version 0 workspaces are auto-migrated to version 1 on next save
+	// Note: Future versions are loaded as-is - callers should validate if needed
 
 	return &w, nil
 }
