@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/giturl"
+	"github.com/alexisbeaulieu97/canopy/internal/gitx"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
@@ -103,7 +103,7 @@ var repoAddCmd = &cobra.Command{
 			realAlias, err := registerWithPrompt(cmd, app.Config.GetRegistry(), alias, entry)
 			if err != nil {
 				// Use a detached context for cleanup to ensure it runs even if cmd.Context() is cancelled
-				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), gitx.DefaultLocalTimeout)
 				defer cleanupCancel()
 
 				if rmErr := svc.RemoveCanonicalRepo(cleanupCtx, name, true); rmErr != nil {
