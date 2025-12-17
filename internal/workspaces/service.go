@@ -270,18 +270,32 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 	return dirName, nil
 }
 
-// cloneWorkspaceRepos clones all repositories for a workspace, checking for context cancellation.
+// cloneWorkspaceRepos clones all repositories for a workspace.
+// It runs EnsureCanonical operations in parallel (bounded by config.parallel_workers)
+// for performance, then creates worktrees sequentially (as they depend on the canonical).
 func (s *Service) cloneWorkspaceRepos(ctx context.Context, repos []domain.Repo, dirName, branchName string) error {
+	if len(repos) == 0 {
+		return nil
+	}
+
+	// Check for context cancellation before starting
+	if ctx.Err() != nil {
+		return cerrors.NewContextError(ctx, "create workspace", dirName)
+	}
+
+	// Run EnsureCanonical operations in parallel
+	err := s.runParallelCanonical(ctx, repos, parallelCanonicalOptions{
+		workers: s.config.GetParallelWorkers(),
+	})
+	if err != nil {
+		return err
+	}
+
+	// Create worktrees sequentially (they depend on the canonical being ready)
 	for _, repo := range repos {
 		// Check for context cancellation before each operation
 		if ctx.Err() != nil {
 			return cerrors.NewContextError(ctx, "create workspace", dirName)
-		}
-
-		// Ensure canonical exists
-		_, err := s.gitEngine.EnsureCanonical(ctx, repo.URL, repo.Name)
-		if err != nil {
-			return cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
 		}
 
 		// Create worktree

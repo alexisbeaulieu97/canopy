@@ -163,6 +163,7 @@ type Config struct {
 	CloseDefault       string        `mapstructure:"workspace_close_default"`
 	WorkspaceNaming    string        `mapstructure:"workspace_naming"`
 	StaleThresholdDays int           `mapstructure:"stale_threshold_days"`
+	ParallelWorkers    int           `mapstructure:"parallel_workers"`
 	Defaults           Defaults      `mapstructure:"defaults"`
 	Hooks              Hooks         `mapstructure:"hooks"`
 	TUI                TUIConfig     `mapstructure:"tui"`
@@ -223,6 +224,9 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("workspace_close_default", CloseDefaultDelete)
 	viper.SetDefault("workspace_naming", "{{.ID}}")
 	viper.SetDefault("stale_threshold_days", 14)
+
+	// Parallel workers default
+	viper.SetDefault("parallel_workers", DefaultParallelWorkers)
 
 	// Git retry defaults
 	viper.SetDefault("git.retry.max_attempts", 3)
@@ -332,6 +336,10 @@ func (c *Config) ValidateValues() error {
 		return err
 	}
 
+	if err := c.validateParallelWorkers(); err != nil {
+		return err
+	}
+
 	return c.validateKeybindings()
 }
 
@@ -388,10 +396,33 @@ func (c *Config) validateStaleThreshold() error {
 	return nil
 }
 
+// validateParallelWorkers checks that parallel_workers is within valid range (1-10).
+func (c *Config) validateParallelWorkers() error {
+	if c.ParallelWorkers < MinParallelWorkers {
+		return cerrors.NewConfigValidation("parallel_workers", fmt.Sprintf("must be at least %d, got %d", MinParallelWorkers, c.ParallelWorkers))
+	}
+
+	if c.ParallelWorkers > MaxParallelWorkers {
+		return cerrors.NewConfigValidation("parallel_workers", fmt.Sprintf("must not exceed %d, got %d", MaxParallelWorkers, c.ParallelWorkers))
+	}
+
+	return nil
+}
+
 // Close behavior constants
 const (
 	CloseDefaultDelete  = "delete"
 	CloseDefaultArchive = "archive"
+)
+
+// Parallel workers constants
+const (
+	// DefaultParallelWorkers is the default number of parallel workers for repository operations.
+	DefaultParallelWorkers = 4
+	// MinParallelWorkers is the minimum allowed value for parallel workers.
+	MinParallelWorkers = 1
+	// MaxParallelWorkers is the maximum allowed value for parallel workers.
+	MaxParallelWorkers = 10
 )
 
 // maxRetryAttempts is the maximum allowed value for retry attempts to prevent misconfiguration.
@@ -564,6 +595,11 @@ func (c *Config) GetWorkspaceNaming() string {
 // GetStaleThresholdDays returns the stale threshold in days.
 func (c *Config) GetStaleThresholdDays() int {
 	return c.StaleThresholdDays
+}
+
+// GetParallelWorkers returns the number of parallel workers for repository operations.
+func (c *Config) GetParallelWorkers() int {
+	return c.ParallelWorkers
 }
 
 // GetRegistry returns the repository registry.

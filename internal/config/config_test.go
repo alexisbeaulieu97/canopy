@@ -471,6 +471,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr: false,
 		},
@@ -483,6 +484,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr:   true,
 			errSubstr: "projects_root",
@@ -497,6 +499,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr:   true,
 			errSubstr: "workspaces_root",
@@ -511,6 +514,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr:   true,
 			errSubstr: "closed_root",
@@ -525,6 +529,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "invalid",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr:   true,
 			errSubstr: "workspace_close_default",
@@ -539,6 +544,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr: false,
 		},
@@ -551,6 +557,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       CloseDefaultArchive,
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr: false,
 		},
@@ -563,6 +570,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: -1,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr:   true,
 			errSubstr: "stale_threshold_days",
@@ -577,6 +585,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 0,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr: false,
 		},
@@ -589,6 +598,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 				Defaults: Defaults{
 					WorkspacePatterns: []WorkspacePattern{
 						{Pattern: "[invalid", Repos: []string{"repo"}},
@@ -607,6 +617,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 				Defaults: Defaults{
 					WorkspacePatterns: []WorkspacePattern{
 						{Pattern: "^TEST-.*", Repos: []string{"repo"}},
@@ -624,6 +635,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 				Hooks: Hooks{
 					PostCreate: []Hook{
 						{Command: "npm install", Repos: []string{"frontend"}},
@@ -644,6 +656,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 				Hooks: Hooks{
 					PostCreate: []Hook{
 						{Command: ""},
@@ -663,6 +676,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 				Hooks: Hooks{
 					PreClose: []Hook{
 						{Command: "echo first"},
@@ -683,6 +697,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 				Hooks: Hooks{
 					PostCreate: []Hook{
 						{Command: "   \t"},
@@ -702,6 +717,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 				Hooks: Hooks{
 					PreClose: []Hook{
 						{Command: "echo first\nrm -rf /"},
@@ -721,6 +737,7 @@ func TestValidateValues(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 				Hooks: Hooks{
 					PostCreate: []Hook{
 						{Command: "npm install", Timeout: -5},
@@ -900,6 +917,7 @@ func TestValidate(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr: false,
 		},
@@ -912,6 +930,7 @@ func TestValidate(t *testing.T) {
 				CloseDefault:       "delete",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr:   true,
 			errSubstr: "projects_root",
@@ -925,6 +944,7 @@ func TestValidate(t *testing.T) {
 				CloseDefault:       "invalid",
 				StaleThresholdDays: 14,
 				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
 			},
 			wantErr:   true,
 			errSubstr: "workspace_close_default",
@@ -1098,21 +1118,23 @@ func TestConfigValidateKeybindings(t *testing.T) {
 		{
 			name: "valid config with default keybindings",
 			cfg: &Config{
-				ProjectsRoot:   "/tmp/projects",
-				WorkspacesRoot: "/tmp/workspaces",
-				ClosedRoot:     "/tmp/closed",
-				CloseDefault:   "delete",
-				Git:            validGitConfig(),
+				ProjectsRoot:    "/tmp/projects",
+				WorkspacesRoot:  "/tmp/workspaces",
+				ClosedRoot:      "/tmp/closed",
+				CloseDefault:    "delete",
+				Git:             validGitConfig(),
+				ParallelWorkers: DefaultParallelWorkers,
 			},
 		},
 		{
 			name: "valid config with custom keybindings",
 			cfg: &Config{
-				ProjectsRoot:   "/tmp/projects",
-				WorkspacesRoot: "/tmp/workspaces",
-				ClosedRoot:     "/tmp/closed",
-				CloseDefault:   "delete",
-				Git:            validGitConfig(),
+				ProjectsRoot:    "/tmp/projects",
+				WorkspacesRoot:  "/tmp/workspaces",
+				ClosedRoot:      "/tmp/closed",
+				CloseDefault:    "delete",
+				Git:             validGitConfig(),
+				ParallelWorkers: DefaultParallelWorkers,
 				TUI: TUIConfig{
 					Keybindings: Keybindings{
 						Quit:   []string{"x"},
@@ -1124,11 +1146,12 @@ func TestConfigValidateKeybindings(t *testing.T) {
 		{
 			name: "invalid config with keybinding conflicts",
 			cfg: &Config{
-				ProjectsRoot:   "/tmp/projects",
-				WorkspacesRoot: "/tmp/workspaces",
-				ClosedRoot:     "/tmp/closed",
-				CloseDefault:   "delete",
-				Git:            validGitConfig(),
+				ProjectsRoot:    "/tmp/projects",
+				WorkspacesRoot:  "/tmp/workspaces",
+				ClosedRoot:      "/tmp/closed",
+				CloseDefault:    "delete",
+				Git:             validGitConfig(),
+				ParallelWorkers: DefaultParallelWorkers,
 				TUI: TUIConfig{
 					Keybindings: Keybindings{
 						Quit:   []string{"p"},
@@ -1143,11 +1166,12 @@ func TestConfigValidateKeybindings(t *testing.T) {
 		{
 			name: "invalid config with bad key name",
 			cfg: &Config{
-				ProjectsRoot:   "/tmp/projects",
-				WorkspacesRoot: "/tmp/workspaces",
-				ClosedRoot:     "/tmp/closed",
-				CloseDefault:   "delete",
-				Git:            validGitConfig(),
+				ProjectsRoot:    "/tmp/projects",
+				WorkspacesRoot:  "/tmp/workspaces",
+				ClosedRoot:      "/tmp/closed",
+				CloseDefault:    "delete",
+				Git:             validGitConfig(),
+				ParallelWorkers: DefaultParallelWorkers,
 				TUI: TUIConfig{
 					Keybindings: Keybindings{
 						Quit: []string{"invalid-key"},
@@ -1203,6 +1227,7 @@ func TestValidateGitRetry(t *testing.T) {
 			CloseDefault:       "delete",
 			StaleThresholdDays: 14,
 			Git:                validGitConfig(),
+			ParallelWorkers:    DefaultParallelWorkers,
 		}
 	}
 

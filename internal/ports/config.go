@@ -29,6 +29,9 @@ type ConfigProvider interface {
 	// GetStaleThresholdDays returns the stale threshold in days.
 	GetStaleThresholdDays() int
 
+	// GetParallelWorkers returns the number of parallel workers for repository operations.
+	GetParallelWorkers() int
+
 	// GetRegistry returns the repository registry.
 	GetRegistry() *config.RepoRegistry
 
