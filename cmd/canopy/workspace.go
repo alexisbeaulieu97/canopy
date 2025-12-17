@@ -73,7 +73,7 @@ var (
 					return err
 				}
 
-				fmt.Printf("Ran post_create hooks for workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+				output.Success("Ran post_create hooks for workspace", id)
 				return nil
 			}
 
@@ -105,9 +105,9 @@ var (
 			}
 
 			if printPath {
-				fmt.Printf("%s/%s", cfg.GetWorkspacesRoot(), dirName) //nolint:forbidigo // user-facing CLI output
+				output.Printf("%s/%s", cfg.GetWorkspacesRoot(), dirName)
 			} else {
-				fmt.Printf("Created workspace %s in %s/%s\n", id, cfg.GetWorkspacesRoot(), dirName) //nolint:forbidigo // user-facing CLI output
+				output.SuccessWithPath("Created workspace", id, cfg.GetWorkspacesRoot()+"/"+dirName)
 			}
 			return nil
 		},
@@ -131,7 +131,7 @@ var (
 				return err
 			}
 
-			fmt.Printf("Restored workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+			output.Success("Restored workspace", id)
 			return nil
 		},
 	}
@@ -162,9 +162,9 @@ var (
 			}
 
 			if renameBranch {
-				fmt.Printf("Renamed workspace %s to %s (branches also renamed)\n", oldID, newID) //nolint:forbidigo // user-facing CLI output
+				output.Infof("Renamed workspace %s to %s (branches also renamed)", oldID, newID)
 			} else {
-				fmt.Printf("Renamed workspace %s to %s\n", oldID, newID) //nolint:forbidigo // user-facing CLI output
+				output.Infof("Renamed workspace %s to %s", oldID, newID)
 			}
 			return nil
 		},
@@ -208,9 +208,9 @@ var (
 						closedDate = a.Metadata.ClosedAt.Format(time.RFC3339)
 					}
 
-					fmt.Printf("%s (Closed: %s)\n", a.Metadata.ID, closedDate) //nolint:forbidigo // user-facing CLI output
+					output.Infof("%s (Closed: %s)", a.Metadata.ID, closedDate)
 					for _, r := range a.Metadata.Repos {
-						fmt.Printf("  - %s (%s)\n", r.Name, r.URL) //nolint:forbidigo // user-facing CLI output
+						output.Infof("  - %s (%s)", r.Name, r.URL)
 					}
 				}
 
@@ -229,9 +229,9 @@ var (
 			}
 
 			for _, w := range list {
-				fmt.Printf("%s (Branch: %s)\n", w.ID, w.BranchName) //nolint:forbidigo // user-facing CLI output
+				output.Infof("%s (Branch: %s)", w.ID, w.BranchName)
 				for _, r := range w.Repos {
-					fmt.Printf("  - %s (%s)\n", r.Name, r.URL) //nolint:forbidigo // user-facing CLI output
+					output.Infof("  - %s (%s)", r.Name, r.URL)
 				}
 			}
 			return nil
@@ -290,7 +290,7 @@ var (
 					return err
 				}
 
-				fmt.Printf("Ran pre_close hooks for workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+				output.Success("Ran pre_close hooks for workspace", id)
 				return nil
 			}
 
@@ -342,7 +342,7 @@ var (
 				promptSuffix = "[Y/n]"
 			}
 
-			fmt.Printf("Keep workspace record without files? %s: ", promptSuffix) //nolint:forbidigo // user prompt
+			output.Printf("Keep workspace record without files? %s: ", promptSuffix)
 
 			answer, err := reader.ReadString('\n')
 			if err != nil {
@@ -395,7 +395,7 @@ var (
 				return err
 			}
 
-			fmt.Printf("Added repository %s to workspace %s\n", repoName, workspaceID) //nolint:forbidigo // user-facing CLI output
+			output.Infof("Added repository %s to workspace %s", repoName, workspaceID)
 			return nil
 		},
 	}
@@ -419,7 +419,7 @@ var (
 				return err
 			}
 
-			fmt.Printf("Removed repository %s from workspace %s\n", repoName, workspaceID) //nolint:forbidigo // user-facing CLI output
+			output.Infof("Removed repository %s from workspace %s", repoName, workspaceID)
 			return nil
 		},
 	}
@@ -452,16 +452,16 @@ var (
 				})
 			}
 
-			fmt.Printf("Workspace: %s\n", status.ID)      //nolint:forbidigo // user-facing CLI output
-			fmt.Printf("Branch: %s\n", status.BranchName) //nolint:forbidigo // user-facing CLI output
+			output.Infof("Workspace: %s", status.ID)
+			output.Infof("Branch: %s", status.BranchName)
 
-			fmt.Println("Repositories:") //nolint:forbidigo // user-facing CLI output
+			output.Println("Repositories:")
 			for _, r := range status.Repos {
 				statusStr := "Clean"
 				if r.IsDirty {
 					statusStr = "Dirty"
 				}
-				fmt.Printf("  - %s: %s (Branch: %s, Unpushed: %d)\n", r.Name, statusStr, r.Branch, r.UnpushedCommits) //nolint:forbidigo // user-facing CLI output
+				output.Infof("  - %s: %s (Branch: %s, Unpushed: %d)", r.Name, statusStr, r.Branch, r.UnpushedCommits)
 			}
 			return nil
 		},
@@ -491,7 +491,7 @@ var (
 				})
 			}
 
-			fmt.Println(path) //nolint:forbidigo // user-facing CLI output
+			output.Println(path)
 			return nil
 		},
 	}
@@ -516,7 +516,7 @@ var (
 				return err
 			}
 
-			fmt.Printf("Switched workspace %s to branch %s\n", id, branchName) //nolint:forbidigo // user-facing CLI output
+			output.Infof("Switched workspace %s to branch %s", id, branchName)
 			return nil
 		},
 	}
@@ -569,11 +569,11 @@ Examples:
 			}
 
 			if failures > 0 {
-				fmt.Printf("\n%d/%d repos failed\n", failures, len(results)) //nolint:forbidigo // user-facing CLI output
+				output.Infof("\n%d/%d repos failed", failures, len(results))
 				return cerrors.NewCommandFailed("git", fmt.Errorf("%d repos failed", failures))
 			}
 
-			fmt.Printf("\nAll %d repos completed successfully\n", len(results)) //nolint:forbidigo // user-facing CLI output
+			output.Infof("\nAll %d repos completed successfully", len(results))
 
 			return nil
 		},
@@ -638,9 +638,9 @@ Examples:
 				if err := os.WriteFile(outputFile, data, 0o644); err != nil { //nolint:gosec // user-specified output file
 					return cerrors.NewIOFailed("write export file", err)
 				}
-				fmt.Printf("Exported workspace %s to %s\n", id, outputFile) //nolint:forbidigo // user-facing CLI output
+				output.Infof("Exported workspace %s to %s", id, outputFile)
 			} else {
-				fmt.Print(string(data)) //nolint:forbidigo // user-facing CLI output
+				output.Print(string(data))
 			}
 
 			return nil
@@ -708,7 +708,7 @@ Examples:
 				workspaceID = idOverride
 			}
 
-			fmt.Printf("Imported workspace %s to %s/%s\n", workspaceID, app.Config.GetWorkspacesRoot(), dirName) //nolint:forbidigo // user-facing CLI output
+			output.SuccessWithPath("Imported workspace", workspaceID, app.Config.GetWorkspacesRoot()+"/"+dirName)
 			return nil
 		},
 	}
@@ -717,26 +717,26 @@ Examples:
 func printGitResults(results []workspaces.RepoGitResult) {
 	for i, r := range results {
 		if i > 0 {
-			fmt.Println() //nolint:forbidigo // user-facing CLI output
+			output.Info("")
 		}
 
-		fmt.Printf("\033[1;36m=== %s ===\033[0m\n", r.RepoName) //nolint:forbidigo // user-facing CLI output
+		output.Printf("\033[1;36m=== %s ===\033[0m\n", r.RepoName)
 
 		if r.Error != nil {
-			fmt.Printf("\033[1;31mError: %s\033[0m\n", r.Error) //nolint:forbidigo // user-facing CLI output
+			output.Printf("\033[1;31mError: %s\033[0m\n", r.Error)
 			continue
 		}
 
 		if r.Stdout != "" {
-			fmt.Print(r.Stdout) //nolint:forbidigo // user-facing CLI output
+			output.Print(r.Stdout)
 		}
 
 		if r.Stderr != "" {
-			fmt.Print(r.Stderr) //nolint:forbidigo // user-facing CLI output
+			output.Print(r.Stderr)
 		}
 
 		if r.ExitCode != 0 {
-			fmt.Printf("\033[1;31mExit code: %d\033[0m\n", r.ExitCode) //nolint:forbidigo // user-facing CLI output
+			output.Printf("\033[1;31mExit code: %d\033[0m\n", r.ExitCode)
 		}
 	}
 }
@@ -746,22 +746,22 @@ func printWorkspaceClosePreview(preview *domain.WorkspaceClosePreview) {
 		return
 	}
 
-	fmt.Printf("\033[33m[DRY RUN]\033[0m Would close workspace: %s\n", preview.WorkspaceID) //nolint:forbidigo // user-facing CLI output
+	output.Printf("\033[33m[DRY RUN]\033[0m Would close workspace: %s\n", preview.WorkspaceID)
 
 	action := "Delete"
 	if preview.KeepMetadata {
 		action = "Archive (keep metadata)"
 	}
 
-	fmt.Printf("  Action: %s\n", action)                          //nolint:forbidigo // user-facing CLI output
-	fmt.Printf("  Remove directory: %s\n", preview.WorkspacePath) //nolint:forbidigo // user-facing CLI output
+	output.Infof("  Action: %s", action)
+	output.Infof("  Remove directory: %s", preview.WorkspacePath)
 
 	if len(preview.ReposAffected) > 0 {
-		fmt.Printf("  Repos affected: %s\n", strings.Join(preview.ReposAffected, ", ")) //nolint:forbidigo // user-facing CLI output
+		output.Infof("  Repos affected: %s", strings.Join(preview.ReposAffected, ", "))
 	}
 
 	if preview.DiskUsageBytes > 0 {
-		fmt.Printf("  Total size: %s\n", output.FormatBytes(preview.DiskUsageBytes)) //nolint:forbidigo // user-facing CLI output
+		output.Infof("  Total size: %s", output.FormatBytes(preview.DiskUsageBytes))
 	}
 }
 
@@ -786,18 +786,18 @@ func closeAndPrint(service *workspaces.Service, id string, force bool, opts work
 		return err
 	}
 
-	fmt.Printf("Closed workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+	output.Success("Closed workspace", id)
 
 	return nil
 }
 
 func printClosed(id string, closedAt *time.Time) {
 	if closedAt != nil {
-		fmt.Printf("Closed workspace %s at %s\n", id, closedAt.Format(time.RFC3339)) //nolint:forbidigo // user-facing CLI output
+		output.Infof("Closed workspace %s at %s", id, closedAt.Format(time.RFC3339))
 		return
 	}
 
-	fmt.Printf("Closed workspace %s\n", id) //nolint:forbidigo // user-facing CLI output
+	output.Success("Closed workspace", id)
 }
 
 func isInteractiveTerminal() bool {

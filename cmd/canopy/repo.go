@@ -62,7 +62,7 @@ var repoListCmd = &cobra.Command{
 
 		for _, repo := range repos {
 			path := filepath.Join(cfg.GetProjectsRoot(), repo)
-			fmt.Printf("%s (%s)\n", repo, path) //nolint:forbidigo // user-facing CLI output
+			output.Infof("%s (%s)", repo, path)
 		}
 		return nil
 	},
@@ -112,10 +112,10 @@ var repoAddCmd = &cobra.Command{
 
 				return cerrors.NewRegistryError("register", "registration failed", err)
 			}
-			fmt.Printf("Registered repository as '%s'\n", realAlias) //nolint:forbidigo // user-facing CLI output
+			output.Infof("Registered repository as '%s'", realAlias)
 		}
 
-		fmt.Printf("Added repository %s\n", url) //nolint:forbidigo // user-facing CLI output
+		output.Success("Added repository", url)
 		return nil
 	},
 }
@@ -159,7 +159,7 @@ var repoRemoveCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Removed repository %s\n", name) //nolint:forbidigo // user-facing CLI output
+		output.Success("Removed repository", name)
 		return nil
 	},
 }
@@ -182,7 +182,7 @@ var repoSyncCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Synced repository %s\n", name) //nolint:forbidigo // user-facing CLI output
+		output.Success("Synced repository", name)
 		return nil
 	},
 }
@@ -223,7 +223,7 @@ var repoRegisterCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Registered '%s' -> %s\n", alias, url) //nolint:forbidigo // user-facing CLI output
+		output.Infof("Registered '%s' -> %s", alias, url)
 		return nil
 	},
 }
@@ -256,7 +256,7 @@ var repoUnregisterCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Unregistered '%s'\n", alias) //nolint:forbidigo // user-facing CLI output
+		output.Infof("Unregistered '%s'", alias)
 		return nil
 	},
 }
@@ -279,11 +279,11 @@ var repoListRegistryCmd = &cobra.Command{
 		tagsRaw, _ := cmd.Flags().GetString("tags")
 		entries := app.Config.GetRegistry().List(parseTags(tagsRaw))
 
-		fmt.Printf("%s%-16s%s %-45s %-20s\n", colorGreen, "ALIAS", colorReset, "URL", "TAGS") //nolint:forbidigo // user-facing CLI output
+		output.Printf("%s%-16s%s %-45s %-20s\n", colorGreen, "ALIAS", colorReset, "URL", "TAGS")
 		for _, entry := range entries {
-			fmt.Printf("%s%-16s%s %-45s %-20s\n", colorGreen, entry.Alias, colorReset, entry.URL, strings.Join(entry.Tags, ",")) //nolint:forbidigo // user-facing CLI output
+			output.Printf("%s%-16s%s %-45s %-20s\n", colorGreen, entry.Alias, colorReset, entry.URL, strings.Join(entry.Tags, ", "))
 		}
-		fmt.Printf("\n%d entries\n", len(entries)) //nolint:forbidigo // user-facing CLI output
+		output.Infof("\n%d entries", len(entries))
 		return nil
 	},
 }
@@ -305,24 +305,24 @@ var repoShowCmd = &cobra.Command{
 			return cerrors.NewRepoNotFound(alias)
 		}
 
-		fmt.Printf("Alias:        %s\n", alias)     //nolint:forbidigo // user-facing CLI output
-		fmt.Printf("URL:          %s\n", entry.URL) //nolint:forbidigo // user-facing CLI output
+		output.Infof("Alias:        %s", alias)
+		output.Infof("URL:          %s", entry.URL)
 		if entry.DefaultBranch != "" {
-			fmt.Printf("Branch:       %s\n", entry.DefaultBranch) //nolint:forbidigo // user-facing CLI output
+			output.Infof("Branch:       %s", entry.DefaultBranch)
 		}
 		if entry.Description != "" {
-			fmt.Printf("Description:  %s\n", entry.Description) //nolint:forbidigo // user-facing CLI output
+			output.Infof("Description:  %s", entry.Description)
 		}
 		if len(entry.Tags) > 0 {
-			fmt.Printf("Tags:         %s\n", strings.Join(entry.Tags, ", ")) //nolint:forbidigo // user-facing CLI output
+			output.Infof("Tags:         %s", strings.Join(entry.Tags, ", "))
 		}
 
 		repoName := giturl.ExtractRepoName(entry.URL)
 		canonicalPath := filepath.Join(app.Config.GetProjectsRoot(), repoName)
 		if _, err := os.Stat(canonicalPath); err == nil {
-			fmt.Printf("Canonical:    %s (present)\n", canonicalPath) //nolint:forbidigo // user-facing CLI output
+			output.Infof("Canonical:    %s (present)", canonicalPath)
 		} else {
-			fmt.Printf("Canonical:    %s (missing)\n", canonicalPath) //nolint:forbidigo // user-facing CLI output
+			output.Infof("Canonical:    %s (missing)", canonicalPath)
 		}
 
 		return nil
@@ -354,7 +354,7 @@ var repoPathCmd = &cobra.Command{
 			})
 		}
 
-		fmt.Println(path) //nolint:forbidigo // user-facing CLI output
+		output.Println(path)
 		return nil
 	},
 }
@@ -485,15 +485,15 @@ func printRepoRemovePreview(preview *domain.RepoRemovePreview) {
 		return
 	}
 
-	fmt.Printf("%s[DRY RUN]%s Would remove repository: %s\n", colorYellow, colorReset, preview.RepoName) //nolint:forbidigo // user-facing CLI output
-	fmt.Printf("  Remove directory: %s\n", preview.RepoPath)                                             //nolint:forbidigo // user-facing CLI output
+	output.Printf("%s[DRY RUN]%s Would remove repository: %s\n", colorYellow, colorReset, preview.RepoName)
+	output.Infof("  Remove directory: %s", preview.RepoPath)
 
 	if len(preview.WorkspacesAffected) > 0 {
-		fmt.Printf("  Used by workspaces: %s (will become orphaned)\n", strings.Join(preview.WorkspacesAffected, ", ")) //nolint:forbidigo // user-facing CLI output
+		output.Infof("  Used by workspaces: %s (will become orphaned)", strings.Join(preview.WorkspacesAffected, ", "))
 	}
 
 	if preview.DiskUsageBytes > 0 {
-		fmt.Printf("  Size: %s\n", output.FormatBytes(preview.DiskUsageBytes)) //nolint:forbidigo // user-facing CLI output
+		output.Infof("  Size: %s", output.FormatBytes(preview.DiskUsageBytes))
 	}
 }
 

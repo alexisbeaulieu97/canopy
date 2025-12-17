@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,13 +54,13 @@ var statusCmd = &cobra.Command{
 			})
 		}
 
-		fmt.Printf("Workspace: %s\n", status.ID) //nolint:forbidigo // user-facing CLI output
+		output.Infof("Workspace: %s", status.ID)
 		for _, r := range status.Repos {
 			statusStr := "Clean"
 			if r.IsDirty {
 				statusStr = "Dirty"
 			}
-			fmt.Printf("- %s: %s (Branch: %s, Unpushed: %d)\n", r.Name, statusStr, r.Branch, r.UnpushedCommits) //nolint:forbidigo // user-facing CLI output
+			output.Infof("- %s: %s (Branch: %s, Unpushed: %d)", r.Name, statusStr, r.Branch, r.UnpushedCommits)
 		}
 
 		return nil
