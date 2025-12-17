@@ -12,6 +12,15 @@ type ViewState interface {
 	HandleKey(m *Model, key string) (ViewState, tea.Cmd, bool)
 }
 
+// Action represents the type of action being confirmed in the TUI.
+type Action string
+
+// Action constants for confirmation dialogs.
+const (
+	ActionClose Action = "close"
+	ActionPush  Action = "push"
+)
+
 // ListViewState represents the main workspace list view.
 type ListViewState struct{}
 
@@ -22,7 +31,7 @@ type DetailViewState struct {
 
 // ConfirmViewState represents a confirmation dialog state.
 type ConfirmViewState struct {
-	Action   string // "close" or "push"
+	Action   Action
 	TargetID string
 }
 

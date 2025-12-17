@@ -4,12 +4,6 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
-// Action constants for confirmation dialogs - aliased from components.
-const (
-	actionClose = string(components.ActionClose)
-	actionPush  = string(components.ActionPush)
-)
-
 // Status indicator styles - aliased from components
 var (
 	statusCleanStyle = components.StatusCleanStyle

@@ -43,11 +43,11 @@ func TestDetailViewState_Loading(t *testing.T) {
 func TestConfirmViewState_Fields(t *testing.T) {
 	tests := []struct {
 		name     string
-		action   string
+		action   Action
 		targetID string
 	}{
-		{name: "close action", action: actionClose, targetID: "ws-1"},
-		{name: "push action", action: actionPush, targetID: "ws-2"},
+		{name: "close action", action: ActionClose, targetID: "ws-1"},
+		{name: "push action", action: ActionPush, targetID: "ws-2"},
 	}
 
 	for _, tt := range tests {
@@ -111,7 +111,7 @@ func TestModel_IsConfirming(t *testing.T) {
 }
 
 func TestModel_GetConfirmState(t *testing.T) {
-	confirmState := &ConfirmViewState{Action: actionPush, TargetID: "ws-1"}
+	confirmState := &ConfirmViewState{Action: ActionPush, TargetID: "ws-1"}
 
 	tests := []struct {
 		name      string

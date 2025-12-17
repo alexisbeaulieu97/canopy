@@ -194,11 +194,11 @@ func (m *Model) handleDetailKeyWithState(state *DetailViewState, key string) (Vi
 func (m *Model) handleConfirmKeyWithState(state *ConfirmViewState, key string) (ViewState, tea.Cmd, bool) {
 	if matchesKey(key, m.ui.Keybindings.Confirm) {
 		switch state.Action {
-		case actionClose:
+		case ActionClose:
 			if state.TargetID != "" {
 				return &ListViewState{}, m.closeWorkspace(state.TargetID), true
 			}
-		case actionPush:
+		case ActionPush:
 			if state.TargetID != "" {
 				m.pushing = true
 				m.pushTarget = state.TargetID
@@ -266,7 +266,7 @@ func (m *Model) handlePushConfirmWithState() (ViewState, tea.Cmd, bool) {
 	m.infoMessage = ""
 
 	return &ConfirmViewState{
-		Action:   actionPush,
+		Action:   ActionPush,
 		TargetID: selected.Workspace.ID,
 	}, nil, true
 }
@@ -289,7 +289,7 @@ func (m *Model) handleCloseConfirmWithState() (ViewState, tea.Cmd, bool) {
 	}
 
 	return &ConfirmViewState{
-		Action:   actionClose,
+		Action:   ActionClose,
 		TargetID: selected.Workspace.ID,
 	}, nil, true
 }
