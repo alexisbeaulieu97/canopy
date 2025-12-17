@@ -35,51 +35,39 @@ func New(workspacesRoot, closedRoot string) *Engine {
 }
 
 // resolveDirectory resolves a workspace ID to its directory path.
-// It first attempts direct path access (assuming ID == dirName),
-// then falls back to scanning all workspaces if the direct lookup fails.
-//
-//nolint:gocyclo // Complexity is necessary for fallback logic and error handling
+// It requires that the workspace ID equals the directory name (after sanitization).
+// If the directory exists but contains corrupt metadata, an error is returned.
 func (e *Engine) resolveDirectory(id string) (string, error) {
-	// First, try direct path access assuming ID == dirName
 	safeID, err := sanitizeDirName(id)
-	if err == nil {
-		path := filepath.Join(e.WorkspacesRoot, safeID)
-		metaPath := filepath.Join(path, "workspace.yaml")
-
-		//nolint:gosec // metaPath is derived from sanitized workspace ID and fixed filename
-		if f, openErr := os.Open(metaPath); openErr == nil {
-			defer func() { _ = f.Close() }()
-
-			var w domain.Workspace
-			if decodeErr := yaml.NewDecoder(f).Decode(&w); decodeErr == nil && w.ID == id {
-				return safeID, nil
-			}
-		}
+	if err != nil {
+		return "", cerrors.NewWorkspaceNotFound(id)
 	}
 
-	// Fallback: scan all workspaces to find the one with matching ID
-	entries, err := os.ReadDir(e.WorkspacesRoot)
-	if err != nil {
-		if os.IsNotExist(err) {
+	path := filepath.Join(e.WorkspacesRoot, safeID)
+	metaPath := filepath.Join(path, "workspace.yaml")
+
+	//nolint:gosec // metaPath is derived from sanitized workspace ID and fixed filename
+	f, openErr := os.Open(metaPath)
+	if openErr != nil {
+		if os.IsNotExist(openErr) {
 			return "", cerrors.NewWorkspaceNotFound(id)
 		}
 
-		return "", cerrors.NewIOFailed("read workspaces root", err)
+		return "", cerrors.NewIOFailed("open workspace metadata", openErr)
 	}
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
+	defer func() { _ = f.Close() }()
 
-		if w, ok := e.tryLoadMetadata(filepath.Join(e.WorkspacesRoot, entry.Name())); ok {
-			if w.ID == id {
-				return entry.Name(), nil
-			}
-		}
+	var w domain.Workspace
+	if decodeErr := yaml.NewDecoder(f).Decode(&w); decodeErr != nil {
+		return "", cerrors.NewWorkspaceMetadataError(id, "decode", decodeErr)
 	}
 
-	return "", cerrors.NewWorkspaceNotFound(id)
+	if w.ID != id {
+		return "", cerrors.NewWorkspaceNotFound(id)
+	}
+
+	return safeID, nil
 }
 
 // resolveClosedDirectory resolves a closed workspace ID and timestamp to its directory path.

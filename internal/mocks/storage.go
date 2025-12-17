@@ -4,6 +4,7 @@ package mocks
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -71,6 +72,7 @@ func (m *MockWorkspaceStorage) Close(ctx context.Context, id string, closedAt ti
 	}
 
 	ws.ClosedAt = &closedAt
+	m.Workspaces[id] = ws // Persist the modification back to the map
 
 	return &domain.ClosedWorkspace{
 		DirName:  id,
@@ -89,6 +91,11 @@ func (m *MockWorkspaceStorage) List(ctx context.Context) ([]domain.Workspace, er
 	for _, ws := range m.Workspaces {
 		result = append(result, ws)
 	}
+
+	// Sort by ID for deterministic test behavior
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ID < result[j].ID
+	})
 
 	return result, nil
 }

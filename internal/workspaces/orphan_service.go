@@ -79,7 +79,7 @@ func (s *WorkspaceOrphanService) DetectOrphans() ([]domain.OrphanedWorktree, err
 // DetectOrphansForWorkspace returns orphans for a specific workspace.
 // This is more efficient than DetectOrphans when only checking a single workspace.
 func (s *WorkspaceOrphanService) DetectOrphansForWorkspace(workspaceID string) ([]domain.OrphanedWorktree, error) {
-	ws, _, err := s.workspaceFinder.FindWorkspace(workspaceID)
+	ws, dirName, err := s.workspaceFinder.FindWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (s *WorkspaceOrphanService) DetectOrphansForWorkspace(workspaceID string) (
 		return nil, err
 	}
 
-	return s.checkWorkspaceForOrphans(*ws, workspaceID, canonicalSet), nil
+	return s.checkWorkspaceForOrphans(*ws, dirName, canonicalSet), nil
 }
 
 // buildCanonicalRepoSet returns a set of canonical repo names.
