@@ -21,6 +21,7 @@ type MockConfigProvider struct {
 	GetCloseDefaultFunc       func() string
 	GetWorkspaceNamingFunc    func() string
 	GetStaleThresholdDaysFunc func() int
+	GetParallelWorkersFunc    func() int
 	GetRegistryFunc           func() *config.RepoRegistry
 	GetHooksFunc              func() config.Hooks
 
@@ -31,6 +32,7 @@ type MockConfigProvider struct {
 	CloseDefault       string
 	WorkspaceNaming    string
 	StaleThresholdDays int
+	ParallelWorkers    int
 	Registry           *config.RepoRegistry
 	Hooks              config.Hooks
 	RepoNames          []string
@@ -45,6 +47,7 @@ func NewMockConfigProvider() *MockConfigProvider {
 		CloseDefault:       "archive",
 		WorkspaceNaming:    "{{.ID}}",
 		StaleThresholdDays: 14,
+		ParallelWorkers:    config.DefaultParallelWorkers,
 		Registry:           &config.RepoRegistry{},
 		RepoNames:          []string{},
 	}
@@ -120,6 +123,15 @@ func (m *MockConfigProvider) GetStaleThresholdDays() int {
 	}
 
 	return m.StaleThresholdDays
+}
+
+// GetParallelWorkers calls the mock function if set, otherwise returns ParallelWorkers.
+func (m *MockConfigProvider) GetParallelWorkers() int {
+	if m.GetParallelWorkersFunc != nil {
+		return m.GetParallelWorkersFunc()
+	}
+
+	return m.ParallelWorkers
 }
 
 // GetRegistry calls the mock function if set, otherwise returns Registry.
