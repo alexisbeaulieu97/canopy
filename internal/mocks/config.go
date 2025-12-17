@@ -157,6 +157,11 @@ func (m *MockConfigProvider) GetKeybindings() config.Keybindings {
 	return config.Keybindings{}.WithDefaults()
 }
 
+// GetUseEmoji returns whether emoji should be used in the TUI (defaults to true).
+func (m *MockConfigProvider) GetUseEmoji() bool {
+	return true
+}
+
 // GetGitRetryConfig returns default git retry configuration.
 func (m *MockConfigProvider) GetGitRetryConfig() config.ParsedRetryConfig {
 	return config.ParsedRetryConfig{

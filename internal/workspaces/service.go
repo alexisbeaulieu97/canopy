@@ -1056,6 +1056,11 @@ func (s *Service) Keybindings() config.Keybindings {
 	return s.config.GetKeybindings()
 }
 
+// UseEmoji returns whether emoji should be used in the TUI.
+func (s *Service) UseEmoji() bool {
+	return s.config.GetUseEmoji()
+}
+
 // DetectOrphans finds orphaned worktrees across all workspaces.
 // An orphan is a worktree reference in workspace metadata that:
 // - References a canonical repo that no longer exists

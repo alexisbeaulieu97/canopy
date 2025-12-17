@@ -1392,3 +1392,40 @@ func TestValidateGitRetry(t *testing.T) {
 		})
 	}
 }
+
+func TestTUIConfig_GetUseEmoji(t *testing.T) {
+	tests := []struct {
+		name     string
+		useEmoji *bool
+		want     bool
+	}{
+		{
+			name:     "nil defaults to true",
+			useEmoji: nil,
+			want:     true,
+		},
+		{
+			name:     "explicit true",
+			useEmoji: boolPtr(true),
+			want:     true,
+		},
+		{
+			name:     "explicit false",
+			useEmoji: boolPtr(false),
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := TUIConfig{UseEmoji: tt.useEmoji}
+			if got := cfg.GetUseEmoji(); got != tt.want {
+				t.Errorf("GetUseEmoji() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}

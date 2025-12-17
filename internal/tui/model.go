@@ -18,6 +18,8 @@ type Model struct {
 	ui UIComponents
 	// svc provides workspace operations.
 	svc *workspaces.Service
+	// symbols provides emoji/ASCII symbol mappings based on config.
+	symbols Symbols
 	// err holds any error to display.
 	err error
 	// infoMessage holds an informational message to display.
@@ -44,12 +46,14 @@ type Model struct {
 func NewModel(svc *workspaces.Service, printPath bool) Model {
 	threshold := svc.StaleThresholdDays()
 	kb := svc.Keybindings()
+	useEmoji := svc.UseEmoji()
 
 	return Model{
 		viewState:  &ListViewState{},
 		workspaces: newWorkspaceModel(threshold),
 		ui:         NewUIComponents(kb, threshold),
 		svc:        svc,
+		symbols:    NewSymbols(useEmoji),
 		printPath:  printPath,
 	}
 }

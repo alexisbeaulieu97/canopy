@@ -133,10 +133,33 @@ hooks:
     - command: "echo 'Closing workspace'"
 
 tui:
+  use_emoji: true  # Set to false for ASCII-only output
   keybindings:
     quit: ["q", "ctrl+c"]
     open_editor: ["o", "e"]
 ```
+
+## TUI Emoji Configuration
+
+Control whether the TUI uses emoji or ASCII characters:
+
+```yaml
+tui:
+  use_emoji: true  # default: true (emoji enabled)
+```
+
+When `use_emoji: false`, emoji are replaced with ASCII fallbacks for better compatibility with terminals that don't support Unicode:
+
+| Emoji | ASCII | Usage |
+|-------|-------|-------|
+| 🌲 | `[W]` | Workspaces header |
+| 💾 | `[D]` | Disk usage |
+| 📂 | `[>]` | Workspace detail |
+| ⚠ | `[!]` | Warnings |
+| ✓ | `[*]` | Success indicators |
+| 🔍 | `[?]` | Search filter |
+| ⏳ | `[...]` | Loading indicator |
+| 📁 | `[-]` | Repository |
 
 ## TUI Keybindings
 
