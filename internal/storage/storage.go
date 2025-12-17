@@ -1,5 +1,5 @@
-// Package workspace manages workspace metadata and directories.
-package workspace
+// Package storage manages workspace metadata and directories.
+package storage
 
 import (
 	"os"

@@ -13,13 +13,13 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/gitx"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/mocks"
+	"github.com/alexisbeaulieu97/canopy/internal/storage"
 	"github.com/alexisbeaulieu97/canopy/internal/testutil"
-	"github.com/alexisbeaulieu97/canopy/internal/workspace"
 )
 
 type testServiceDeps struct {
 	svc            *Service
-	wsEngine       *workspace.Engine
+	wsEngine       *storage.Engine
 	projectsRoot   string
 	workspacesRoot string
 	closedRoot     string
@@ -43,7 +43,7 @@ func newTestService(t *testing.T) testServiceDeps {
 	}
 
 	gitEngine := gitx.New(projectsRoot)
-	wsEngine := workspace.New(workspacesRoot, closedRoot)
+	wsEngine := storage.New(workspacesRoot, closedRoot)
 
 	return testServiceDeps{
 		svc:            NewService(cfg, gitEngine, wsEngine, nil),
@@ -76,7 +76,7 @@ func TestResolveRepos(t *testing.T) {
 
 	// We need to provide mock engines since Service constructor validates dependencies
 	mockGit := gitx.New(cfg.ProjectsRoot)
-	mockWs := workspace.New(t.TempDir(), t.TempDir())
+	mockWs := storage.New(t.TempDir(), t.TempDir())
 	svc := NewService(cfg, mockGit, mockWs, nil)
 
 	// Test case 1: Pattern match
@@ -151,7 +151,7 @@ func TestCreateWorkspace(t *testing.T) {
 	}
 
 	gitEngine := gitx.New(projectsRoot)
-	wsEngine := workspace.New(workspacesRoot, closedRoot)
+	wsEngine := storage.New(workspacesRoot, closedRoot)
 	svc := NewService(cfg, gitEngine, wsEngine, nil)
 
 	// We can't easily test full CreateWorkspace because it calls git commands.
