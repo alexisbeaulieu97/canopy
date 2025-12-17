@@ -5,6 +5,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
 // Update handles incoming Tea messages and state transitions.
@@ -194,11 +195,11 @@ func (m *Model) handleDetailKeyWithState(state *DetailViewState, key string) (Vi
 func (m *Model) handleConfirmKeyWithState(state *ConfirmViewState, key string) (ViewState, tea.Cmd, bool) {
 	if matchesKey(key, m.ui.Keybindings.Confirm) {
 		switch state.Action {
-		case ActionClose:
+		case components.ActionClose:
 			if state.TargetID != "" {
 				return &ListViewState{}, m.closeWorkspace(state.TargetID), true
 			}
-		case ActionPush:
+		case components.ActionPush:
 			if state.TargetID != "" {
 				m.pushing = true
 				m.pushTarget = state.TargetID
@@ -266,7 +267,7 @@ func (m *Model) handlePushConfirmWithState() (ViewState, tea.Cmd, bool) {
 	m.infoMessage = ""
 
 	return &ConfirmViewState{
-		Action:   ActionPush,
+		Action:   components.ActionPush,
 		TargetID: selected.Workspace.ID,
 	}, nil, true
 }
@@ -289,7 +290,7 @@ func (m *Model) handleCloseConfirmWithState() (ViewState, tea.Cmd, bool) {
 	}
 
 	return &ConfirmViewState{
-		Action:   ActionClose,
+		Action:   components.ActionClose,
 		TargetID: selected.Workspace.ID,
 	}, nil, true
 }

@@ -1,6 +1,10 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
+)
 
 // ViewState represents a distinct view mode in the TUI.
 // Each state handles its own view rendering and key events.
@@ -12,15 +16,6 @@ type ViewState interface {
 	HandleKey(m *Model, key string) (ViewState, tea.Cmd, bool)
 }
 
-// Action represents the type of action being confirmed in the TUI.
-type Action string
-
-// Action constants for confirmation dialogs.
-const (
-	ActionClose Action = "close"
-	ActionPush  Action = "push"
-)
-
 // ListViewState represents the main workspace list view.
 type ListViewState struct{}
 
@@ -31,7 +26,7 @@ type DetailViewState struct {
 
 // ConfirmViewState represents a confirmation dialog state.
 type ConfirmViewState struct {
-	Action   Action
+	Action   components.ConfirmAction
 	TargetID string
 }
 

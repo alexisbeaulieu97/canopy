@@ -1,6 +1,10 @@
 package tui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
+)
 
 func TestViewStateInterface(_ *testing.T) {
 	// Verify all states implement ViewState
@@ -43,11 +47,11 @@ func TestDetailViewState_Loading(t *testing.T) {
 func TestConfirmViewState_Fields(t *testing.T) {
 	tests := []struct {
 		name     string
-		action   Action
+		action   components.ConfirmAction
 		targetID string
 	}{
-		{name: "close action", action: ActionClose, targetID: "ws-1"},
-		{name: "push action", action: ActionPush, targetID: "ws-2"},
+		{name: "close action", action: components.ActionClose, targetID: "ws-1"},
+		{name: "push action", action: components.ActionPush, targetID: "ws-2"},
 	}
 
 	for _, tt := range tests {
@@ -111,7 +115,7 @@ func TestModel_IsConfirming(t *testing.T) {
 }
 
 func TestModel_GetConfirmState(t *testing.T) {
-	confirmState := &ConfirmViewState{Action: ActionPush, TargetID: "ws-1"}
+	confirmState := &ConfirmViewState{Action: components.ActionPush, TargetID: "ws-1"}
 
 	tests := []struct {
 		name      string
