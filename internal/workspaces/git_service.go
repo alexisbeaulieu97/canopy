@@ -248,14 +248,14 @@ func (s *WorkspaceGitService) runGitParallel(ctx context.Context, workspace *dom
 
 // SwitchBranch switches the branch for all repos in a workspace.
 func (s *WorkspaceGitService) SwitchBranch(ctx context.Context, workspaceID, branchName string, create bool) error {
-	targetWorkspace, dirName, err := s.workspaceFinder.FindWorkspace(workspaceID)
+	targetWorkspace, _, err := s.workspaceFinder.FindWorkspace(workspaceID)
 	if err != nil {
 		return err
 	}
 
 	// Iterate through repos and checkout
 	for _, repo := range targetWorkspace.Repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repo.Name)
 
 		if s.logger != nil {
 			s.logger.Info("Switching branch", "repo", repo.Name, "branch", branchName)
@@ -268,7 +268,7 @@ func (s *WorkspaceGitService) SwitchBranch(ctx context.Context, workspaceID, bra
 
 	// Update metadata
 	targetWorkspace.BranchName = branchName
-	if err := s.wsEngine.Save(dirName, *targetWorkspace); err != nil {
+	if err := s.wsEngine.Save(ctx, *targetWorkspace); err != nil {
 		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
 

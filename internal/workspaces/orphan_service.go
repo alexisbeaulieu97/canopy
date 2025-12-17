@@ -56,7 +56,7 @@ func NewOrphanService(
 // - Has a worktree directory that doesn't exist
 // - Has an invalid git directory
 func (s *WorkspaceOrphanService) DetectOrphans() ([]domain.OrphanedWorktree, error) {
-	workspaceMap, err := s.wsEngine.List()
+	workspaceList, err := s.wsEngine.List(context.Background())
 	if err != nil {
 		return nil, cerrors.NewIOFailed("list workspaces", err)
 	}
@@ -68,8 +68,8 @@ func (s *WorkspaceOrphanService) DetectOrphans() ([]domain.OrphanedWorktree, err
 
 	var orphans []domain.OrphanedWorktree
 
-	for dir, ws := range workspaceMap {
-		wsOrphans := s.checkWorkspaceForOrphans(ws, dir, canonicalSet)
+	for _, ws := range workspaceList {
+		wsOrphans := s.checkWorkspaceForOrphans(ws, ws.ID, canonicalSet)
 		orphans = append(orphans, wsOrphans...)
 	}
 
@@ -79,7 +79,7 @@ func (s *WorkspaceOrphanService) DetectOrphans() ([]domain.OrphanedWorktree, err
 // DetectOrphansForWorkspace returns orphans for a specific workspace.
 // This is more efficient than DetectOrphans when only checking a single workspace.
 func (s *WorkspaceOrphanService) DetectOrphansForWorkspace(workspaceID string) ([]domain.OrphanedWorktree, error) {
-	ws, dirName, err := s.workspaceFinder.FindWorkspace(workspaceID)
+	ws, _, err := s.workspaceFinder.FindWorkspace(workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (s *WorkspaceOrphanService) DetectOrphansForWorkspace(workspaceID string) (
 		return nil, err
 	}
 
-	return s.checkWorkspaceForOrphans(*ws, dirName, canonicalSet), nil
+	return s.checkWorkspaceForOrphans(*ws, workspaceID, canonicalSet), nil
 }
 
 // buildCanonicalRepoSet returns a set of canonical repo names.

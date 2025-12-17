@@ -159,7 +159,7 @@ func TestCanonicalRepoService_Remove(t *testing.T) {
 
 		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil)
 
-		err := svc.Remove("test-repo", false)
+		err := svc.Remove(context.Background(), "test-repo", false)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -188,7 +188,7 @@ func TestCanonicalRepoService_Remove(t *testing.T) {
 
 		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil)
 
-		err := svc.Remove("test-repo", false)
+		err := svc.Remove(context.Background(), "test-repo", false)
 		if err == nil {
 			t.Fatal("expected error when repo is in use")
 		}
@@ -213,7 +213,7 @@ func TestCanonicalRepoService_Remove(t *testing.T) {
 
 		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil)
 
-		err := svc.Remove("test-repo", true)
+		err := svc.Remove(context.Background(), "test-repo", true)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -232,7 +232,7 @@ func TestCanonicalRepoService_Remove(t *testing.T) {
 
 		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil)
 
-		err := svc.Remove("nonexistent", false)
+		err := svc.Remove(context.Background(), "nonexistent", false)
 		if err == nil {
 			t.Fatal("expected error for non-existent repo")
 		}
@@ -292,7 +292,7 @@ func TestCanonicalRepoService_GetWorkspacesUsingRepo(t *testing.T) {
 
 		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
 
-		usedBy, err := svc.GetWorkspacesUsingRepo("shared-repo")
+		usedBy, err := svc.GetWorkspacesUsingRepo(context.Background(), "shared-repo")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -310,7 +310,7 @@ func TestCanonicalRepoService_GetWorkspacesUsingRepo(t *testing.T) {
 
 		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
 
-		usedBy, err := svc.GetWorkspacesUsingRepo("unused-repo")
+		usedBy, err := svc.GetWorkspacesUsingRepo(context.Background(), "unused-repo")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -350,7 +350,7 @@ func TestCanonicalRepoService_PreviewRemove(t *testing.T) {
 		diskCalc := DefaultDiskUsageCalculator()
 		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, diskCalc)
 
-		preview, err := svc.PreviewRemove("test-repo")
+		preview, err := svc.PreviewRemove(context.Background(), "test-repo")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
