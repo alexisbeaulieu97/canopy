@@ -63,12 +63,12 @@ type WorkspaceStorage interface {
     // LatestClosed returns the most recent closed entry for a workspace.
     LatestClosed(ctx context.Context, id string) (*domain.ClosedWorkspace, error)
 
-    // DeleteClosed removes a closed workspace entry.
-    DeleteClosed(ctx context.Context, path string) error
+    // DeleteClosed removes a closed workspace entry identified by workspace ID and close timestamp.
+    DeleteClosed(ctx context.Context, id string, closedAt time.Time) error
 }
 ```
 
-**Rationale:** This is the cleanest approach that fully abstracts the storage implementation. The storage layer decides how to map IDs to paths.
+**Rationale:** This is the cleanest approach that fully abstracts the storage implementation. The storage layer decides how to map IDs to paths. Closed workspaces are uniquely identified by the combination of workspace ID and close timestamp, eliminating path exposure.
 
 ### Decision 2: List returns slice instead of map
 Change `List()` return type from `map[string]domain.Workspace` to `[]domain.Workspace`.

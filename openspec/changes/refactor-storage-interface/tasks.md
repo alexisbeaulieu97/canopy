@@ -7,7 +7,8 @@
 - [ ] 1.6 Change `Close` signature to `Close(ctx, id string, closedAt time.Time) (*domain.ClosedWorkspace, error)`
 - [ ] 1.7 Change `Rename` signature to `Rename(ctx, oldID, newID string) error`
 - [ ] 1.8 Change `List` return type to `[]domain.Workspace`
-- [ ] 1.9 Remove `LoadByID` (now redundant with new `Load`)
+- [ ] 1.9 Change `DeleteClosed` signature to `DeleteClosed(ctx, id string, closedAt time.Time) error`
+- [ ] 1.10 Remove `LoadByID` (now redundant with new `Load`)
 
 ## 2. Mock Implementation
 - [ ] 2.1 Update `internal/mocks/storage.go` to match new interface
@@ -19,8 +20,10 @@
 - [ ] 3.4 Update `Engine.Close` to accept ID and resolve directory internally
 - [ ] 3.5 Update `Engine.Rename` to accept old/new IDs
 - [ ] 3.6 Update `Engine.List` to return slice
-- [ ] 3.7 Add internal `resolveDirectory(id string) (string, error)` helper
-- [ ] 3.8 Remove `LoadByID` method
+- [ ] 3.7 Update `Engine.DeleteClosed` to accept ID and timestamp
+- [ ] 3.8 Add internal `resolveDirectory(id string) (string, error)` helper
+- [ ] 3.9 Add internal `resolveClosedDirectory(id string, closedAt time.Time) (string, error)` helper
+- [ ] 3.10 Remove `LoadByID` method
 
 ## 4. Service Layer Updates
 - [ ] 4.1 Update `service.go` Create calls to pass domain object

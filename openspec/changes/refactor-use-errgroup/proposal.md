@@ -1,11 +1,7 @@
 # Change: Replace Custom Parallel Logic with errgroup
 
 ## Why
-The current `parallel.go` implementation uses custom channel-based work distribution with manual worker pools and context cancellation. This is ~137 lines of complex concurrent code that can be significantly simplified using the standard `golang.org/x/sync/errgroup` package, which provides:
-- Built-in bounded concurrency via `SetLimit()`
-- Automatic context cancellation on first error (fail-fast)
-- Cleaner, more idiomatic Go concurrent patterns
-- Well-tested standard library code
+The current `parallel.go` is complex due to manual channel/worker pool and cancellation logic (~137 lines). Using `golang.org/x/sync/errgroup` simplifies this to ~30 lines while providing bounded concurrency and automatic fail-fast cancellation.
 
 ## What Changes
 - Add `golang.org/x/sync/errgroup` dependency

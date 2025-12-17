@@ -6,12 +6,13 @@ The current `WorkspaceStorage` interface leaks filesystem implementation details
 Additionally, methods lack `context.Context` support, preventing proper cancellation and timeout propagation for I/O operations.
 
 ## What Changes
-- Add `context.Context` as first parameter to all `WorkspaceStorage` methods
-- Refactor `Create` to accept a `domain.Workspace` object instead of separate parameters
-- Refactor `Save`, `Load`, `Close` to use workspace ID instead of `dirName`
-- Refactor `Rename` to use old/new IDs instead of dirNames
+- **BREAKING** Add `context.Context` as first parameter to all `WorkspaceStorage` methods
+- **BREAKING** Refactor `Create` to accept a `domain.Workspace` object instead of separate parameters
+- **BREAKING** Refactor `Save`, `Load`, `Close` to use workspace ID instead of `dirName`
+- **BREAKING** Refactor `Rename` to use old/new IDs instead of dirNames
+- **BREAKING** Refactor `DeleteClosed` to use workspace ID and timestamp instead of path
+- **BREAKING** Remove `LoadByID` in favor of unified `Load(ctx, id)`
 - Storage implementation manages ID-to-directory mapping internally
-- Remove `LoadByID` in favor of unified `Load(ctx, id)` (current `Load(dirName)` pattern deprecated)
 
 ## Impact
 - Affected specs: core-architecture
