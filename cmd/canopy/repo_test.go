@@ -1,7 +1,9 @@
 package main
 
 import (
-	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
@@ -54,11 +56,13 @@ func TestSaveRegistryWithRollback_SuccessfulSave(t *testing.T) {
 }
 
 func TestSaveRegistryWithRollback_SaveFailureWithSuccessfulRollback(t *testing.T) {
-	// For this test, we'll simulate using a valid registry
-	// Since we can't easily make Save() fail, we test the function signature
-	// and verify the behavior when save succeeds.
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows - directory permissions behave differently")
+	}
+
+	// Create a temp directory and registry
 	tmpDir := t.TempDir()
-	registryPath := tmpDir + "/repos.yaml"
+	registryPath := filepath.Join(tmpDir, "repos.yaml")
 
 	registry, err := config.LoadRepoRegistry(registryPath)
 	if err != nil {
@@ -75,21 +79,46 @@ func TestSaveRegistryWithRollback_SaveFailureWithSuccessfulRollback(t *testing.T
 		t.Fatalf("initial save failed: %v", err)
 	}
 
-	// Since we can't easily make Save() fail with the current implementation,
-	// we'll test that when save succeeds, rollback is not called (covered above)
-	// and verify the function signature works correctly.
+	// Make the file read-only to cause Save() to fail
+	if err := os.Chmod(registryPath, 0o444); err != nil {
+		t.Fatalf("failed to make file read-only: %v", err)
+	}
+	// Restore permissions at the end so cleanup works
+	t.Cleanup(func() {
+		_ = os.Chmod(registryPath, 0o644)
+	})
 
-	// For a true save failure test, we would need to mock the registry or use
-	// a filesystem mock. The implementation correctness is verified by the
-	// integration tests and manual testing.
+	rollbackCalled := false
+	rollbackFn := func() error {
+		rollbackCalled = true
+		return nil
+	}
 
-	t.Skip("Skipping save failure test - requires filesystem mocking")
+	logger := &mockLogger{}
+
+	err = saveRegistryWithRollback(registry, rollbackFn, "test operation", logger)
+	if err == nil {
+		t.Error("expected error when save fails, got nil")
+	}
+
+	if !rollbackCalled {
+		t.Error("rollback should be called when save fails")
+	}
+
+	// Rollback save will also fail due to read-only file, so we should see a log
+	if len(logger.errors) == 0 {
+		t.Error("expected logged error for failed rollback save")
+	}
 }
 
 func TestSaveRegistryWithRollback_RollbackFailure(t *testing.T) {
-	// Test that rollback errors are logged
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows - directory permissions behave differently")
+	}
+
+	// Create a temp directory and registry
 	tmpDir := t.TempDir()
-	registryPath := tmpDir + "/repos.yaml"
+	registryPath := filepath.Join(tmpDir, "repos.yaml")
 
 	registry, err := config.LoadRepoRegistry(registryPath)
 	if err != nil {
@@ -101,25 +130,36 @@ func TestSaveRegistryWithRollback_RollbackFailure(t *testing.T) {
 		t.Fatalf("failed to register test entry: %v", err)
 	}
 
-	// This test verifies the rollback error logging path
-	// Since we can't easily trigger a Save failure, we'll verify
-	// that when a rollback function returns an error, it gets logged
+	// First save to create the file
+	if err := registry.Save(); err != nil {
+		t.Fatalf("initial save failed: %v", err)
+	}
 
-	rollbackErr := errors.New("rollback failed")
+	// Make the file read-only to cause Save() to fail
+	if err := os.Chmod(registryPath, 0o444); err != nil {
+		t.Fatalf("failed to make file read-only: %v", err)
+	}
+	// Restore permissions at the end so cleanup works
+	t.Cleanup(func() {
+		_ = os.Chmod(registryPath, 0o644)
+	})
+
+	// Rollback function that returns an error
 	rollbackFn := func() error {
-		return rollbackErr
+		return os.ErrPermission
 	}
 
 	logger := &mockLogger{}
 
-	// Save should succeed in this case, so rollback won't be called
 	err = saveRegistryWithRollback(registry, rollbackFn, "test operation", logger)
-	if err != nil {
-		t.Errorf("expected no error on successful save, got: %v", err)
+	if err == nil {
+		t.Error("expected error when save fails, got nil")
 	}
 
-	// For rollback failure logging to be tested, we need the save to fail first
-	t.Skip("Skipping rollback failure logging test - requires save failure simulation")
+	// Should log the rollback failure
+	if len(logger.errors) == 0 {
+		t.Error("expected logged error for failed rollback")
+	}
 }
 
 func TestSaveRegistryWithRollback_NilLogger(t *testing.T) {
@@ -158,8 +198,9 @@ func TestRegisterAlias_Success(t *testing.T) {
 	}
 
 	entry := config.RegistryEntry{URL: "https://github.com/test/repo"}
+	logger := &mockLogger{}
 
-	alias, err := registerAlias(registry, "test-alias", entry)
+	alias, err := registerAlias(registry, "test-alias", entry, logger)
 	if err != nil {
 		t.Fatalf("registerAlias failed: %v", err)
 	}
@@ -189,15 +230,16 @@ func TestRegisterAlias_DuplicateError(t *testing.T) {
 	}
 
 	entry := config.RegistryEntry{URL: "https://github.com/test/repo"}
+	logger := &mockLogger{}
 
 	// First registration should succeed
-	_, err = registerAlias(registry, "test-alias", entry)
+	_, err = registerAlias(registry, "test-alias", entry, logger)
 	if err != nil {
 		t.Fatalf("first registerAlias failed: %v", err)
 	}
 
 	// Second registration with same alias should fail
-	_, err = registerAlias(registry, "test-alias", config.RegistryEntry{URL: "https://github.com/other/repo"})
+	_, err = registerAlias(registry, "test-alias", config.RegistryEntry{URL: "https://github.com/other/repo"}, logger)
 	if err == nil {
 		t.Error("expected error for duplicate alias, got nil")
 	}

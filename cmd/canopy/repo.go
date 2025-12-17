@@ -100,7 +100,7 @@ var repoAddCmd = &cobra.Command{
 			}
 
 			entry := config.RegistryEntry{URL: url}
-			realAlias, err := registerWithPrompt(cmd, app.Config.GetRegistry(), alias, entry)
+			realAlias, err := registerWithPrompt(cmd, app.Config.GetRegistry(), alias, entry, app.Logger)
 			if err != nil {
 				// Use a detached context for cleanup to ensure it runs even if cmd.Context() is cancelled
 				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), gitx.DefaultLocalTimeout)
@@ -378,7 +378,7 @@ func parseTags(raw string) []string {
 	return tags
 }
 
-func registerWithPrompt(cmd *cobra.Command, registry *config.RepoRegistry, alias string, entry config.RegistryEntry) (string, error) {
+func registerWithPrompt(cmd *cobra.Command, registry *config.RepoRegistry, alias string, entry config.RegistryEntry, logger rollbackLogger) (string, error) {
 	if registry == nil {
 		return alias, cerrors.NewConfigInvalid("registry not configured")
 	}
@@ -390,7 +390,7 @@ func registerWithPrompt(cmd *cobra.Command, registry *config.RepoRegistry, alias
 
 	for {
 		if _, exists := registry.Resolve(target); !exists {
-			return registerAlias(registry, target, entry)
+			return registerAlias(registry, target, entry, logger)
 		}
 
 		suggested := nextAvailableAlias(registry, target)
@@ -415,7 +415,7 @@ func nextAvailableAlias(registry *config.RepoRegistry, base string) string {
 	}
 }
 
-func registerAlias(registry *config.RepoRegistry, alias string, entry config.RegistryEntry) (string, error) {
+func registerAlias(registry *config.RepoRegistry, alias string, entry config.RegistryEntry, logger rollbackLogger) (string, error) {
 	if err := registry.Register(alias, entry, false); err != nil {
 		return "", err
 	}
@@ -423,7 +423,7 @@ func registerAlias(registry *config.RepoRegistry, alias string, entry config.Reg
 	rollbackFn := func() error {
 		return registry.Unregister(alias)
 	}
-	if err := saveRegistryWithRollback(registry, rollbackFn, "registration", nil); err != nil {
+	if err := saveRegistryWithRollback(registry, rollbackFn, "registration", logger); err != nil {
 		return "", err
 	}
 
