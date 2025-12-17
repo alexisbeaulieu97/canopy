@@ -281,7 +281,7 @@ var repoListRegistryCmd = &cobra.Command{
 
 		output.Printf("%s%-16s%s %-45s %-20s\n", colorGreen, "ALIAS", colorReset, "URL", "TAGS")
 		for _, entry := range entries {
-			output.Printf("%s%-16s%s %-45s %-20s\n", colorGreen, entry.Alias, colorReset, entry.URL, strings.Join(entry.Tags, ","))
+			output.Printf("%s%-16s%s %-45s %-20s\n", colorGreen, entry.Alias, colorReset, entry.URL, strings.Join(entry.Tags, ", "))
 		}
 		output.Infof("\n%d entries", len(entries))
 		return nil

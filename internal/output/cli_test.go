@@ -11,6 +11,9 @@ import (
 // stdoutMutex protects stdout capture operations across tests.
 var stdoutMutex sync.Mutex
 
+// stderrMutex protects stderr capture operations across tests.
+var stderrMutex sync.Mutex
+
 // captureOutput captures stdout output from a function.
 // Uses a mutex to prevent parallel test interference.
 func captureOutput(t *testing.T, fn func()) string {
@@ -26,13 +29,48 @@ func captureOutput(t *testing.T, fn func()) string {
 		t.Fatalf("failed to create pipe: %v", err)
 	}
 
+	// Ensure cleanup happens even if fn() panics
+	defer func() { _ = r.Close() }()
+	defer func() { os.Stdout = old }()
+
 	os.Stdout = w
 
 	fn()
 
 	_ = w.Close()
 
-	os.Stdout = old
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("failed to copy output: %v", err)
+	}
+
+	return buf.String()
+}
+
+// captureStderr captures stderr output from a function.
+// Uses a mutex to prevent parallel test interference.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	stderrMutex.Lock()
+	defer stderrMutex.Unlock()
+
+	old := os.Stderr
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+
+	// Ensure cleanup happens even if fn() panics
+	defer func() { _ = r.Close() }()
+	defer func() { os.Stderr = old }()
+
+	os.Stderr = w
+
+	fn()
+
+	_ = w.Close()
 
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, r); err != nil {
@@ -195,7 +233,7 @@ func TestWarn(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := captureOutput(t, func() {
+			got := captureStderr(t, func() {
 				Warn(tt.message)
 			})
 			if got != tt.want {
@@ -222,7 +260,7 @@ func TestWarnf(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := captureOutput(t, func() {
+			got := captureStderr(t, func() {
 				Warnf(tt.format, tt.args...)
 			})
 			if got != tt.want {
