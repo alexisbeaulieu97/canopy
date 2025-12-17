@@ -160,17 +160,17 @@ func TestRunParallelCanonical_ContextCancellation(t *testing.T) {
 	mockCfg := mocks.NewMockConfigProvider()
 	mockCfg.ParallelWorkers = 4
 
-	var startedCount atomic.Int32
+	// Synchronization: signal when at least one worker has started
+	workerStarted := make(chan struct{})
+	var startedOnce sync.Once
 
 	mockGit.EnsureCanonicalFunc = func(ctx context.Context, _, _ string) (*git.Repository, error) {
-		startedCount.Add(1)
-		// Simulate slow operation
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(1 * time.Second):
-			return nil, nil
-		}
+		// Signal that a worker has started (only once)
+		startedOnce.Do(func() { close(workerStarted) })
+
+		// Block until context is cancelled
+		<-ctx.Done()
+		return nil, ctx.Err()
 	}
 
 	svc := &Service{
@@ -186,9 +186,9 @@ func TestRunParallelCanonical_ContextCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Cancel after a short delay
+	// Cancel only after at least one worker has started
 	go func() {
-		time.Sleep(50 * time.Millisecond)
+		<-workerStarted
 		cancel()
 	}()
 

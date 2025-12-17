@@ -97,11 +97,10 @@ func (s *Service) canonicalWorker(ctx context.Context, repos []domain.Repo, jobs
 			repo := repos[idx]
 			_, err := s.gitEngine.EnsureCanonical(ctx, repo.URL, repo.Name)
 
-			select {
-			case results <- canonicalResult{repo: repo, err: err}:
-			case <-ctx.Done():
-				return
-			}
+			// Always send the result - the channel is buffered to len(repos) so this
+			// will never block. This ensures context cancellation errors are reported
+			// rather than silently dropped.
+			results <- canonicalResult{repo: repo, err: err}
 		}
 	}
 }
