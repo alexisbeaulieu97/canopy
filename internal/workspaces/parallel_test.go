@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -108,17 +109,22 @@ func TestRunParallelCanonical_ErrorFailsFast(t *testing.T) {
 
 	expectedErr := errors.New("clone failed")
 
-	var callCount atomic.Int32
+	// Synchronization: repo1 signals when it has failed, other repos wait for this signal
+	repo1Failed := make(chan struct{})
 
-	mockGit.EnsureCanonicalFunc = func(_ context.Context, _, repoName string) (*git.Repository, error) {
-		callCount.Add(1)
-		// First repo fails
+	mockGit.EnsureCanonicalFunc = func(ctx context.Context, _, repoName string) (*git.Repository, error) {
 		if repoName == "repo1" {
+			// repo1 fails immediately and signals other repos
+			defer close(repo1Failed)
 			return nil, expectedErr
 		}
-		// Other repos take time so they can be cancelled
-		time.Sleep(50 * time.Millisecond)
-
+		// Other repos wait for repo1 to fail (or context cancellation)
+		select {
+		case <-repo1Failed:
+			// repo1 has failed, we can proceed (and likely be cancelled)
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 		return nil, nil
 	}
 
@@ -248,10 +254,15 @@ func TestRunParallelCanonical_SingleWorkerRunsSequentially(t *testing.T) {
 	mockCfg := mocks.NewMockConfigProvider()
 	mockCfg.ParallelWorkers = 1
 
-	var callOrder []string
+	var (
+		callOrder []string
+		mu        sync.Mutex
+	)
 
 	mockGit.EnsureCanonicalFunc = func(_ context.Context, _, repoName string) (*git.Repository, error) {
+		mu.Lock()
 		callOrder = append(callOrder, repoName)
+		mu.Unlock()
 		return nil, nil
 	}
 
@@ -271,12 +282,17 @@ func TestRunParallelCanonical_SingleWorkerRunsSequentially(t *testing.T) {
 	}
 
 	// With single worker, should run sequentially in order
-	if len(callOrder) != 2 {
-		t.Errorf("expected 2 calls, got %d", len(callOrder))
+	mu.Lock()
+	orderCopy := make([]string, len(callOrder))
+	copy(orderCopy, callOrder)
+	mu.Unlock()
+
+	if len(orderCopy) != 2 {
+		t.Errorf("expected 2 calls, got %d", len(orderCopy))
 	}
 
-	if callOrder[0] != "repo1" || callOrder[1] != "repo2" {
-		t.Errorf("expected sequential order [repo1, repo2], got %v", callOrder)
+	if len(orderCopy) >= 2 && (orderCopy[0] != "repo1" || orderCopy[1] != "repo2") {
+		t.Errorf("expected sequential order [repo1, repo2], got %v", orderCopy)
 	}
 }
 
