@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"github.com/alexisbeaulieu97/canopy/internal/app"
@@ -94,7 +92,7 @@ func runOrphanCheck(_ *cobra.Command, appInstance *app.App, jsonOutput bool) err
 		return nil
 	}
 
-	fmt.Printf("Found %d orphaned worktree(s):\n", len(orphans)) //nolint:forbidigo // user-facing CLI output
+	output.Infof("Found %d orphaned worktree(s):", len(orphans))
 
 	// Group orphans by workspace for cleaner output
 	byWorkspace := make(map[string][]domain.OrphanedWorktree)
@@ -103,15 +101,15 @@ func runOrphanCheck(_ *cobra.Command, appInstance *app.App, jsonOutput bool) err
 	}
 
 	for wsID, wsOrphans := range byWorkspace {
-		fmt.Printf("\n  Workspace: %s\n", wsID) //nolint:forbidigo // user-facing CLI output
+		output.Infof("\n  Workspace: %s", wsID)
 
 		for _, orphan := range wsOrphans {
-			fmt.Printf("    - %s: %s\n", orphan.RepoName, orphan.ReasonDescription()) //nolint:forbidigo // user-facing CLI output
+			output.Infof("    - %s: %s", orphan.RepoName, orphan.ReasonDescription())
 		}
 	}
 
 	// Print remediation suggestions
-	fmt.Println("\nRemediation:") //nolint:forbidigo // user-facing CLI output
+	output.Info("\nRemediation:")
 	printRemediationSuggestions(orphans)
 
 	return nil
@@ -134,13 +132,13 @@ func printRemediationSuggestions(orphans []domain.OrphanedWorktree) {
 	}
 
 	if hasMissingCanonical {
-		fmt.Println("  • For missing canonical repos: Run 'canopy repo add <url>' to restore the repo")   //nolint:forbidigo // user-facing CLI output
-		fmt.Println("    or remove the reference with 'canopy workspace remove-repo <workspace> <repo>'") //nolint:forbidigo // user-facing CLI output
+		output.Info("  • For missing canonical repos: Run 'canopy repo add <url>' to restore the repo")
+		output.Info("    or remove the reference with 'canopy workspace remove-repo <workspace> <repo>'")
 	}
 
 	if hasMissingDir || hasInvalidGit {
-		fmt.Println("  • For missing/invalid worktrees: Remove the workspace and recreate it")                 //nolint:forbidigo // user-facing CLI output
-		fmt.Println("    or remove the repo reference with 'canopy workspace remove-repo <workspace> <repo>'") //nolint:forbidigo // user-facing CLI output
+		output.Info("  • For missing/invalid worktrees: Remove the workspace and recreate it")
+		output.Info("    or remove the repo reference with 'canopy workspace remove-repo <workspace> <repo>'")
 	}
 }
 
