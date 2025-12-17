@@ -7,7 +7,6 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
-	"github.com/alexisbeaulieu97/canopy/internal/giturl"
 )
 
 // RepoResolver handles resolution of repository identifiers to domain.Repo objects.
@@ -83,18 +82,4 @@ func (r *RepoResolver) Resolve(raw string, userRequested bool) (domain.Repo, boo
 	}
 
 	return domain.Repo{}, false, cerrors.NewUnknownRepository(val, userRequested)
-}
-
-// isLikelyURL checks if the given string appears to be a URL.
-//
-// Deprecated: Use giturl.IsURL instead.
-func isLikelyURL(val string) bool {
-	return giturl.IsURL(val)
-}
-
-// repoNameFromURL extracts the repository name from a URL.
-//
-// Deprecated: Use giturl.ExtractRepoName instead.
-func repoNameFromURL(url string) string {
-	return giturl.ExtractRepoName(url)
 }

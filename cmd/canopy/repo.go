@@ -321,7 +321,7 @@ var repoShowCmd = &cobra.Command{
 			fmt.Printf("Tags:         %s\n", strings.Join(entry.Tags, ", ")) //nolint:forbidigo // user-facing CLI output
 		}
 
-		repoName := repoNameFromURL(entry.URL)
+		repoName := giturl.ExtractRepoName(entry.URL)
 		canonicalPath := filepath.Join(app.Config.GetProjectsRoot(), repoName)
 		if _, err := os.Stat(canonicalPath); err == nil {
 			fmt.Printf("Canonical:    %s (present)\n", canonicalPath) //nolint:forbidigo // user-facing CLI output
@@ -380,30 +380,6 @@ func parseTags(raw string) []string {
 	}
 
 	return tags
-}
-
-func repoNameFromURL(url string) string {
-	if strings.Contains(url, ":") && !strings.HasPrefix(url, "http") {
-		parts := strings.Split(url, ":")
-		url = parts[len(parts)-1]
-	}
-
-	parts := strings.Split(url, "/")
-
-	var name string
-
-	for i := len(parts) - 1; i >= 0; i-- {
-		if trimmed := strings.TrimSpace(parts[i]); trimmed != "" {
-			name = trimmed
-			break
-		}
-	}
-
-	if name == "" {
-		return ""
-	}
-
-	return strings.TrimSuffix(name, ".git")
 }
 
 func registerWithPrompt(cmd *cobra.Command, registry *config.RepoRegistry, alias string, entry config.RegistryEntry) (string, error) {

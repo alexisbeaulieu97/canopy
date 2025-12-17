@@ -108,16 +108,6 @@ func TestEnsureMapDefensiveInit(t *testing.T) {
 	}
 }
 
-func TestDeriveAliasFromURL(t *testing.T) {
-	if got := DeriveAliasFromURL("https://github.com/org/backend-api.git"); got != "backend-api" {
-		t.Fatalf("unexpected alias: %s", got)
-	}
-
-	if got := DeriveAliasFromURL("git@github.com:org/Service.git"); got != "service" {
-		t.Fatalf("unexpected alias: %s", got)
-	}
-}
-
 func TestListFiltersTags(t *testing.T) {
 	registry := &RepoRegistry{path: filepath.Join(t.TempDir(), "repos.yaml"), Repos: map[string]RegistryEntry{
 		"api":  {URL: "https://github.com/example/api", Tags: []string{"backend", "go"}},

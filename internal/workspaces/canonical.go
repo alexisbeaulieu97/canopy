@@ -9,6 +9,7 @@ import (
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/giturl"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
@@ -55,7 +56,7 @@ func (c *CanonicalRepoService) List(ctx context.Context) ([]string, error) {
 
 // Add clones a new repository to the canonical store and returns the canonical name.
 func (c *CanonicalRepoService) Add(ctx context.Context, url string) (string, error) {
-	name := repoNameFromURL(url)
+	name := giturl.ExtractRepoName(url)
 	if name == "" {
 		return "", cerrors.NewInvalidArgument("url", fmt.Sprintf("could not determine repo name from URL: %s", url))
 	}
