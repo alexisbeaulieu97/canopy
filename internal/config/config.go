@@ -108,6 +108,17 @@ type Keybindings struct {
 // TUIConfig holds TUI-specific configuration.
 type TUIConfig struct {
 	Keybindings Keybindings `mapstructure:"keybindings"`
+	UseEmoji    *bool       `mapstructure:"use_emoji"` // nil means default (true)
+}
+
+// GetUseEmoji returns whether emoji should be used in the TUI.
+// Defaults to true for backward compatibility.
+func (t TUIConfig) GetUseEmoji() bool {
+	if t.UseEmoji == nil {
+		return true
+	}
+
+	return *t.UseEmoji
 }
 
 // GitRetrySettings holds YAML configuration for git network operation retry behavior.
@@ -620,6 +631,11 @@ func (c *Config) GetTUI() TUIConfig {
 // GetKeybindings returns the TUI keybindings with defaults applied.
 func (c *Config) GetKeybindings() Keybindings {
 	return c.TUI.Keybindings.WithDefaults()
+}
+
+// GetUseEmoji returns whether emoji should be used in the TUI.
+func (c *Config) GetUseEmoji() bool {
+	return c.TUI.GetUseEmoji()
 }
 
 // GetGitRetryConfig returns the parsed git retry configuration.

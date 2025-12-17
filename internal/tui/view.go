@@ -84,16 +84,16 @@ func (m Model) renderHeader() string {
 	total := len(m.workspaces.Items())
 	visible := len(m.ui.List.Items())
 
-	titleText := fmt.Sprintf("🌲 Workspaces (%d)", total)
+	titleText := fmt.Sprintf("%s Workspaces (%d)", m.symbols.Workspaces(), total)
 	if visible != total {
-		titleText = fmt.Sprintf("🌲 Workspaces (%d/%d)", visible, total)
+		titleText = fmt.Sprintf("%s Workspaces (%d/%d)", m.symbols.Workspaces(), visible, total)
 	}
 
 	parts = append(parts, titleStyle.Render(titleText))
 
 	// Disk usage
 	if m.workspaces.TotalDiskUsage() > 0 {
-		diskInfo := fmt.Sprintf("💾 %s", humanizeBytes(m.workspaces.TotalDiskUsage()))
+		diskInfo := fmt.Sprintf("%s %s", m.symbols.Disk(), humanizeBytes(m.workspaces.TotalDiskUsage()))
 		parts = append(parts, mutedTextStyle.Render(diskInfo))
 	}
 
@@ -105,7 +105,7 @@ func (m Model) renderHeader() string {
 	}
 
 	if m.ui.List.FilterValue() != "" {
-		searchBadge := badgeInfoStyle.Render(fmt.Sprintf("🔍 %s", m.ui.List.FilterValue()))
+		searchBadge := badgeInfoStyle.Render(fmt.Sprintf("%s %s", m.symbols.Search(), m.ui.List.FilterValue()))
 		filters = append(filters, searchBadge)
 	}
 
@@ -117,12 +117,12 @@ func (m Model) renderHeader() string {
 
 	// Error message if any
 	if m.err != nil {
-		header += "\n" + statusDirtyStyle.Render(fmt.Sprintf("⚠ Error: %v", m.err))
+		header += "\n" + statusDirtyStyle.Render(fmt.Sprintf("%s Error: %v", m.symbols.Warning(), m.err))
 	}
 
 	// Info message if any
 	if m.infoMessage != "" {
-		header += "\n" + statusCleanStyle.Render(fmt.Sprintf("✓ %s", m.infoMessage))
+		header += "\n" + statusCleanStyle.Render(fmt.Sprintf("%s %s", m.symbols.Check(), m.infoMessage))
 	}
 
 	return header
@@ -131,7 +131,7 @@ func (m Model) renderHeader() string {
 // renderFooter renders the keyboard shortcuts footer.
 func (m Model) renderFooter() string {
 	if m.pushing {
-		return subtleTextStyle.Render("⏳ Push in progress...")
+		return subtleTextStyle.Render(fmt.Sprintf("%s Push in progress...", m.symbols.Loading()))
 	}
 
 	if m.isConfirming() {
@@ -183,7 +183,7 @@ func (m Model) renderDetailView() string {
 	}
 
 	// Workspace header
-	header := fmt.Sprintf("📂 %s", m.selectedWS.ID)
+	header := fmt.Sprintf("%s %s", m.symbols.Folder(), m.selectedWS.ID)
 	b.WriteString(detailHeaderStyle.Render(header))
 	b.WriteString("\n\n")
 
@@ -278,13 +278,14 @@ func (m Model) renderRepoLine(repo domain.RepoStatus) string {
 	}
 
 	if len(statusParts) == 0 {
-		statusParts = append(statusParts, statusCleanStyle.Render("✓ clean"))
+		statusParts = append(statusParts, statusCleanStyle.Render(fmt.Sprintf("%s clean", m.symbols.Check())))
 	}
 
 	statusStr := strings.Join(statusParts, " • ")
 
 	// Format: icon name [branch] status
-	return fmt.Sprintf("  📁 %-20s %s  %s",
+	return fmt.Sprintf("  %s %-20s %s  %s",
+		m.symbols.Repo(),
 		repo.Name,
 		subtleTextStyle.Render(fmt.Sprintf("[%s]", repo.Branch)),
 		statusStr)
@@ -294,13 +295,14 @@ func (m Model) renderRepoLine(repo domain.RepoStatus) string {
 func (m Model) renderDetailOrphans() string {
 	var b strings.Builder
 
-	b.WriteString(statusWarnStyle.Render("⚠ Orphaned Worktrees"))
+	b.WriteString(statusWarnStyle.Render(fmt.Sprintf("%s Orphaned Worktrees", m.symbols.Warning())))
 	b.WriteString("\n")
 	b.WriteString(strings.Repeat("─", 50))
 	b.WriteString("\n")
 
 	for _, orphan := range m.wsOrphans {
-		line := fmt.Sprintf("  ⚠ %-20s %s",
+		line := fmt.Sprintf("  %s %-20s %s",
+			m.symbols.Warning(),
 			orphan.RepoName,
 			statusWarnStyle.Render(orphan.ReasonDescription()))
 		b.WriteString(line)
