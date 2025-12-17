@@ -162,6 +162,7 @@ func TestRunParallelCanonical_ContextCancellation(t *testing.T) {
 
 	// Synchronization: signal when at least one worker has started
 	workerStarted := make(chan struct{})
+
 	var startedOnce sync.Once
 
 	mockGit.EnsureCanonicalFunc = func(ctx context.Context, _, _ string) (*git.Repository, error) {
@@ -170,6 +171,7 @@ func TestRunParallelCanonical_ContextCancellation(t *testing.T) {
 
 		// Block until context is cancelled
 		<-ctx.Done()
+
 		return nil, ctx.Err()
 	}
 
