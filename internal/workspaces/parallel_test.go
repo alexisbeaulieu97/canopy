@@ -125,6 +125,7 @@ func TestRunParallelCanonical_ErrorFailsFast(t *testing.T) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
+
 		return nil, nil
 	}
 
@@ -261,8 +262,11 @@ func TestRunParallelCanonical_SingleWorkerRunsSequentially(t *testing.T) {
 
 	mockGit.EnsureCanonicalFunc = func(_ context.Context, _, repoName string) (*git.Repository, error) {
 		mu.Lock()
+
 		callOrder = append(callOrder, repoName)
+
 		mu.Unlock()
+
 		return nil, nil
 	}
 
@@ -283,6 +287,7 @@ func TestRunParallelCanonical_SingleWorkerRunsSequentially(t *testing.T) {
 
 	// With single worker, should run sequentially in order
 	mu.Lock()
+
 	orderCopy := make([]string, len(callOrder))
 	copy(orderCopy, callOrder)
 	mu.Unlock()
