@@ -12,15 +12,12 @@ Output helpers SHALL provide the following message types:
 
 #### Scenario: Success message format
 
-- **WHEN** a CLI command completes successfully
-- **THEN** the output SHALL follow the pattern: "[Action] [target]" (e.g., "Created workspace foo")
+- **WHEN** a CLI command completes successfully, **THEN** the output SHALL follow the pattern: "[Action] [target]" (e.g., "Created workspace foo")
 
 #### Scenario: Success message with path
 
-- **WHEN** a CLI command creates or modifies a filesystem resource
-- **THEN** the output SHALL include the path: "[Action] [target] in [path]"
+- **WHEN** a CLI command creates or modifies a filesystem resource, **THEN** the output SHALL include the path: "[Action] [target] in [path]"
 
 #### Scenario: Consistent verb usage
 
-- **WHEN** displaying success messages
-- **THEN** past tense verbs SHALL be used (Created, Closed, Removed, Renamed, Added)
+- **WHEN** displaying success messages, **THEN** past tense verbs SHALL be used (Created, Closed, Removed, Renamed, Added)
