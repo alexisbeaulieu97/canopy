@@ -1,3 +1,5 @@
+//go:build integration
+
 package integration
 
 import (
@@ -33,7 +35,7 @@ func TestCloseWorkspaceDirtyRepo(t *testing.T) {
 
 	// Verify error mentions dirty state
 	if !strings.Contains(out, "dirty") && !strings.Contains(out, "uncommitted") && !strings.Contains(out, "untracked") {
-		t.Logf("Error should mention dirty state: %s", out)
+		t.Errorf("Error should mention dirty state: %s", out)
 	}
 
 	// 4. Workspace should still exist
@@ -97,7 +99,7 @@ func TestWorkspaceNotFound(t *testing.T) {
 	}
 
 	if !strings.Contains(strings.ToLower(out), "not found") && !strings.Contains(strings.ToLower(out), "does not exist") {
-		t.Logf("Error message should indicate workspace not found: %s", out)
+		t.Errorf("Error message should indicate workspace not found: %s", out)
 	}
 
 	// 2. Try to close non-existent workspace
@@ -168,7 +170,7 @@ func TestAddNonexistentRepoToWorkspace(t *testing.T) {
 	}
 
 	if !strings.Contains(strings.ToLower(out), "unknown") && !strings.Contains(strings.ToLower(out), "not found") && !strings.Contains(strings.ToLower(out), "unregistered") {
-		t.Logf("Error should indicate unknown repo: %s", out)
+		t.Errorf("Error should indicate unknown repo: %s", out)
 	}
 }
 
@@ -210,6 +212,6 @@ func TestDuplicateWorkspaceCreation(t *testing.T) {
 	}
 
 	if !strings.Contains(strings.ToLower(out), "exists") && !strings.Contains(strings.ToLower(out), "already") {
-		t.Logf("Error should indicate workspace exists: %s", out)
+		t.Errorf("Error should indicate workspace exists: %s", out)
 	}
 }

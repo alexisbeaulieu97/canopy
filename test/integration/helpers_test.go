@@ -1,3 +1,5 @@
+//go:build integration
+
 package integration
 
 import (
@@ -18,7 +20,7 @@ type TestContext struct {
 }
 
 // newTestContext creates a new TestContext with isolated directories.
-// Call cleanup() when done to remove temp directories (usually via t.Cleanup).
+// Cleanup is handled by TestMain which removes the shared testRoot directory.
 func newTestContext(t *testing.T) *TestContext {
 	t.Helper()
 

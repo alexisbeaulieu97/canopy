@@ -1,3 +1,5 @@
+//go:build integration
+
 package integration
 
 import (
@@ -42,9 +44,9 @@ func TestOrphanDetection(t *testing.T) {
 	// Note: This may or may not error depending on implementation
 	// The important thing is detecting the orphan
 
-	if !strings.Contains(out, "orphan") || !strings.Contains(out, "TEST-ORPHAN") {
-		// The orphan might be detected, verify the check completes
-		t.Logf("Orphan detection output: %s (error: %v)", out, err)
+	if !strings.Contains(out, "orphan") && !strings.Contains(out, "TEST-ORPHAN") && !strings.Contains(out, "missing") {
+		// The orphan check should report something about the missing worktree
+		t.Errorf("Orphan detection should report missing worktree: output=%s, err=%v", out, err)
 	}
 }
 
@@ -89,14 +91,15 @@ func TestOrphanCleanup(t *testing.T) {
 	tc.createWorkspace("TEST-CLEANUP", "cleanup-repo")
 	tc.closeWorkspace("TEST-CLEANUP")
 
-	// 2. Verify no orphans after proper close
+	// 2. Verify no orphans for this workspace after proper close
 	out, err := runCanopy("check", "--orphans")
 	if err != nil {
 		t.Fatalf("Failed to run orphan check: %v\nOutput: %s", err, out)
 	}
 
-	if !strings.Contains(out, "No orphaned worktrees found") {
-		t.Logf("After close, orphan status: %s", out)
+	// The properly closed workspace should not appear in orphan output
+	if strings.Contains(out, "TEST-CLEANUP") {
+		t.Errorf("Properly closed workspace should not be listed as orphan: %s", out)
 	}
 
 	// 3. Create another workspace, then delete workspace dir manually
@@ -113,6 +116,8 @@ func TestOrphanCleanup(t *testing.T) {
 	// and the system should be able to handle this gracefully
 	out, err = runCanopy("check", "--orphans")
 	// This tests the detection mechanism - even if there's an error,
-	// it should be a graceful one
-	t.Logf("After manual deletion, orphan check: %s (err: %v)", out, err)
+	// it should be a graceful one and report the stale worktree
+	if err != nil && !strings.Contains(out, "stale") && !strings.Contains(out, "orphan") && !strings.Contains(out, "missing") {
+		t.Errorf("After manual deletion, orphan check should handle gracefully: output=%s, err=%v", out, err)
+	}
 }
