@@ -26,6 +26,18 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	// Force Go build cache into the test workspace so sandboxed environments
+	// don't attempt to write to the user cache directory.
+	goCache := filepath.Join(testRoot, ".gocache")
+	if err := os.MkdirAll(goCache, 0o750); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create go cache dir: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.Setenv("GOCACHE", goCache); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to set GOCACHE: %v\n", err)
+		os.Exit(1)
+	}
+
 	defer func() { _ = os.RemoveAll(testRoot) }()
 
 	// Build canopy binary
