@@ -45,8 +45,12 @@ func (s *Service) runParallelCanonical(ctx context.Context, repos []domain.Repo,
 	jobs := make(chan int, len(repos))
 	results := make(chan canonicalResult, len(repos))
 
-	// Determine worker count
+	// Determine worker count (ensure at least 1 to prevent deadlock)
 	numWorkers := opts.workers
+	if numWorkers <= 0 {
+		numWorkers = 1
+	}
+
 	if numWorkers > len(repos) {
 		numWorkers = len(repos)
 	}

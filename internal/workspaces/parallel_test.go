@@ -3,6 +3,7 @@ package workspaces
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -139,8 +140,8 @@ func TestRunParallelCanonical_ErrorFailsFast(t *testing.T) {
 
 	if !errors.Is(err, expectedErr) {
 		// The error should be wrapped, so check the message contains the original error
-		if err.Error() == "" {
-			t.Errorf("expected wrapped error containing original, got %v", err)
+		if !strings.Contains(err.Error(), expectedErr.Error()) {
+			t.Errorf("expected wrapped error containing %q, got %v", expectedErr.Error(), err)
 		}
 	}
 }
