@@ -6,7 +6,7 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/gitx"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
-	"github.com/alexisbeaulieu97/canopy/internal/workspace"
+	"github.com/alexisbeaulieu97/canopy/internal/storage"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
@@ -113,7 +113,7 @@ func New(debug bool, opts ...Option) (*App, error) {
 	// Use provided workspace storage or create default
 	wsEngine := options.wsStorage
 	if wsEngine == nil {
-		wsEngine = workspace.New(cfg.GetWorkspacesRoot(), cfg.GetClosedRoot())
+		wsEngine = storage.New(cfg.GetWorkspacesRoot(), cfg.GetClosedRoot())
 	}
 
 	return &App{

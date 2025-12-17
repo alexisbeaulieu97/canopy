@@ -23,7 +23,7 @@
     - `cmd/`: Entry points.
     - `internal/domain/`: Core logic (Workspace, Repo entities).
     - `internal/gitx/`: Git adapter.
-    - `internal/workspace/`: Filesystem adapter.
+    - `internal/storage/`: Filesystem adapter.
     - `internal/config/`: Configuration adapter.
     - `internal/tui/`: UI adapter.
 
