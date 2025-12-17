@@ -60,7 +60,7 @@ func (m Model) renderListViewWithConfirm(state *ConfirmViewState) string {
 	// Confirmation prompt
 	dialog := components.ConfirmDialog{
 		Active:   true,
-		Action:   components.ConfirmAction(state.Action),
+		Action:   state.Action,
 		TargetID: state.TargetID,
 	}
 	b.WriteString(dialog.Render())
