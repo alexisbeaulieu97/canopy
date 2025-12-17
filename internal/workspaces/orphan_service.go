@@ -56,7 +56,7 @@ func NewOrphanService(
 // - Has a worktree directory that doesn't exist
 // - Has an invalid git directory
 func (s *WorkspaceOrphanService) DetectOrphans() ([]domain.OrphanedWorktree, error) {
-	workspaceMap, err := s.wsEngine.List()
+	workspaceList, err := s.wsEngine.List(context.Background())
 	if err != nil {
 		return nil, cerrors.NewIOFailed("list workspaces", err)
 	}
@@ -68,8 +68,8 @@ func (s *WorkspaceOrphanService) DetectOrphans() ([]domain.OrphanedWorktree, err
 
 	var orphans []domain.OrphanedWorktree
 
-	for dir, ws := range workspaceMap {
-		wsOrphans := s.checkWorkspaceForOrphans(ws, dir, canonicalSet)
+	for _, ws := range workspaceList {
+		wsOrphans := s.checkWorkspaceForOrphans(ws, ws.ID, canonicalSet)
 		orphans = append(orphans, wsOrphans...)
 	}
 

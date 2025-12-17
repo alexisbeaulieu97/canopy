@@ -55,8 +55,17 @@ func TestWorkspaceOrphanService_DetectOrphans(t *testing.T) {
 			}
 
 			mockStorage := &mocks.MockWorkspaceStorage{
-				ListFunc: func() (map[string]domain.Workspace, error) {
-					return tt.workspaces, tt.listErr
+				ListFunc: func(_ context.Context) ([]domain.Workspace, error) {
+					if tt.listErr != nil {
+						return nil, tt.listErr
+					}
+
+					workspaces := make([]domain.Workspace, 0, len(tt.workspaces))
+					for _, ws := range tt.workspaces {
+						workspaces = append(workspaces, ws)
+					}
+
+					return workspaces, nil
 				},
 			}
 

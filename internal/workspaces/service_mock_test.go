@@ -47,7 +47,7 @@ func TestServiceWithMocks(t *testing.T) {
 		t.Parallel()
 
 		mockStorage := mocks.NewMockWorkspaceStorage()
-		mockStorage.ListFunc = func() (map[string]domain.Workspace, error) {
+		mockStorage.ListFunc = func(_ context.Context) ([]domain.Workspace, error) {
 			return nil, errors.New("storage unavailable")
 		}
 

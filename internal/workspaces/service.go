@@ -170,7 +170,7 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 
 // FindWorkspace implements WorkspaceFinder interface for sub-services.
 func (s *Service) FindWorkspace(workspaceID string) (*domain.Workspace, string, error) {
-	return s.findWorkspace(workspaceID)
+	return s.findWorkspace(context.Background(), workspaceID)
 }
 
 // ResolveRepos determines which repos should be part of the workspace
@@ -229,8 +229,6 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 		return "", err
 	}
 
-	dirName := id
-
 	// Default branch name is the workspace ID
 	if branchName == "" {
 		branchName = id
@@ -240,7 +238,13 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 		}
 	}
 
-	if err := s.wsEngine.Create(dirName, id, branchName, repos); err != nil {
+	ws := domain.Workspace{
+		ID:         id,
+		BranchName: branchName,
+		Repos:      repos,
+	}
+
+	if err := s.wsEngine.Create(ctx, ws); err != nil {
 		return "", err
 	}
 
@@ -249,25 +253,25 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 
 	// Manual cleanup helper
 	cleanup := func() {
-		path := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
+		path := filepath.Join(s.config.GetWorkspacesRoot(), id)
 		_ = os.RemoveAll(path)
 	}
 
 	// Clone repositories (if any)
-	if err := s.cloneWorkspaceRepos(ctx, repos, dirName, branchName); err != nil {
+	if err := s.cloneWorkspaceRepos(ctx, repos, id, branchName); err != nil {
 		cleanup()
 		return "", err
 	}
 
 	// Run post_create hooks
 	//nolint:contextcheck // Hooks manage their own timeout context per-hook
-	if err := s.runPostCreateHooks(id, dirName, branchName, repos, opts); err != nil {
+	if err := s.runPostCreateHooks(id, id, branchName, repos, opts); err != nil {
 		// Hook failures don't rollback the workspace (per design.md)
 		// But we return the error if not continuing on hook errors
-		return dirName, err
+		return id, err
 	}
 
-	return dirName, nil
+	return id, nil
 }
 
 // cloneWorkspaceRepos clones all repositories for a workspace.
@@ -341,14 +345,14 @@ func (s *Service) runPostCreateHooks(id, dirName, branchName string, repos []dom
 
 // WorkspacePath returns the absolute path for a workspace ID.
 func (s *Service) WorkspacePath(workspaceID string) (string, error) {
-	workspaces, err := s.wsEngine.List()
+	workspaces, err := s.wsEngine.List(context.Background())
 	if err != nil {
 		return "", cerrors.NewIOFailed("list workspaces", err)
 	}
 
-	for dir, w := range workspaces {
+	for _, w := range workspaces {
 		if w.ID == workspaceID {
-			return filepath.Join(s.config.GetWorkspacesRoot(), dir), nil
+			return filepath.Join(s.config.GetWorkspacesRoot(), w.ID), nil
 		}
 	}
 
@@ -361,8 +365,8 @@ func (s *Service) validateRenameInputs(newID string) error {
 }
 
 // ensureNewIDAvailable checks that the new workspace ID doesn't already exist.
-func (s *Service) ensureNewIDAvailable(newID string) error {
-	_, _, err := s.wsEngine.LoadByID(newID)
+func (s *Service) ensureNewIDAvailable(ctx context.Context, newID string) error {
+	_, err := s.wsEngine.Load(ctx, newID)
 	if err == nil {
 		return cerrors.NewWorkspaceExists(newID)
 	}
@@ -412,25 +416,25 @@ func (s *Service) rollbackBranchRenamesWithError(ctx context.Context, workspace 
 }
 
 // updateBranchMetadata loads the workspace and updates the branch name metadata.
-func (s *Service) updateBranchMetadata(dirName, newID string) error {
-	ws, err := s.wsEngine.Load(dirName)
+func (s *Service) updateBranchMetadata(ctx context.Context, workspaceID, newBranchName string) error {
+	ws, err := s.wsEngine.Load(ctx, workspaceID)
 	if err != nil {
-		return cerrors.NewWorkspaceMetadataError(newID, "load", err)
+		return cerrors.NewWorkspaceMetadataError(workspaceID, "load", err)
 	}
 
-	ws.BranchName = newID
-	if err := s.wsEngine.Save(dirName, *ws); err != nil {
-		return cerrors.NewWorkspaceMetadataError(newID, "save", err)
+	ws.BranchName = newBranchName
+	if err := s.wsEngine.Save(ctx, *ws); err != nil {
+		return cerrors.NewWorkspaceMetadataError(workspaceID, "save", err)
 	}
 
 	return nil
 }
 
 // renameWorkspaceDir renames the workspace directory and handles rollback on failure.
-func (s *Service) renameWorkspaceDir(ctx context.Context, workspace domain.Workspace, oldDirName, newDirName, oldID, newID string, shouldRenameBranch bool) error {
-	if err := s.wsEngine.Rename(oldDirName, newDirName, newID); err != nil {
+func (s *Service) renameWorkspaceDir(ctx context.Context, workspace domain.Workspace, oldID, newID string, shouldRenameBranch bool) error {
+	if err := s.wsEngine.Rename(ctx, oldID, newID); err != nil {
 		if shouldRenameBranch {
-			s.rollbackBranchRenames(ctx, workspace, oldDirName, oldID, newID)
+			s.rollbackBranchRenames(ctx, workspace, oldID, oldID, newID)
 		}
 
 		return err
@@ -449,12 +453,12 @@ func (s *Service) invalidateWorkspaceCache(ids ...string) {
 }
 
 // updateBranchMetadataWithRollback updates workspace metadata and rolls back branch and directory renames on failure.
-func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspace domain.Workspace, oldDirName, newDirName, oldID, newID string) error {
-	if err := s.updateBranchMetadata(newDirName, newID); err != nil {
+func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspace domain.Workspace, oldID, newID string) error {
+	if err := s.updateBranchMetadata(ctx, newID, newID); err != nil {
 		var rollbackErrors []error
 
 		// Attempt to rollback branch renames first so repo state aligns with directory rollback.
-		if branchRollbackErr := s.rollbackBranchRenamesWithError(ctx, workspace, newDirName, oldID, newID); branchRollbackErr != nil {
+		if branchRollbackErr := s.rollbackBranchRenamesWithError(ctx, workspace, newID, oldID, newID); branchRollbackErr != nil {
 			if s.logger != nil {
 				s.logger.Error("failed to rollback branch renames after metadata update error",
 					"error", branchRollbackErr,
@@ -467,12 +471,12 @@ func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspac
 		}
 
 		// Then rollback directory rename.
-		if dirRollbackErr := s.wsEngine.Rename(newDirName, oldDirName, oldID); dirRollbackErr != nil {
+		if dirRollbackErr := s.wsEngine.Rename(ctx, newID, oldID); dirRollbackErr != nil {
 			if s.logger != nil {
 				s.logger.Error("failed to rollback workspace rename after metadata update error",
 					"error", dirRollbackErr,
-					"from", newDirName,
-					"to", oldDirName,
+					"from", newID,
+					"to", oldID,
 				)
 			}
 
@@ -492,7 +496,7 @@ func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspac
 // RenameWorkspace renames a workspace to a new ID.
 // If renameBranch is true and the branch name matches the old ID, it will also rename branches.
 func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, renameBranch bool) error {
-	workspace, oldDirName, err := s.findWorkspace(oldID)
+	workspace, _, err := s.findWorkspace(ctx, oldID)
 	if err != nil {
 		return err
 	}
@@ -501,25 +505,24 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 		return err
 	}
 
-	if err := s.ensureNewIDAvailable(newID); err != nil {
+	if err := s.ensureNewIDAvailable(ctx, newID); err != nil {
 		return err
 	}
 
 	shouldRenameBranch := renameBranch && workspace.BranchName == oldID
-	newDirName := newID
 
 	if shouldRenameBranch {
-		if err := s.renameBranchesInRepos(ctx, *workspace, oldDirName, oldID, newID); err != nil {
+		if err := s.renameBranchesInRepos(ctx, *workspace, oldID, oldID, newID); err != nil {
 			return err
 		}
 	}
 
-	if err := s.renameWorkspaceDir(ctx, *workspace, oldDirName, newDirName, oldID, newID, shouldRenameBranch); err != nil {
+	if err := s.renameWorkspaceDir(ctx, *workspace, oldID, newID, shouldRenameBranch); err != nil {
 		return err
 	}
 
 	if shouldRenameBranch {
-		if err := s.updateBranchMetadataWithRollback(ctx, *workspace, oldDirName, newDirName, oldID, newID); err != nil {
+		if err := s.updateBranchMetadataWithRollback(ctx, *workspace, oldID, newID); err != nil {
 			return err
 		}
 	}
@@ -535,7 +538,7 @@ func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName 
 		return err
 	}
 
-	workspace, dirName, err := s.findWorkspace(workspaceID)
+	workspace, _, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
@@ -554,11 +557,11 @@ func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName 
 		return err
 	}
 
-	if err := s.ensureWorkspaceWorktree(ctx, repo, dirName, branchName); err != nil {
+	if err := s.ensureWorkspaceWorktree(ctx, repo, workspaceID, branchName); err != nil {
 		return err
 	}
 
-	if err := s.saveWorkspaceRepo(dirName, workspaceID, workspace, repo); err != nil {
+	if err := s.saveWorkspaceRepo(ctx, workspaceID, workspace, repo); err != nil {
 		return err
 	}
 
@@ -620,9 +623,9 @@ func (s *Service) ensureWorkspaceWorktree(ctx context.Context, repo domain.Repo,
 	return nil
 }
 
-func (s *Service) saveWorkspaceRepo(dirName, workspaceID string, workspace *domain.Workspace, repo domain.Repo) error {
+func (s *Service) saveWorkspaceRepo(ctx context.Context, workspaceID string, workspace *domain.Workspace, repo domain.Repo) error {
 	workspace.Repos = append(workspace.Repos, repo)
-	if err := s.wsEngine.Save(dirName, *workspace); err != nil {
+	if err := s.wsEngine.Save(ctx, *workspace); err != nil {
 		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
 
@@ -630,8 +633,8 @@ func (s *Service) saveWorkspaceRepo(dirName, workspaceID string, workspace *doma
 }
 
 // RemoveRepoFromWorkspace removes a repository from an existing workspace
-func (s *Service) RemoveRepoFromWorkspace(_ context.Context, workspaceID, repoName string) error {
-	workspace, dirName, err := s.findWorkspace(workspaceID)
+func (s *Service) RemoveRepoFromWorkspace(ctx context.Context, workspaceID, repoName string) error {
+	workspace, _, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
@@ -651,14 +654,14 @@ func (s *Service) RemoveRepoFromWorkspace(_ context.Context, workspaceID, repoNa
 	}
 
 	// 3. Remove worktree directory
-	worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repoName)
+	worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repoName)
 	if err := os.RemoveAll(worktreePath); err != nil {
 		return cerrors.NewIOFailed(fmt.Sprintf("remove worktree %s", worktreePath), err)
 	}
 
 	// 4. Update metadata
 	workspace.Repos = append(workspace.Repos[:repoIndex], workspace.Repos[repoIndex+1:]...)
-	if err := s.wsEngine.Save(dirName, *workspace); err != nil {
+	if err := s.wsEngine.Save(ctx, *workspace); err != nil {
 		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
 
@@ -681,14 +684,16 @@ func (s *Service) CloseWorkspace(_ context.Context, workspaceID string, force bo
 }
 
 // CloseWorkspaceWithOptions removes a workspace with configurable options.
+//
+//nolint:contextcheck // This function manages hook contexts internally with their own timeouts
 func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts CloseOptions) error {
-	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
+	targetWorkspace, _, err := s.findWorkspace(context.Background(), workspaceID)
 	if err != nil {
 		return err
 	}
 
 	if !force {
-		if err := s.ensureWorkspaceClean(targetWorkspace, dirName, "close"); err != nil {
+		if err := s.ensureWorkspaceClean(targetWorkspace, workspaceID, "close"); err != nil {
 			return err
 		}
 	}
@@ -699,7 +704,7 @@ func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts
 		if len(hooksConfig.PreClose) > 0 {
 			hookCtx := domain.HookContext{
 				WorkspaceID:   workspaceID,
-				WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
+				WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), workspaceID),
 				BranchName:    targetWorkspace.BranchName,
 				Repos:         targetWorkspace.Repos,
 			}
@@ -716,10 +721,10 @@ func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts
 	}
 
 	// Remove worktrees from canonical repos before deleting workspace directory
-	s.removeWorkspaceWorktrees(targetWorkspace, dirName)
+	s.removeWorkspaceWorktrees(targetWorkspace, workspaceID)
 
 	// Delete workspace
-	if err := s.wsEngine.Delete(dirName); err != nil {
+	if err := s.wsEngine.Delete(context.Background(), workspaceID); err != nil {
 		return err
 	}
 
@@ -736,14 +741,16 @@ func (s *Service) CloseWorkspaceKeepMetadata(_ context.Context, workspaceID stri
 }
 
 // CloseWorkspaceKeepMetadataWithOptions moves workspace metadata to the closed store with configurable options.
+//
+//nolint:contextcheck // This function manages hook contexts internally with their own timeouts
 func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, force bool, opts CloseOptions) (*domain.ClosedWorkspace, error) {
-	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
+	targetWorkspace, _, err := s.findWorkspace(context.Background(), workspaceID)
 	if err != nil {
 		return nil, err
 	}
 
 	if !force {
-		if err := s.ensureWorkspaceClean(targetWorkspace, dirName, "close"); err != nil {
+		if err := s.ensureWorkspaceClean(targetWorkspace, workspaceID, "close"); err != nil {
 			return nil, err
 		}
 	}
@@ -754,7 +761,7 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, forc
 		if len(hooksConfig.PreClose) > 0 {
 			hookCtx := domain.HookContext{
 				WorkspaceID:   workspaceID,
-				WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
+				WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), workspaceID),
 				BranchName:    targetWorkspace.BranchName,
 				Repos:         targetWorkspace.Repos,
 			}
@@ -770,16 +777,18 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, forc
 		}
 	}
 
-	archived, err := s.wsEngine.Close(dirName, *targetWorkspace, time.Now().UTC())
+	closedAt := time.Now().UTC()
+
+	archived, err := s.wsEngine.Close(context.Background(), workspaceID, closedAt)
 	if err != nil {
 		return nil, err
 	}
 
 	// Remove worktrees from canonical repos before deleting workspace directory
-	s.removeWorkspaceWorktrees(targetWorkspace, dirName)
+	s.removeWorkspaceWorktrees(targetWorkspace, workspaceID)
 
-	if err := s.wsEngine.Delete(dirName); err != nil {
-		_ = s.wsEngine.DeleteClosed(archived.Path)
+	if err := s.wsEngine.Delete(context.Background(), workspaceID); err != nil {
+		_ = s.wsEngine.DeleteClosed(context.Background(), workspaceID, closedAt)
 		return nil, cerrors.NewIOFailed("remove workspace directory", err)
 	}
 
@@ -790,8 +799,10 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, forc
 }
 
 // RunHooks executes lifecycle hooks for an existing workspace without performing other actions.
+//
+//nolint:contextcheck // Hooks manage their own timeout context per-hook
 func (s *Service) RunHooks(workspaceID string, phase HookPhase, continueOnError bool) error {
-	workspace, dirName, err := s.findWorkspace(workspaceID)
+	workspace, _, err := s.findWorkspace(context.Background(), workspaceID)
 	if err != nil {
 		return err
 	}
@@ -815,7 +826,7 @@ func (s *Service) RunHooks(workspaceID string, phase HookPhase, continueOnError 
 
 	hookCtx := domain.HookContext{
 		WorkspaceID:   workspaceID,
-		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
+		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), workspaceID),
 		BranchName:    workspace.BranchName,
 		Repos:         workspace.Repos,
 	}
@@ -835,12 +846,12 @@ func (s *Service) RunHooks(workspaceID string, phase HookPhase, continueOnError 
 
 // PreviewCloseWorkspace returns a preview of what would happen when closing a workspace.
 func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (*domain.WorkspaceClosePreview, error) {
-	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
+	targetWorkspace, _, err := s.findWorkspace(context.Background(), workspaceID)
 	if err != nil {
 		return nil, err
 	}
 
-	wsPath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
+	wsPath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID)
 
 	repoNames := []string{}
 	for _, r := range targetWorkspace.Repos {
@@ -864,15 +875,15 @@ func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (
 
 // ListWorkspaces returns all active workspaces
 func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
-	workspaceMap, err := s.wsEngine.List()
+	workspaceList, err := s.wsEngine.List(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
 	var workspaces []domain.Workspace
 
-	for dir, w := range workspaceMap {
-		wsPath := filepath.Join(s.config.GetWorkspacesRoot(), dir)
+	for _, w := range workspaceList {
+		wsPath := filepath.Join(s.config.GetWorkspacesRoot(), w.ID)
 
 		usage, latest, sizeErr := s.diskUsage.CachedUsage(wsPath)
 		if sizeErr != nil {
@@ -899,12 +910,12 @@ func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
 
 // ListClosedWorkspaces returns closed workspace metadata.
 func (s *Service) ListClosedWorkspaces() ([]domain.ClosedWorkspace, error) {
-	return s.wsEngine.ListClosed()
+	return s.wsEngine.ListClosed(context.Background())
 }
 
 // GetStatus returns the aggregate status of a workspace
 func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error) {
-	targetWorkspace, dirName, err := s.findWorkspace(workspaceID)
+	targetWorkspace, _, err := s.findWorkspace(context.Background(), workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -913,7 +924,7 @@ func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error)
 	var repoStatuses []domain.RepoStatus
 
 	for _, repo := range targetWorkspace.Repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repo.Name)
 
 		isDirty, unpushed, behind, branch, err := s.gitEngine.Status(context.Background(), worktreePath)
 		if err != nil {
@@ -952,13 +963,13 @@ func (s *Service) AddCanonicalRepo(ctx context.Context, url string) (string, err
 }
 
 // RemoveCanonicalRepo removes a repository from the cache
-func (s *Service) RemoveCanonicalRepo(_ context.Context, name string, force bool) error {
-	return s.canonical.Remove(name, force)
+func (s *Service) RemoveCanonicalRepo(ctx context.Context, name string, force bool) error {
+	return s.canonical.Remove(ctx, name, force)
 }
 
 // PreviewRemoveCanonicalRepo returns a preview of what would happen when removing a repo.
-func (s *Service) PreviewRemoveCanonicalRepo(name string) (*domain.RepoRemovePreview, error) {
-	return s.canonical.PreviewRemove(name)
+func (s *Service) PreviewRemoveCanonicalRepo(ctx context.Context, name string) (*domain.RepoRemovePreview, error) {
+	return s.canonical.PreviewRemove(ctx, name)
 }
 
 // SyncCanonicalRepo fetches updates for a cached repository
@@ -998,12 +1009,12 @@ func (s *Service) SwitchBranch(ctx context.Context, workspaceID, branchName stri
 
 // RestoreWorkspace recreates a workspace from the newest closed entry.
 func (s *Service) RestoreWorkspace(ctx context.Context, workspaceID string, force bool) error {
-	archive, err := s.wsEngine.LatestClosed(workspaceID)
+	archive, err := s.wsEngine.LatestClosed(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
 
-	if _, _, err := s.findWorkspace(workspaceID); err == nil {
+	if _, _, err := s.findWorkspace(ctx, workspaceID); err == nil {
 		if !force {
 			return cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to replace or choose a different ID")
 		}
@@ -1026,7 +1037,9 @@ func (s *Service) RestoreWorkspace(ctx context.Context, workspaceID string, forc
 		return cerrors.Wrap(cerrors.ErrIOFailed, fmt.Sprintf("failed to restore workspace %s", workspaceID), err)
 	}
 
-	if err := s.wsEngine.DeleteClosed(archive.Path); err != nil {
+	// Delete the closed entry using ID and timestamp
+	closedAt := archive.ClosedAt()
+	if err := s.wsEngine.DeleteClosed(ctx, workspaceID, closedAt); err != nil {
 		return cerrors.NewIOFailed("remove closed entry", err)
 	}
 
@@ -1053,8 +1066,8 @@ func (s *Service) DetectOrphans() ([]domain.OrphanedWorktree, error) {
 }
 
 // GetWorkspacesUsingRepo returns the IDs of workspaces that use the given canonical repo.
-func (s *Service) GetWorkspacesUsingRepo(repoName string) ([]string, error) {
-	return s.canonical.GetWorkspacesUsingRepo(repoName)
+func (s *Service) GetWorkspacesUsingRepo(ctx context.Context, repoName string) ([]string, error) {
+	return s.canonical.GetWorkspacesUsingRepo(ctx, repoName)
 }
 
 // DetectOrphansForWorkspace returns orphans for a specific workspace.
@@ -1069,31 +1082,31 @@ func (s *Service) PruneAllWorktrees(ctx context.Context) error {
 	return s.orphanService.PruneAllWorktrees(ctx)
 }
 
-func (s *Service) findWorkspace(workspaceID string) (*domain.Workspace, string, error) {
+func (s *Service) findWorkspace(ctx context.Context, workspaceID string) (*domain.Workspace, string, error) {
 	// Check cache first
 	if ws, dirName, ok := s.cache.Get(workspaceID); ok {
 		return ws, dirName, nil
 	}
 
-	// Cache miss: use direct lookup via LoadByID
-	ws, dirName, err := s.wsEngine.LoadByID(workspaceID)
+	// Cache miss: use direct lookup via Load (ID-based)
+	ws, err := s.wsEngine.Load(ctx, workspaceID)
 	if err != nil {
 		return nil, "", err
 	}
 
-	// Populate cache with the result
-	s.cache.Set(workspaceID, ws, dirName)
+	// Populate cache with the result (dirName is now the same as ID)
+	s.cache.Set(workspaceID, ws, workspaceID)
 
-	return ws, dirName, nil
+	return ws, workspaceID, nil
 }
 
-func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, action string) error {
+func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, workspaceID, action string) error {
 	if s.gitEngine == nil {
 		return nil
 	}
 
 	for _, repo := range workspace.Repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repo.Name)
 
 		isDirty, _, _, _, err := s.gitEngine.Status(context.Background(), worktreePath)
 		if err != nil {
@@ -1120,13 +1133,13 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, dirName, act
 // removeWorkspaceWorktrees removes all worktrees from canonical repos for a workspace.
 // This is called during workspace close to properly clean up git worktree references.
 // Errors are logged but not returned since the workspace is being deleted anyway.
-func (s *Service) removeWorkspaceWorktrees(workspace *domain.Workspace, dirName string) {
+func (s *Service) removeWorkspaceWorktrees(workspace *domain.Workspace, workspaceID string) {
 	if s.gitEngine == nil {
 		return
 	}
 
 	for _, repo := range workspace.Repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repo.Name)
 
 		//nolint:contextcheck // Using background context since this is cleanup during close
 		if err := s.gitEngine.RemoveWorktree(context.Background(), repo.Name, worktreePath); err != nil {

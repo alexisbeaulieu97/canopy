@@ -268,7 +268,7 @@ func (s *WorkspaceGitService) SwitchBranch(ctx context.Context, workspaceID, bra
 
 	// Update metadata
 	targetWorkspace.BranchName = branchName
-	if err := s.wsEngine.Save(dirName, *targetWorkspace); err != nil {
+	if err := s.wsEngine.Save(ctx, *targetWorkspace); err != nil {
 		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 	}
 

@@ -139,7 +139,7 @@ var repoRemoveCmd = &cobra.Command{
 
 		// Handle dry-run mode
 		if dryRun {
-			preview, err := svc.PreviewRemoveCanonicalRepo(name)
+			preview, err := svc.PreviewRemoveCanonicalRepo(cmd.Context(), name)
 			if err != nil {
 				return err
 			}

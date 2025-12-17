@@ -69,9 +69,9 @@ func (c *CanonicalRepoService) Add(ctx context.Context, url string) (string, err
 }
 
 // Remove removes a repository from the canonical store.
-func (c *CanonicalRepoService) Remove(name string, force bool) error {
+func (c *CanonicalRepoService) Remove(ctx context.Context, name string, force bool) error {
 	// 1. Check if repo is used by any workspace
-	usedBy, err := c.GetWorkspacesUsingRepo(name)
+	usedBy, err := c.GetWorkspacesUsingRepo(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -104,14 +104,14 @@ func (c *CanonicalRepoService) Remove(name string, force bool) error {
 }
 
 // PreviewRemove returns a preview of what would happen when removing a repo.
-func (c *CanonicalRepoService) PreviewRemove(name string) (*domain.RepoRemovePreview, error) {
+func (c *CanonicalRepoService) PreviewRemove(ctx context.Context, name string) (*domain.RepoRemovePreview, error) {
 	path := filepath.Join(c.projectsRoot, name)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil, cerrors.NewRepoNotFound(name)
 	}
 
 	// Find workspaces using this repo
-	usedBy, err := c.GetWorkspacesUsingRepo(name)
+	usedBy, err := c.GetWorkspacesUsingRepo(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -143,15 +143,15 @@ func (c *CanonicalRepoService) Sync(ctx context.Context, name string) error {
 }
 
 // GetWorkspacesUsingRepo returns the IDs of workspaces that use the given canonical repo.
-func (c *CanonicalRepoService) GetWorkspacesUsingRepo(repoName string) ([]string, error) {
-	workspaceMap, err := c.wsStorage.List()
+func (c *CanonicalRepoService) GetWorkspacesUsingRepo(ctx context.Context, repoName string) ([]string, error) {
+	workspaceList, err := c.wsStorage.List(ctx)
 	if err != nil {
 		return nil, cerrors.NewIOFailed("list workspaces", err)
 	}
 
 	var usingRepo []string
 
-	for _, ws := range workspaceMap {
+	for _, ws := range workspaceList {
 		for _, repo := range ws.Repos {
 			if repo.Name == repoName {
 				usingRepo = append(usingRepo, ws.ID)

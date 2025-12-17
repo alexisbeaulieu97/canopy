@@ -171,7 +171,7 @@ func TestCreateWorkspace(t *testing.T) {
 	}
 
 	// Check metadata
-	ws, err := wsEngine.Load(dirName)
+	ws, err := wsEngine.Load(context.Background(), "TEST-EMPTY")
 	if err != nil {
 		t.Fatalf("failed to load workspace: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestCloseWorkspaceStoresMetadata(t *testing.T) {
 		t.Fatalf("expected workspace directory to be removed")
 	}
 
-	closedEntries, err := deps.wsEngine.ListClosed()
+	closedEntries, err := deps.wsEngine.ListClosed(context.Background())
 	if err != nil {
 		t.Fatalf("ListClosed failed: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestRestoreWorkspaceConflict(t *testing.T) {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
-	_, err := deps.wsEngine.Close("TEST-CONFLICT", domain.Workspace{ID: "TEST-CONFLICT"}, time.Now())
+	_, err := deps.wsEngine.Close(context.Background(), "TEST-CONFLICT", time.Now())
 	if err != nil {
 		t.Fatalf("failed to seed closed entry: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestDetectOrphans_MissingCanonicalRepo(t *testing.T) {
 	}
 
 	// Save workspace metadata (without actually creating the canonical repo)
-	if err := deps.wsEngine.Create("ORPHAN-TEST-1", ws.ID, ws.BranchName, ws.Repos); err != nil {
+	if err := deps.wsEngine.Create(context.Background(), ws); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
@@ -400,7 +400,7 @@ func TestDetectOrphans_MissingWorktreeDirectory(t *testing.T) {
 		},
 	}
 
-	if err := deps.wsEngine.Create("ORPHAN-TEST-2", ws.ID, ws.BranchName, ws.Repos); err != nil {
+	if err := deps.wsEngine.Create(context.Background(), ws); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
@@ -439,7 +439,7 @@ func TestDetectOrphans_InvalidGitDir(t *testing.T) {
 		},
 	}
 
-	if err := deps.wsEngine.Create("ORPHAN-TEST-3", ws.ID, ws.BranchName, ws.Repos); err != nil {
+	if err := deps.wsEngine.Create(context.Background(), ws); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
@@ -528,7 +528,7 @@ func TestGetWorkspacesUsingRepo(t *testing.T) {
 		t.Fatalf("failed to create workspace WS-3: %v", err)
 	}
 
-	usedBy, err := deps.svc.GetWorkspacesUsingRepo("shared-repo")
+	usedBy, err := deps.svc.GetWorkspacesUsingRepo(context.Background(), "shared-repo")
 	if err != nil {
 		t.Fatalf("GetWorkspacesUsingRepo failed: %v", err)
 	}
@@ -623,7 +623,7 @@ func TestPreviewRemoveCanonicalRepo(t *testing.T) {
 	}
 
 	// Test preview
-	preview, err := deps.svc.PreviewRemoveCanonicalRepo("test-repo")
+	preview, err := deps.svc.PreviewRemoveCanonicalRepo(context.Background(), "test-repo")
 	if err != nil {
 		t.Fatalf("PreviewRemoveCanonicalRepo failed: %v", err)
 	}
@@ -653,7 +653,7 @@ func TestPreviewRemoveCanonicalRepo(t *testing.T) {
 func TestPreviewRemoveCanonicalRepoNonexistent(t *testing.T) {
 	deps := newTestService(t)
 
-	_, err := deps.svc.PreviewRemoveCanonicalRepo("nonexistent-repo")
+	_, err := deps.svc.PreviewRemoveCanonicalRepo(context.Background(), "nonexistent-repo")
 	if err == nil {
 		t.Fatalf("expected error when previewing nonexistent repo")
 	}
@@ -803,7 +803,7 @@ func TestImportWorkspaceWithBranchOverride(t *testing.T) {
 	}
 
 	// Check that workspace metadata has the overridden branch
-	ws, err := deps.wsEngine.Load("BRANCH-TEST")
+	ws, err := deps.wsEngine.Load(context.Background(), "BRANCH-TEST")
 	if err != nil {
 		t.Fatalf("failed to load workspace: %v", err)
 	}
@@ -829,7 +829,7 @@ func TestImportWorkspaceEmptyBranchDefaultsToID(t *testing.T) {
 	}
 
 	// Check that workspace metadata has branch defaulted to workspace ID
-	ws, err := deps.wsEngine.Load("EMPTY-BRANCH-TEST")
+	ws, err := deps.wsEngine.Load(context.Background(), "EMPTY-BRANCH-TEST")
 	if err != nil {
 		t.Fatalf("failed to load workspace: %v", err)
 	}
@@ -881,7 +881,7 @@ func TestImportWorkspaceForce(t *testing.T) {
 	}
 
 	// Check that the workspace was replaced
-	ws, err := deps.wsEngine.Load("FORCE-TEST")
+	ws, err := deps.wsEngine.Load(context.Background(), "FORCE-TEST")
 	if err != nil {
 		t.Fatalf("failed to load workspace: %v", err)
 	}
@@ -942,7 +942,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 	}
 
 	// Verify it exists
-	ws, err := deps.wsEngine.Load("ROUNDTRIP")
+	ws, err := deps.wsEngine.Load(context.Background(), "ROUNDTRIP")
 	if err != nil {
 		t.Fatalf("failed to load restored workspace: %v", err)
 	}

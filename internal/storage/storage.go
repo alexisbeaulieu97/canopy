@@ -2,6 +2,8 @@
 package storage
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,52 +34,130 @@ func New(workspacesRoot, closedRoot string) *Engine {
 	}
 }
 
-// Create creates a new workspace directory and metadata.
-func (e *Engine) Create(dirName, id, branchName string, repos []domain.Repo) error {
-	safeDir, err := sanitizeDirName(dirName)
+// resolveDirectory resolves a workspace ID to its directory path.
+// It requires that the workspace ID equals the directory name (after sanitization).
+// If the directory exists but contains corrupt metadata, an error is returned.
+func (e *Engine) resolveDirectory(id string) (string, error) {
+	safeID, err := sanitizeDirName(id)
 	if err != nil {
-		return cerrors.NewPathInvalid(dirName, err.Error())
+		return "", cerrors.NewWorkspaceNotFound(id)
+	}
+
+	path := filepath.Join(e.WorkspacesRoot, safeID)
+	metaPath := filepath.Join(path, "workspace.yaml")
+
+	//nolint:gosec // metaPath is derived from sanitized workspace ID and fixed filename
+	f, openErr := os.Open(metaPath)
+	if openErr != nil {
+		if os.IsNotExist(openErr) {
+			return "", cerrors.NewWorkspaceNotFound(id)
+		}
+
+		return "", cerrors.NewIOFailed("open workspace metadata", openErr)
+	}
+
+	defer func() { _ = f.Close() }()
+
+	var w domain.Workspace
+	if decodeErr := yaml.NewDecoder(f).Decode(&w); decodeErr != nil {
+		return "", cerrors.NewWorkspaceMetadataError(id, "decode", decodeErr)
+	}
+
+	if w.ID != id {
+		return "", cerrors.NewWorkspaceNotFound(id)
+	}
+
+	return safeID, nil
+}
+
+// resolveClosedDirectory resolves a closed workspace ID and timestamp to its directory path.
+func (e *Engine) resolveClosedDirectory(id string, closedAt time.Time) (string, error) {
+	if e.ClosedRoot == "" {
+		return "", cerrors.NewConfigInvalid("closed_root is not configured")
+	}
+
+	safeDir, err := sanitizeDirName(id)
+	if err != nil {
+		return "", cerrors.NewPathInvalid(id, err.Error())
+	}
+
+	timestampDir := closedAt.UTC().Format("20060102T150405Z")
+	closedDir := filepath.Join(e.ClosedRoot, safeDir, timestampDir)
+
+	// Verify the directory exists
+	if _, err := os.Stat(closedDir); err != nil {
+		if os.IsNotExist(err) {
+			return "", cerrors.NewWorkspaceNotFound(id).WithContext("state", "closed")
+		}
+
+		return "", cerrors.NewIOFailed("stat closed directory", err)
+	}
+
+	return closedDir, nil
+}
+
+// Create creates a new workspace from the provided domain object.
+func (e *Engine) Create(_ context.Context, ws domain.Workspace) error {
+	safeDir, err := sanitizeDirName(ws.ID)
+	if err != nil {
+		return cerrors.NewPathInvalid(ws.ID, err.Error())
 	}
 
 	path := filepath.Join(e.WorkspacesRoot, safeDir)
 
 	if err := os.Mkdir(path, 0o750); err != nil {
 		if os.IsExist(err) {
-			return cerrors.NewWorkspaceExists(id)
+			return cerrors.NewWorkspaceExists(ws.ID)
 		}
 
 		return cerrors.NewIOFailed("create workspace directory", err)
 	}
 
-	workspace := domain.Workspace{
-		ID:         id,
-		BranchName: branchName,
-		Repos:      repos,
-	}
-
 	metaPath := filepath.Join(path, "workspace.yaml")
 
-	return e.saveMetadata(metaPath, workspace)
+	return e.saveMetadata(metaPath, ws)
 }
 
-// Save updates the metadata for an existing workspace directory.
-func (e *Engine) Save(dirName string, workspace domain.Workspace) error {
-	safeDir, err := sanitizeDirName(dirName)
+// Save persists changes to an existing workspace.
+func (e *Engine) Save(_ context.Context, ws domain.Workspace) error {
+	dirName, err := e.resolveDirectory(ws.ID)
 	if err != nil {
-		return cerrors.NewPathInvalid(dirName, err.Error())
+		return err
 	}
 
-	path := filepath.Join(e.WorkspacesRoot, safeDir)
+	path := filepath.Join(e.WorkspacesRoot, dirName)
 	metaPath := filepath.Join(path, "workspace.yaml")
 
-	return e.saveMetadata(metaPath, workspace)
+	return e.saveMetadata(metaPath, ws)
 }
 
-// Close copies workspace metadata into the closed root and returns the closed entry.
-func (e *Engine) Close(dirName string, workspace domain.Workspace, closedAt time.Time) (*domain.ClosedWorkspace, error) {
+// Close archives a workspace and returns the closed entry.
+func (e *Engine) Close(_ context.Context, id string, closedAt time.Time) (*domain.ClosedWorkspace, error) {
 	if e.ClosedRoot == "" {
 		return nil, cerrors.NewConfigInvalid("closed_root is not configured")
 	}
+
+	dirName, err := e.resolveDirectory(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load the workspace metadata
+	path := filepath.Join(e.WorkspacesRoot, dirName)
+	metaPath := filepath.Join(path, "workspace.yaml")
+
+	f, err := os.Open(metaPath) //nolint:gosec // path is derived from workspace directory
+	if err != nil {
+		return nil, cerrors.NewWorkspaceMetadataError(id, "read", err)
+	}
+
+	var workspace domain.Workspace
+	if err := yaml.NewDecoder(f).Decode(&workspace); err != nil {
+		_ = f.Close()
+		return nil, cerrors.NewWorkspaceMetadataError(id, "decode", err)
+	}
+
+	_ = f.Close()
 
 	safeDir, err := sanitizeDirName(dirName)
 	if err != nil {
@@ -92,9 +172,9 @@ func (e *Engine) Close(dirName string, workspace domain.Workspace, closedAt time
 
 	workspace.ClosedAt = &closedAt
 
-	metaPath := filepath.Join(closedDir, "workspace.yaml")
+	closedMetaPath := filepath.Join(closedDir, "workspace.yaml")
 
-	if err := e.saveMetadata(metaPath, workspace); err != nil {
+	if err := e.saveMetadata(closedMetaPath, workspace); err != nil {
 		return nil, cerrors.NewWorkspaceMetadataError(workspace.ID, "write", err)
 	}
 
@@ -129,7 +209,7 @@ func (e *Engine) saveMetadata(path string, workspace domain.Workspace) error {
 }
 
 // List returns all active workspaces.
-func (e *Engine) List() (map[string]domain.Workspace, error) {
+func (e *Engine) List(_ context.Context) ([]domain.Workspace, error) {
 	entries, err := os.ReadDir(e.WorkspacesRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -139,7 +219,7 @@ func (e *Engine) List() (map[string]domain.Workspace, error) {
 		return nil, cerrors.NewIOFailed("read workspaces root", err)
 	}
 
-	workspaces := make(map[string]domain.Workspace)
+	var workspaces []domain.Workspace
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -147,7 +227,7 @@ func (e *Engine) List() (map[string]domain.Workspace, error) {
 		}
 
 		if w, ok := e.tryLoadMetadata(filepath.Join(e.WorkspacesRoot, entry.Name())); ok {
-			workspaces[entry.Name()] = w
+			workspaces = append(workspaces, w)
 		}
 	}
 
@@ -155,7 +235,7 @@ func (e *Engine) List() (map[string]domain.Workspace, error) {
 }
 
 // ListClosed returns closed workspaces stored on disk, sorted by newest first.
-func (e *Engine) ListClosed() ([]domain.ClosedWorkspace, error) {
+func (e *Engine) ListClosed(_ context.Context) ([]domain.ClosedWorkspace, error) {
 	if e.ClosedRoot == "" {
 		return nil, nil
 	}
@@ -248,26 +328,26 @@ func inferClosedTimeFromPath(path string) (time.Time, bool) {
 	return ts, true
 }
 
-// Load reads the metadata for a specific workspace.
-func (e *Engine) Load(dirName string) (*domain.Workspace, error) {
-	safeDir, err := sanitizeDirName(dirName)
+// Load retrieves a workspace by ID.
+func (e *Engine) Load(_ context.Context, id string) (*domain.Workspace, error) {
+	dirName, err := e.resolveDirectory(id)
 	if err != nil {
-		return nil, cerrors.NewPathInvalid(dirName, err.Error())
+		return nil, err
 	}
 
-	path := filepath.Join(e.WorkspacesRoot, safeDir)
+	path := filepath.Join(e.WorkspacesRoot, dirName)
 	metaPath := filepath.Join(path, "workspace.yaml")
 
 	f, err := os.Open(metaPath) //nolint:gosec // path is derived from workspace directory
 	if err != nil {
-		return nil, cerrors.NewWorkspaceMetadataError(dirName, "read", err)
+		return nil, cerrors.NewWorkspaceMetadataError(id, "read", err)
 	}
 
 	defer func() { _ = f.Close() }()
 
 	var w domain.Workspace
 	if err := yaml.NewDecoder(f).Decode(&w); err != nil {
-		return nil, cerrors.NewWorkspaceMetadataError(dirName, "decode", err)
+		return nil, cerrors.NewWorkspaceMetadataError(id, "decode", err)
 	}
 
 	// Handle version: missing version defaults to 0 (legacy)
@@ -277,69 +357,37 @@ func (e *Engine) Load(dirName string) (*domain.Workspace, error) {
 	return &w, nil
 }
 
-// LoadByID looks up a workspace by its ID and returns the workspace metadata
-// and directory name. It attempts direct path access first (assuming ID == dirName),
-// then falls back to scanning all workspaces if the direct lookup fails.
-func (e *Engine) LoadByID(id string) (*domain.Workspace, string, error) {
-	// First, try direct path access assuming ID == dirName
-	safeID, err := sanitizeDirName(id)
-	if err == nil {
-		ws, err := e.Load(safeID)
-		if err == nil && ws.ID == id {
-			return ws, safeID, nil
-		}
-	}
-
-	// Fallback: scan all workspaces to find the one with matching ID
-	workspaces, err := e.List()
+// Delete removes a workspace by ID.
+func (e *Engine) Delete(_ context.Context, id string) error {
+	dirName, err := e.resolveDirectory(id)
 	if err != nil {
-		return nil, "", cerrors.NewIOFailed("list workspaces", err)
-	}
-
-	for dirName, ws := range workspaces {
-		if ws.ID == id {
-			return &ws, dirName, nil
+		// If workspace not found, deletion is idempotent - return nil
+		if errors.Is(err, cerrors.WorkspaceNotFound) {
+			return nil
 		}
+
+		return err
 	}
 
-	return nil, "", cerrors.NewWorkspaceNotFound(id)
-}
-
-// Delete removes a workspace.
-func (e *Engine) Delete(workspaceID string) error {
-	safeDir, err := sanitizeDirName(workspaceID)
-	if err != nil {
-		return cerrors.NewPathInvalid(workspaceID, err.Error())
-	}
-
-	path := filepath.Join(e.WorkspacesRoot, safeDir)
+	path := filepath.Join(e.WorkspacesRoot, dirName)
 
 	return os.RemoveAll(path)
 }
 
-// Rename renames a workspace directory and updates its metadata.
-func (e *Engine) Rename(oldDirName, newDirName, newID string) error {
-	safeOldDir, err := sanitizeDirName(oldDirName)
+// Rename changes a workspace's ID.
+func (e *Engine) Rename(_ context.Context, oldID, newID string) error {
+	oldDirName, err := e.resolveDirectory(oldID)
 	if err != nil {
-		return cerrors.NewPathInvalid(oldDirName, err.Error())
+		return err
 	}
 
-	safeNewDir, err := sanitizeDirName(newDirName)
+	safeNewDir, err := sanitizeDirName(newID)
 	if err != nil {
-		return cerrors.NewPathInvalid(newDirName, err.Error())
+		return cerrors.NewPathInvalid(newID, err.Error())
 	}
 
-	oldPath := filepath.Join(e.WorkspacesRoot, safeOldDir)
+	oldPath := filepath.Join(e.WorkspacesRoot, oldDirName)
 	newPath := filepath.Join(e.WorkspacesRoot, safeNewDir)
-
-	// Check that old path exists
-	if _, err := os.Stat(oldPath); err != nil {
-		if os.IsNotExist(err) {
-			return cerrors.NewWorkspaceNotFound(oldDirName)
-		}
-
-		return cerrors.NewIOFailed("stat old workspace", err)
-	}
 
 	// Check that new path doesn't exist
 	if _, err := os.Stat(newPath); err == nil {
@@ -349,10 +397,21 @@ func (e *Engine) Rename(oldDirName, newDirName, newID string) error {
 	}
 
 	// Load existing metadata
-	ws, err := e.Load(safeOldDir)
+	path := filepath.Join(e.WorkspacesRoot, oldDirName)
+	metaPath := filepath.Join(path, "workspace.yaml")
+
+	f, err := os.Open(metaPath) //nolint:gosec // path is derived from workspace directory
 	if err != nil {
-		return cerrors.NewWorkspaceMetadataError(oldDirName, "load", err)
+		return cerrors.NewWorkspaceMetadataError(oldID, "read", err)
 	}
+
+	var ws domain.Workspace
+	if decodeErr := yaml.NewDecoder(f).Decode(&ws); decodeErr != nil {
+		_ = f.Close()
+		return cerrors.NewWorkspaceMetadataError(oldID, "decode", decodeErr)
+	}
+
+	_ = f.Close()
 
 	// Rename the directory
 	if err := os.Rename(oldPath, newPath); err != nil {
@@ -361,7 +420,9 @@ func (e *Engine) Rename(oldDirName, newDirName, newID string) error {
 
 	// Update metadata with new ID
 	ws.ID = newID
-	if err := e.Save(safeNewDir, *ws); err != nil {
+	newMetaPath := filepath.Join(newPath, "workspace.yaml")
+
+	if err := e.saveMetadata(newMetaPath, ws); err != nil {
 		// Attempt rollback on metadata save failure
 		_ = os.Rename(newPath, oldPath)
 		return cerrors.NewWorkspaceMetadataError(newID, "update", err)
@@ -370,15 +431,15 @@ func (e *Engine) Rename(oldDirName, newDirName, newID string) error {
 	return nil
 }
 
-// LatestClosed returns the newest closed entry for the given workspace ID.
-func (e *Engine) LatestClosed(workspaceID string) (*domain.ClosedWorkspace, error) { //nolint:gocyclo // handles filesystem traversal and selection
+// LatestClosed returns the most recent closed entry for a workspace.
+func (e *Engine) LatestClosed(_ context.Context, id string) (*domain.ClosedWorkspace, error) { //nolint:gocyclo // handles filesystem traversal and selection
 	if e.ClosedRoot == "" {
 		return nil, cerrors.NewConfigInvalid("closed_root is not configured")
 	}
 
-	safeDir, err := sanitizeDirName(workspaceID)
+	safeDir, err := sanitizeDirName(id)
 	if err != nil {
-		return nil, cerrors.NewPathInvalid(workspaceID, err.Error())
+		return nil, cerrors.NewPathInvalid(id, err.Error())
 	}
 
 	workspaceDir := filepath.Join(e.ClosedRoot, safeDir)
@@ -386,7 +447,7 @@ func (e *Engine) LatestClosed(workspaceID string) (*domain.ClosedWorkspace, erro
 	entries, err := os.ReadDir(workspaceDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, cerrors.NewWorkspaceNotFound(workspaceID).WithContext("state", "closed")
+			return nil, cerrors.NewWorkspaceNotFound(id).WithContext("state", "closed")
 		}
 
 		return nil, cerrors.NewIOFailed("read closed entries", err)
@@ -415,33 +476,25 @@ func (e *Engine) LatestClosed(workspaceID string) (*domain.ClosedWorkspace, erro
 	}
 
 	if latest == nil {
-		return nil, cerrors.NewWorkspaceNotFound(workspaceID).WithContext("state", "closed")
+		return nil, cerrors.NewWorkspaceNotFound(id).WithContext("state", "closed")
 	}
 
 	return latest, nil
 }
 
-// DeleteClosed removes a closed workspace entry.
-func (e *Engine) DeleteClosed(path string) error {
-	if path == "" {
-		return cerrors.NewInvalidArgument("path", "closed path is required")
-	}
-
-	absPath, err := filepath.Abs(path)
+// DeleteClosed removes a closed workspace entry identified by workspace ID and close timestamp.
+func (e *Engine) DeleteClosed(_ context.Context, id string, closedAt time.Time) error {
+	closedDir, err := e.resolveClosedDirectory(id, closedAt)
 	if err != nil {
-		return cerrors.NewIOFailed("resolve closed path", err)
-	}
-
-	if e.ClosedRoot != "" {
-		root := filepath.Clean(e.ClosedRoot)
-
-		if !strings.HasPrefix(absPath, root+string(os.PathSeparator)) && absPath != root {
-			return cerrors.NewPathInvalid(path, "closed path must be within closed root")
+		// If closed workspace not found, deletion is idempotent - return nil
+		if errors.Is(err, cerrors.WorkspaceNotFound) {
+			return nil
 		}
+
+		return err
 	}
 
-	// Use the validated absolute path to prevent TOCTOU race conditions
-	return os.RemoveAll(absPath)
+	return os.RemoveAll(closedDir)
 }
 
 func sanitizeDirName(name string) (string, error) {

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,7 +9,7 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 )
 
-func TestLoadByID_DirectPath(t *testing.T) {
+func TestLoad_ByID(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -20,39 +21,41 @@ func TestLoadByID_DirectPath(t *testing.T) {
 	}
 
 	engine := New(workspacesRoot, closedRoot)
+	ctx := context.Background()
 
-	// Create a workspace where ID == dirName
+	// Create a workspace
 	wsID := "test-workspace"
 	repos := []domain.Repo{{Name: "test-repo", URL: "https://github.com/org/repo.git"}}
+	ws := domain.Workspace{
+		ID:         wsID,
+		BranchName: "main",
+		Repos:      repos,
+	}
 
-	if err := engine.Create(wsID, wsID, "main", repos); err != nil {
+	if err := engine.Create(ctx, ws); err != nil {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
-	// Test LoadByID with direct path access
-	ws, dirName, err := engine.LoadByID(wsID)
+	// Test Load by ID
+	loaded, err := engine.Load(ctx, wsID)
 	if err != nil {
-		t.Fatalf("LoadByID failed: %v", err)
+		t.Fatalf("Load failed: %v", err)
 	}
 
-	if ws.ID != wsID {
-		t.Errorf("expected ID %q, got %q", wsID, ws.ID)
+	if loaded.ID != wsID {
+		t.Errorf("expected ID %q, got %q", wsID, loaded.ID)
 	}
 
-	if dirName != wsID {
-		t.Errorf("expected dirName %q, got %q", wsID, dirName)
+	if loaded.BranchName != "main" {
+		t.Errorf("expected BranchName %q, got %q", "main", loaded.BranchName)
 	}
 
-	if ws.BranchName != "main" {
-		t.Errorf("expected BranchName %q, got %q", "main", ws.BranchName)
-	}
-
-	if len(ws.Repos) != 1 || ws.Repos[0].Name != "test-repo" {
-		t.Errorf("expected 1 repo named test-repo, got %v", ws.Repos)
+	if len(loaded.Repos) != 1 || loaded.Repos[0].Name != "test-repo" {
+		t.Errorf("expected 1 repo named test-repo, got %v", loaded.Repos)
 	}
 }
 
-func TestLoadByID_FallbackScan(t *testing.T) {
+func TestLoad_NotFound(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -64,51 +67,16 @@ func TestLoadByID_FallbackScan(t *testing.T) {
 	}
 
 	engine := New(workspacesRoot, closedRoot)
+	ctx := context.Background()
 
-	// Create a workspace where dirName differs from ID
-	dirName := "custom-dir"
-	wsID := "workspace-id"
-
-	if err := engine.Create(dirName, wsID, "feature", nil); err != nil {
-		t.Fatalf("failed to create workspace: %v", err)
-	}
-
-	// Test LoadByID falls back to scanning when direct path fails
-	ws, foundDir, err := engine.LoadByID(wsID)
-	if err != nil {
-		t.Fatalf("LoadByID fallback failed: %v", err)
-	}
-
-	if ws.ID != wsID {
-		t.Errorf("expected ID %q, got %q", wsID, ws.ID)
-	}
-
-	if foundDir != dirName {
-		t.Errorf("expected dirName %q, got %q", dirName, foundDir)
-	}
-}
-
-func TestLoadByID_NotFound(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	workspacesRoot := filepath.Join(tmpDir, "workspaces")
-	closedRoot := filepath.Join(tmpDir, "closed")
-
-	if err := os.MkdirAll(workspacesRoot, 0o750); err != nil {
-		t.Fatalf("failed to create workspaces root: %v", err)
-	}
-
-	engine := New(workspacesRoot, closedRoot)
-
-	// Test LoadByID with non-existent workspace
-	_, _, err := engine.LoadByID("non-existent")
+	// Test Load with non-existent workspace
+	_, err := engine.Load(ctx, "non-existent")
 	if err == nil {
 		t.Fatal("expected error for non-existent workspace")
 	}
 }
 
-func TestLoadByID_DirectPathMismatch(t *testing.T) {
+func TestCreateAndList(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -120,16 +88,41 @@ func TestLoadByID_DirectPathMismatch(t *testing.T) {
 	}
 
 	engine := New(workspacesRoot, closedRoot)
+	ctx := context.Background()
 
-	// Create workspace where dirName == searchID but ID is different
-	// This tests that we correctly verify the ID matches, not just the directory
-	if err := engine.Create("some-dir", "different-id", "main", nil); err != nil {
-		t.Fatalf("failed to create workspace: %v", err)
+	// Create two workspaces
+	ws1 := domain.Workspace{ID: "workspace-1", BranchName: "main"}
+	ws2 := domain.Workspace{ID: "workspace-2", BranchName: "feature"}
+
+	if err := engine.Create(ctx, ws1); err != nil {
+		t.Fatalf("failed to create workspace 1: %v", err)
 	}
 
-	// Search for "some-dir" as an ID - it exists as a directory but ID is "different-id"
-	_, _, err := engine.LoadByID("some-dir")
-	if err == nil {
-		t.Fatal("expected error when directory exists but ID doesn't match")
+	if err := engine.Create(ctx, ws2); err != nil {
+		t.Fatalf("failed to create workspace 2: %v", err)
+	}
+
+	// List workspaces
+	workspaces, err := engine.List(ctx)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+
+	if len(workspaces) != 2 {
+		t.Errorf("expected 2 workspaces, got %d", len(workspaces))
+	}
+
+	// Verify workspace IDs are in the list
+	ids := make(map[string]bool)
+	for _, w := range workspaces {
+		ids[w.ID] = true
+	}
+
+	if !ids["workspace-1"] {
+		t.Error("workspace-1 not found in list")
+	}
+
+	if !ids["workspace-2"] {
+		t.Error("workspace-2 not found in list")
 	}
 }

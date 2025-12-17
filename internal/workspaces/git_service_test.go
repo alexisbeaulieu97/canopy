@@ -277,7 +277,7 @@ func TestWorkspaceGitService_SwitchBranch(t *testing.T) {
 			}
 
 			mockStorage := &mocks.MockWorkspaceStorage{
-				SaveFunc: func(_ string, _ domain.Workspace) error {
+				SaveFunc: func(_ context.Context, _ domain.Workspace) error {
 					return tt.saveErr
 				},
 			}
