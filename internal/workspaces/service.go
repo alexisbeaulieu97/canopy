@@ -854,8 +854,35 @@ func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (
 	wsPath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID)
 
 	repoNames := []string{}
+	repoStatuses := []domain.RepoCloseStatus{}
+
 	for _, r := range targetWorkspace.Repos {
 		repoNames = append(repoNames, r.Name)
+
+		// Check repo status if git engine is available
+		if s.gitEngine != nil {
+			worktreePath := filepath.Join(wsPath, r.Name)
+
+			isDirty, unpushed, _, _, statusErr := s.gitEngine.Status(context.Background(), worktreePath)
+			if statusErr != nil {
+				if s.logger != nil {
+					s.logger.Debug("Failed to check repo status for preview",
+						"repo", r.Name,
+						"path", worktreePath,
+						"error", statusErr)
+				}
+				// Include repo with unknown status (zeros)
+				repoStatuses = append(repoStatuses, domain.RepoCloseStatus{
+					Name: r.Name,
+				})
+			} else {
+				repoStatuses = append(repoStatuses, domain.RepoCloseStatus{
+					Name:          r.Name,
+					IsDirty:       isDirty,
+					UnpushedCount: unpushed,
+				})
+			}
+		}
 	}
 
 	usage, _, sizeErr := s.diskUsage.CachedUsage(wsPath)
@@ -868,6 +895,7 @@ func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (
 		WorkspacePath:  wsPath,
 		BranchName:     targetWorkspace.BranchName,
 		ReposAffected:  repoNames,
+		RepoStatuses:   repoStatuses,
 		DiskUsageBytes: usage,
 		KeepMetadata:   keepMetadata,
 	}, nil
@@ -1113,7 +1141,7 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, workspaceID,
 	for _, repo := range workspace.Repos {
 		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repo.Name)
 
-		isDirty, _, _, _, err := s.gitEngine.Status(context.Background(), worktreePath)
+		isDirty, unpushed, _, _, err := s.gitEngine.Status(context.Background(), worktreePath)
 		if err != nil {
 			// Log the error but continue checking other repos.
 			// Status failures are non-fatal here as we're checking for uncommitted changes.
@@ -1129,6 +1157,10 @@ func (s *Service) ensureWorkspaceClean(workspace *domain.Workspace, workspaceID,
 
 		if isDirty {
 			return cerrors.NewRepoNotClean(repo.Name, action)
+		}
+
+		if unpushed > 0 {
+			return cerrors.NewRepoHasUnpushedCommits(repo.Name, unpushed, action)
 		}
 	}
 

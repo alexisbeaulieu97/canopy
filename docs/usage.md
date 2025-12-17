@@ -148,7 +148,21 @@ canopy workspace close PROJ-123 --delete
 
 # Run pre_close hooks only (don't actually close)
 canopy workspace close PROJ-123 --hooks-only
+
+# Force close even with uncommitted changes or unpushed commits
+canopy workspace close PROJ-123 --force
 ```
+
+#### Safety Checks
+
+Before closing a workspace, Canopy verifies that all repositories are in a safe state:
+
+1. **No uncommitted changes** - All changes must be committed
+2. **No unpushed commits** - All commits must be pushed to the remote
+
+If either check fails, the close operation is blocked. Use `--force` to bypass these safety checks (use with caution, as unpushed work may be lost).
+
+The `--dry-run` flag shows what would happen, including warnings for any repos with uncommitted changes or unpushed commits.
 
 ### Reopening Archived Workspaces
 

@@ -14,31 +14,32 @@ type ErrorCode string
 
 // Error codes for domain errors.
 const (
-	ErrWorkspaceNotFound   ErrorCode = "WORKSPACE_NOT_FOUND"
-	ErrWorkspaceExists     ErrorCode = "WORKSPACE_EXISTS"
-	ErrRepoNotFound        ErrorCode = "REPO_NOT_FOUND"
-	ErrRepoNotClean        ErrorCode = "REPO_NOT_CLEAN"
-	ErrRepoAlreadyExists   ErrorCode = "REPO_ALREADY_EXISTS"
-	ErrGitOperationFailed  ErrorCode = "GIT_OPERATION_FAILED"
-	ErrConfigInvalid       ErrorCode = "CONFIG_INVALID"
-	ErrConfigValidation    ErrorCode = "CONFIG_VALIDATION"
-	ErrUnknownRepository   ErrorCode = "UNKNOWN_REPOSITORY"
-	ErrNotInWorkspace      ErrorCode = "NOT_IN_WORKSPACE"
-	ErrCommandFailed       ErrorCode = "COMMAND_FAILED"
-	ErrInvalidArgument     ErrorCode = "INVALID_ARGUMENT"
-	ErrOperationCancelled  ErrorCode = "OPERATION_CANCELLED"
-	ErrOperationTimeout    ErrorCode = "OPERATION_TIMEOUT"
-	ErrIOFailed            ErrorCode = "IO_FAILED"
-	ErrRegistryError       ErrorCode = "REGISTRY_ERROR"
-	ErrInternalError       ErrorCode = "INTERNAL_ERROR"
-	ErrRepoInUse           ErrorCode = "REPO_IN_USE"
-	ErrWorkspaceMetadata   ErrorCode = "WORKSPACE_METADATA_ERROR"
-	ErrNoReposConfigured   ErrorCode = "NO_REPOS_CONFIGURED"
-	ErrMissingBranchConfig ErrorCode = "MISSING_BRANCH_CONFIG"
-	ErrHookFailed          ErrorCode = "HOOK_FAILED"
-	ErrHookTimeout         ErrorCode = "HOOK_TIMEOUT"
-	ErrPathInvalid         ErrorCode = "PATH_INVALID"
-	ErrPathNotDirectory    ErrorCode = "PATH_NOT_DIRECTORY"
+	ErrWorkspaceNotFound      ErrorCode = "WORKSPACE_NOT_FOUND"
+	ErrWorkspaceExists        ErrorCode = "WORKSPACE_EXISTS"
+	ErrRepoNotFound           ErrorCode = "REPO_NOT_FOUND"
+	ErrRepoNotClean           ErrorCode = "REPO_NOT_CLEAN"
+	ErrRepoAlreadyExists      ErrorCode = "REPO_ALREADY_EXISTS"
+	ErrRepoHasUnpushedCommits ErrorCode = "REPO_HAS_UNPUSHED_COMMITS"
+	ErrGitOperationFailed     ErrorCode = "GIT_OPERATION_FAILED"
+	ErrConfigInvalid          ErrorCode = "CONFIG_INVALID"
+	ErrConfigValidation       ErrorCode = "CONFIG_VALIDATION"
+	ErrUnknownRepository      ErrorCode = "UNKNOWN_REPOSITORY"
+	ErrNotInWorkspace         ErrorCode = "NOT_IN_WORKSPACE"
+	ErrCommandFailed          ErrorCode = "COMMAND_FAILED"
+	ErrInvalidArgument        ErrorCode = "INVALID_ARGUMENT"
+	ErrOperationCancelled     ErrorCode = "OPERATION_CANCELLED"
+	ErrOperationTimeout       ErrorCode = "OPERATION_TIMEOUT"
+	ErrIOFailed               ErrorCode = "IO_FAILED"
+	ErrRegistryError          ErrorCode = "REGISTRY_ERROR"
+	ErrInternalError          ErrorCode = "INTERNAL_ERROR"
+	ErrRepoInUse              ErrorCode = "REPO_IN_USE"
+	ErrWorkspaceMetadata      ErrorCode = "WORKSPACE_METADATA_ERROR"
+	ErrNoReposConfigured      ErrorCode = "NO_REPOS_CONFIGURED"
+	ErrMissingBranchConfig    ErrorCode = "MISSING_BRANCH_CONFIG"
+	ErrHookFailed             ErrorCode = "HOOK_FAILED"
+	ErrHookTimeout            ErrorCode = "HOOK_TIMEOUT"
+	ErrPathInvalid            ErrorCode = "PATH_INVALID"
+	ErrPathNotDirectory       ErrorCode = "PATH_NOT_DIRECTORY"
 )
 
 // CanopyError is a typed error with code, message, cause, and context.
@@ -124,6 +125,15 @@ func NewRepoNotClean(repoName, action string) *CanopyError {
 		Code:    ErrRepoNotClean,
 		Message: fmt.Sprintf("repo %s has uncommitted changes. Use --force to %s", repoName, action),
 		Context: map[string]string{"repo_name": repoName, "action": action},
+	}
+}
+
+// NewRepoHasUnpushedCommits creates an error for when a repository has unpushed commits.
+func NewRepoHasUnpushedCommits(repoName string, count int, action string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrRepoHasUnpushedCommits,
+		Message: fmt.Sprintf("repo %s has %d unpushed commit(s). Use --force to %s", repoName, count, action),
+		Context: map[string]string{"repo_name": repoName, "count": fmt.Sprintf("%d", count), "action": action},
 	}
 }
 
@@ -413,29 +423,30 @@ func NewPathNotDirectory(path string) *CanopyError {
 
 // Sentinel errors for use with errors.Is().
 var (
-	WorkspaceNotFound   = &CanopyError{Code: ErrWorkspaceNotFound}
-	WorkspaceExists     = &CanopyError{Code: ErrWorkspaceExists}
-	RepoNotFound        = &CanopyError{Code: ErrRepoNotFound}
-	RepoNotClean        = &CanopyError{Code: ErrRepoNotClean}
-	RepoAlreadyExists   = &CanopyError{Code: ErrRepoAlreadyExists}
-	GitOperationFailed  = &CanopyError{Code: ErrGitOperationFailed}
-	ConfigInvalid       = &CanopyError{Code: ErrConfigInvalid}
-	ConfigValidation    = &CanopyError{Code: ErrConfigValidation}
-	UnknownRepository   = &CanopyError{Code: ErrUnknownRepository}
-	NotInWorkspace      = &CanopyError{Code: ErrNotInWorkspace}
-	CommandFailed       = &CanopyError{Code: ErrCommandFailed}
-	InvalidArgument     = &CanopyError{Code: ErrInvalidArgument}
-	OperationCancelled  = &CanopyError{Code: ErrOperationCancelled}
-	OperationTimeout    = &CanopyError{Code: ErrOperationTimeout}
-	IOFailed            = &CanopyError{Code: ErrIOFailed}
-	RegistryError       = &CanopyError{Code: ErrRegistryError}
-	InternalError       = &CanopyError{Code: ErrInternalError}
-	RepoInUse           = &CanopyError{Code: ErrRepoInUse}
-	WorkspaceMetadata   = &CanopyError{Code: ErrWorkspaceMetadata}
-	NoReposConfigured   = &CanopyError{Code: ErrNoReposConfigured}
-	MissingBranchConfig = &CanopyError{Code: ErrMissingBranchConfig}
-	HookFailed          = &CanopyError{Code: ErrHookFailed}
-	HookTimeout         = &CanopyError{Code: ErrHookTimeout}
-	PathInvalid         = &CanopyError{Code: ErrPathInvalid}
-	PathNotDirectory    = &CanopyError{Code: ErrPathNotDirectory}
+	WorkspaceNotFound      = &CanopyError{Code: ErrWorkspaceNotFound}
+	WorkspaceExists        = &CanopyError{Code: ErrWorkspaceExists}
+	RepoNotFound           = &CanopyError{Code: ErrRepoNotFound}
+	RepoNotClean           = &CanopyError{Code: ErrRepoNotClean}
+	RepoHasUnpushedCommits = &CanopyError{Code: ErrRepoHasUnpushedCommits}
+	RepoAlreadyExists      = &CanopyError{Code: ErrRepoAlreadyExists}
+	GitOperationFailed     = &CanopyError{Code: ErrGitOperationFailed}
+	ConfigInvalid          = &CanopyError{Code: ErrConfigInvalid}
+	ConfigValidation       = &CanopyError{Code: ErrConfigValidation}
+	UnknownRepository      = &CanopyError{Code: ErrUnknownRepository}
+	NotInWorkspace         = &CanopyError{Code: ErrNotInWorkspace}
+	CommandFailed          = &CanopyError{Code: ErrCommandFailed}
+	InvalidArgument        = &CanopyError{Code: ErrInvalidArgument}
+	OperationCancelled     = &CanopyError{Code: ErrOperationCancelled}
+	OperationTimeout       = &CanopyError{Code: ErrOperationTimeout}
+	IOFailed               = &CanopyError{Code: ErrIOFailed}
+	RegistryError          = &CanopyError{Code: ErrRegistryError}
+	InternalError          = &CanopyError{Code: ErrInternalError}
+	RepoInUse              = &CanopyError{Code: ErrRepoInUse}
+	WorkspaceMetadata      = &CanopyError{Code: ErrWorkspaceMetadata}
+	NoReposConfigured      = &CanopyError{Code: ErrNoReposConfigured}
+	MissingBranchConfig    = &CanopyError{Code: ErrMissingBranchConfig}
+	HookFailed             = &CanopyError{Code: ErrHookFailed}
+	HookTimeout            = &CanopyError{Code: ErrHookTimeout}
+	PathInvalid            = &CanopyError{Code: ErrPathInvalid}
+	PathNotDirectory       = &CanopyError{Code: ErrPathNotDirectory}
 )

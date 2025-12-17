@@ -317,6 +317,20 @@ func TestCloseWorkspaceDirtyFailsWithoutForce(t *testing.T) {
 	}
 }
 
+func TestCloseWorkspaceCleanSucceeds(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create workspace with no repos (simplest clean case)
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "PROJ-CLEAN", "", []domain.Repo{}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Attempt to close - should succeed
+	if _, err := deps.svc.CloseWorkspaceKeepMetadata(context.Background(), "PROJ-CLEAN", false); err != nil {
+		t.Fatalf("expected close keep-metadata to succeed on clean workspace: %v", err)
+	}
+}
+
 func TestRestoreWorkspaceForceDoesNotDeleteWithoutClosedEntry(t *testing.T) {
 	deps := newTestService(t)
 
