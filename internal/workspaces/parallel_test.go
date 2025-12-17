@@ -187,6 +187,7 @@ func TestRunParallelCanonical_ContextCancellation(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// Cancel only after at least one worker has started
 	go func() {
