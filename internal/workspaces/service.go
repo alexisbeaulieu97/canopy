@@ -897,14 +897,6 @@ func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
 	return workspaces, nil
 }
 
-// CalculateDiskUsage sums file sizes under the provided root and returns latest mtime.
-// Note: .git directories are skipped so LastModified reflects working tree activity.
-//
-// Deprecated: Use DiskUsageCalculator.Calculate directly. This method delegates to DiskUsageCalculator.
-func (s *Service) CalculateDiskUsage(root string) (int64, time.Time, error) {
-	return s.diskUsage.Calculate(root)
-}
-
 // ListClosedWorkspaces returns closed workspace metadata.
 func (s *Service) ListClosedWorkspaces() ([]domain.ClosedWorkspace, error) {
 	return s.wsEngine.ListClosed()

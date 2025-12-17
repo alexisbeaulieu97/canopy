@@ -25,7 +25,7 @@ func TestExecuteHooks_Success(t *testing.T) {
 		{Command: "echo hello"},
 	}
 
-	ctx := HookContext{
+	ctx := domain.HookContext{
 		WorkspaceID:   "test-ws",
 		WorkspacePath: tmpDir,
 		BranchName:    "main",
@@ -49,7 +49,7 @@ func TestExecuteHooks_CommandFailed(t *testing.T) {
 		{Command: "exit 1"},
 	}
 
-	ctx := HookContext{
+	ctx := domain.HookContext{
 		WorkspaceID:   "test-ws",
 		WorkspacePath: tmpDir,
 		BranchName:    "main",
@@ -86,7 +86,7 @@ func TestExecuteHooks_ContinueOnError(t *testing.T) {
 		{Command: "touch " + markerFile},
 	}
 
-	ctx := HookContext{
+	ctx := domain.HookContext{
 		WorkspaceID:   "test-ws",
 		WorkspacePath: tmpDir,
 		BranchName:    "main",
@@ -120,7 +120,7 @@ func TestExecuteHooks_HookContinueOnError(t *testing.T) {
 		{Command: "touch " + markerFile},
 	}
 
-	ctx := HookContext{
+	ctx := domain.HookContext{
 		WorkspaceID:   "test-ws",
 		WorkspacePath: tmpDir,
 		BranchName:    "main",
@@ -149,7 +149,7 @@ func TestExecuteHooks_Timeout(t *testing.T) {
 		{Command: "sleep 10", Timeout: 1}, // 1 second timeout
 	}
 
-	ctx := HookContext{
+	ctx := domain.HookContext{
 		WorkspaceID:   "test-ws",
 		WorkspacePath: tmpDir,
 		BranchName:    "main",
@@ -192,7 +192,7 @@ func TestExecuteHooks_EnvironmentVariables(t *testing.T) {
 		{Command: "echo $CANOPY_WORKSPACE_ID,$CANOPY_BRANCH > " + outputFile},
 	}
 
-	ctx := HookContext{
+	ctx := domain.HookContext{
 		WorkspaceID:   "test-ws-123",
 		WorkspacePath: tmpDir,
 		BranchName:    "feature/test",
@@ -244,7 +244,7 @@ func TestExecuteHooks_RepoFilter(t *testing.T) {
 		},
 	}
 
-	ctx := HookContext{
+	ctx := domain.HookContext{
 		WorkspaceID:   "test-ws",
 		WorkspacePath: tmpDir,
 		BranchName:    "main",
@@ -292,7 +292,7 @@ func TestExecuteHooks_RepoEnvironmentVariables(t *testing.T) {
 		},
 	}
 
-	ctx := HookContext{
+	ctx := domain.HookContext{
 		WorkspaceID:   "test-ws",
 		WorkspacePath: tmpDir,
 		BranchName:    "main",
@@ -330,7 +330,7 @@ func TestExecuteHooks_WorkingDirectory(t *testing.T) {
 		{Command: "pwd > " + outputFile},
 	}
 
-	ctx := HookContext{
+	ctx := domain.HookContext{
 		WorkspaceID:   "test-ws",
 		WorkspacePath: tmpDir,
 		BranchName:    "main",
@@ -402,7 +402,7 @@ func TestExecuteHooks_EmptyHooks(t *testing.T) {
 	logger := logging.New(false)
 	executor := NewExecutor(logger)
 
-	ctx := HookContext{
+	ctx := domain.HookContext{
 		WorkspaceID:   "test-ws",
 		WorkspacePath: tmpDir,
 		BranchName:    "main",

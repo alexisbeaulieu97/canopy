@@ -227,13 +227,6 @@ func (r *RepoRegistry) Path() string {
 	return r.path
 }
 
-// DeriveAliasFromURL returns a sensible alias from a Git URL.
-//
-// Deprecated: Use giturl.DeriveAlias instead.
-func DeriveAliasFromURL(url string) string {
-	return giturl.DeriveAlias(url)
-}
-
 func defaultRegistryPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -31,11 +31,6 @@ var _ ports.HookExecutor = (*Executor)(nil)
 // DefaultTimeout is the default hook execution timeout.
 const DefaultTimeout = 30 * time.Second
 
-// HookContext is an alias for domain.HookContext for backwards compatibility.
-//
-// Deprecated: Use domain.HookContext directly.
-type HookContext = domain.HookContext
-
 // Executor executes lifecycle hooks.
 type Executor struct {
 	logger *logging.Logger
@@ -149,7 +144,7 @@ func resolveTimeout(hookTimeout int) time.Duration {
 func (e *Executor) buildCommand(
 	ctx context.Context,
 	shell, command, workDir string,
-	hookCtx HookContext,
+	hookCtx domain.HookContext,
 	repo *domain.Repo,
 ) *exec.Cmd {
 	// The hook command comes from user-controlled config, which is the trust boundary.
@@ -162,7 +157,7 @@ func (e *Executor) buildCommand(
 }
 
 // buildEnvVars creates the environment variables for the hook command.
-func (e *Executor) buildEnvVars(ctx HookContext, repo *domain.Repo) []string {
+func (e *Executor) buildEnvVars(ctx domain.HookContext, repo *domain.Repo) []string {
 	env := append(os.Environ(),
 		fmt.Sprintf("CANOPY_WORKSPACE_ID=%s", ctx.WorkspaceID),
 		fmt.Sprintf("CANOPY_WORKSPACE_PATH=%s", ctx.WorkspacePath),

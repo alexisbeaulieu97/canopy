@@ -32,11 +32,6 @@ func New(workspacesRoot, closedRoot string) *Engine {
 	}
 }
 
-// ClosedWorkspace is an alias for domain.ClosedWorkspace for backward compatibility.
-//
-// Deprecated: Use domain.ClosedWorkspace directly.
-type ClosedWorkspace = domain.ClosedWorkspace
-
 // Create creates a new workspace directory and metadata.
 func (e *Engine) Create(dirName, id, branchName string, repos []domain.Repo) error {
 	safeDir, err := sanitizeDirName(dirName)
@@ -79,7 +74,7 @@ func (e *Engine) Save(dirName string, workspace domain.Workspace) error {
 }
 
 // Close copies workspace metadata into the closed root and returns the closed entry.
-func (e *Engine) Close(dirName string, workspace domain.Workspace, closedAt time.Time) (*ClosedWorkspace, error) {
+func (e *Engine) Close(dirName string, workspace domain.Workspace, closedAt time.Time) (*domain.ClosedWorkspace, error) {
 	if e.ClosedRoot == "" {
 		return nil, cerrors.NewConfigInvalid("closed_root is not configured")
 	}
@@ -103,7 +98,7 @@ func (e *Engine) Close(dirName string, workspace domain.Workspace, closedAt time
 		return nil, cerrors.NewWorkspaceMetadataError(workspace.ID, "write", err)
 	}
 
-	return &ClosedWorkspace{
+	return &domain.ClosedWorkspace{
 		DirName:  safeDir,
 		Path:     closedDir,
 		Metadata: workspace,
@@ -160,7 +155,7 @@ func (e *Engine) List() (map[string]domain.Workspace, error) {
 }
 
 // ListClosed returns closed workspaces stored on disk, sorted by newest first.
-func (e *Engine) ListClosed() ([]ClosedWorkspace, error) {
+func (e *Engine) ListClosed() ([]domain.ClosedWorkspace, error) {
 	if e.ClosedRoot == "" {
 		return nil, nil
 	}
@@ -174,7 +169,7 @@ func (e *Engine) ListClosed() ([]ClosedWorkspace, error) {
 		return nil, cerrors.NewIOFailed("read closed root", err)
 	}
 
-	var closed []ClosedWorkspace
+	var closed []domain.ClosedWorkspace
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -196,7 +191,7 @@ func (e *Engine) ListClosed() ([]ClosedWorkspace, error) {
 			dirPath := filepath.Join(workspaceDir, version.Name())
 
 			if w, ok := e.tryLoadMetadata(dirPath); ok {
-				closed = append(closed, ClosedWorkspace{
+				closed = append(closed, domain.ClosedWorkspace{
 					DirName:  entry.Name(),
 					Path:     dirPath,
 					Metadata: w,
@@ -376,7 +371,7 @@ func (e *Engine) Rename(oldDirName, newDirName, newID string) error {
 }
 
 // LatestClosed returns the newest closed entry for the given workspace ID.
-func (e *Engine) LatestClosed(workspaceID string) (*ClosedWorkspace, error) { //nolint:gocyclo // handles filesystem traversal and selection
+func (e *Engine) LatestClosed(workspaceID string) (*domain.ClosedWorkspace, error) { //nolint:gocyclo // handles filesystem traversal and selection
 	if e.ClosedRoot == "" {
 		return nil, cerrors.NewConfigInvalid("closed_root is not configured")
 	}
@@ -397,7 +392,7 @@ func (e *Engine) LatestClosed(workspaceID string) (*ClosedWorkspace, error) { //
 		return nil, cerrors.NewIOFailed("read closed entries", err)
 	}
 
-	var latest *ClosedWorkspace
+	var latest *domain.ClosedWorkspace
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -407,7 +402,7 @@ func (e *Engine) LatestClosed(workspaceID string) (*ClosedWorkspace, error) { //
 		dirPath := filepath.Join(workspaceDir, entry.Name())
 
 		if w, ok := e.tryLoadMetadata(dirPath); ok {
-			candidate := &ClosedWorkspace{
+			candidate := &domain.ClosedWorkspace{
 				DirName:  safeDir,
 				Path:     dirPath,
 				Metadata: w,
