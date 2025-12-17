@@ -215,14 +215,12 @@ var repoRegisterCmd = &cobra.Command{
 		if err := app.Config.GetRegistry().Register(alias, entry, force); err != nil {
 			return err
 		}
-		if err := app.Config.GetRegistry().Save(); err != nil {
-			if rollbackErr := app.Config.GetRegistry().Unregister(alias); rollbackErr != nil {
-				app.Logger.Errorf("Failed to rollback registration: %v", rollbackErr)
-			} else if rollbackSaveErr := app.Config.GetRegistry().Save(); rollbackSaveErr != nil {
-				app.Logger.Errorf("Failed to save rollback: %v", rollbackSaveErr)
-			}
 
-			return cerrors.NewRegistryError("save", "failed to save registry", err)
+		rollbackFn := func() error {
+			return app.Config.GetRegistry().Unregister(alias)
+		}
+		if err := saveRegistryWithRollback(app.Config.GetRegistry(), rollbackFn, "registration", app.Logger); err != nil {
+			return err
 		}
 
 		fmt.Printf("Registered '%s' -> %s\n", alias, url) //nolint:forbidigo // user-facing CLI output
@@ -250,14 +248,12 @@ var repoUnregisterCmd = &cobra.Command{
 		if err := app.Config.GetRegistry().Unregister(alias); err != nil {
 			return err
 		}
-		if err := app.Config.GetRegistry().Save(); err != nil {
-			if restoreErr := app.Config.GetRegistry().Register(alias, entry, true); restoreErr != nil {
-				app.Logger.Errorf("Failed to restore registration: %v", restoreErr)
-			} else if restoreSaveErr := app.Config.GetRegistry().Save(); restoreSaveErr != nil {
-				app.Logger.Errorf("Failed to save restored registration: %v", restoreSaveErr)
-			}
 
-			return cerrors.NewRegistryError("save", "failed to save registry", err)
+		rollbackFn := func() error {
+			return app.Config.GetRegistry().Register(alias, entry, true)
+		}
+		if err := saveRegistryWithRollback(app.Config.GetRegistry(), rollbackFn, "unregistration", app.Logger); err != nil {
+			return err
 		}
 
 		fmt.Printf("Unregistered '%s'\n", alias) //nolint:forbidigo // user-facing CLI output
@@ -424,13 +420,45 @@ func registerAlias(registry *config.RepoRegistry, alias string, entry config.Reg
 		return "", err
 	}
 
-	if err := registry.Save(); err != nil {
-		// Best-effort rollback - if it fails, we still return the original error
-		_ = registry.Unregister(alias)
-		return "", cerrors.NewRegistryError("save", "failed to persist registry", err)
+	rollbackFn := func() error {
+		return registry.Unregister(alias)
+	}
+	if err := saveRegistryWithRollback(registry, rollbackFn, "registration", nil); err != nil {
+		return "", err
 	}
 
 	return alias, nil
+}
+
+// rollbackLogger is an interface for logging rollback errors.
+type rollbackLogger interface {
+	Errorf(format string, args ...interface{})
+}
+
+// saveRegistryWithRollback saves the registry and performs a rollback on failure.
+// It logs any errors that occur during rollback and returns the save error if present.
+// If logger is nil, rollback errors are silently discarded.
+func saveRegistryWithRollback(
+	registry *config.RepoRegistry,
+	rollbackFn func() error,
+	rollbackDesc string,
+	logger rollbackLogger,
+) error {
+	if err := registry.Save(); err != nil {
+		if rollbackErr := rollbackFn(); rollbackErr != nil {
+			if logger != nil {
+				logger.Errorf("Failed to rollback %s: %v", rollbackDesc, rollbackErr)
+			}
+		} else if rollbackSaveErr := registry.Save(); rollbackSaveErr != nil {
+			if logger != nil {
+				logger.Errorf("Failed to save rollback: %v", rollbackSaveErr)
+			}
+		}
+
+		return cerrors.NewRegistryError("save", "failed to save registry", err)
+	}
+
+	return nil
 }
 
 func promptAlias(cmd *cobra.Command, alias, suggested string) (string, error) {
