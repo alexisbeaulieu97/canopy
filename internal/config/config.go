@@ -59,6 +59,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
@@ -180,6 +181,7 @@ type Config struct {
 	TUI                TUIConfig     `mapstructure:"tui"`
 	Git                GitConfig     `mapstructure:"git"`
 	Registry           *RepoRegistry `mapstructure:"-"`
+	Warnings           []string      `mapstructure:"-"` // Warnings collected during loading (e.g., deprecated keys)
 }
 
 // WorkspacePattern defines a regex pattern and default repos
@@ -191,6 +193,207 @@ type WorkspacePattern struct {
 // Defaults holds default configurations
 type Defaults struct {
 	WorkspacePatterns []WorkspacePattern `mapstructure:"workspace_patterns"`
+}
+
+// knownConfigFields contains all valid top-level and nested config field names
+// for providing suggestions when unknown fields are detected.
+var knownConfigFields = []string{
+	"projects_root",
+	"workspaces_root",
+	"closed_root",
+	"workspace_close_default",
+	"workspace_naming",
+	"stale_threshold_days",
+	"parallel_workers",
+	"defaults",
+	"defaults.workspace_patterns",
+	"hooks",
+	"hooks.post_create",
+	"hooks.pre_close",
+	"tui",
+	"tui.keybindings",
+	"tui.use_emoji",
+	"git",
+	"git.retry",
+	"git.retry.max_attempts",
+	"git.retry.initial_delay",
+	"git.retry.max_delay",
+	"git.retry.multiplier",
+	"git.retry.jitter_factor",
+	// Hook fields
+	"command",
+	"repos",
+	"shell",
+	"timeout",
+	"continue_on_error",
+	// Keybinding fields
+	"quit",
+	"search",
+	"push",
+	"close",
+	"open_editor",
+	"toggle_stale",
+	"details",
+	"confirm",
+	"cancel",
+	// Pattern fields
+	"pattern",
+}
+
+// DeprecatedKey represents a deprecated configuration key with migration guidance.
+type DeprecatedKey struct {
+	OldKey    string // The deprecated key name
+	NewKey    string // The replacement key name (empty if removed entirely)
+	Message   string // Migration guidance message
+	RemovedIn string // Version when the key will be removed (empty if just deprecated)
+}
+
+// deprecatedKeys maps deprecated config field names to their migration information.
+// Add entries here when deprecating config keys to provide helpful warnings to users.
+var deprecatedKeys = map[string]DeprecatedKey{
+	// Example (uncomment when deprecating a key):
+	// "old_field_name": {
+	//     OldKey:    "old_field_name",
+	//     NewKey:    "new_field_name",
+	//     Message:   "Use 'new_field_name' instead",
+	//     RemovedIn: "v2.0.0",
+	// },
+}
+
+// checkDeprecatedKeys checks for deprecated keys in the raw config map
+// and returns warnings for any that are found.
+func checkDeprecatedKeys(allSettings map[string]interface{}) []string {
+	var warnings []string
+
+	for oldKey, info := range deprecatedKeys {
+		if _, exists := allSettings[oldKey]; exists {
+			var warning string
+
+			if info.NewKey != "" {
+				warning = fmt.Sprintf("config key %q is deprecated, use %q instead", oldKey, info.NewKey)
+			} else {
+				warning = fmt.Sprintf("config key %q is deprecated: %s", oldKey, info.Message)
+			}
+
+			if info.RemovedIn != "" {
+				warning += fmt.Sprintf(" (will be removed in %s)", info.RemovedIn)
+			}
+
+			warnings = append(warnings, warning)
+		}
+	}
+
+	return warnings
+}
+
+// findSimilarField finds the most similar known field name using Levenshtein distance.
+// Returns empty string if no similar field is found (distance > 3).
+func findSimilarField(unknown string) string {
+	bestMatch := ""
+	bestDistance := 4 // Only suggest if distance is 3 or less
+
+	for _, known := range knownConfigFields {
+		// Extract just the field name for nested fields
+		parts := strings.Split(known, ".")
+		fieldName := parts[len(parts)-1]
+
+		dist := levenshteinDistance(strings.ToLower(unknown), strings.ToLower(fieldName))
+		if dist < bestDistance {
+			bestDistance = dist
+			bestMatch = fieldName
+		}
+
+		// Also check full path for nested fields
+		if len(parts) > 1 {
+			dist = levenshteinDistance(strings.ToLower(unknown), strings.ToLower(known))
+			if dist < bestDistance {
+				bestDistance = dist
+				bestMatch = known
+			}
+		}
+	}
+
+	return bestMatch
+}
+
+// levenshteinDistance calculates the edit distance between two strings.
+func levenshteinDistance(a, b string) int {
+	if len(a) == 0 {
+		return len(b)
+	}
+
+	if len(b) == 0 {
+		return len(a)
+	}
+
+	matrix := make([][]int, len(a)+1)
+
+	for i := range matrix {
+		matrix[i] = make([]int, len(b)+1)
+		matrix[i][0] = i
+	}
+
+	for j := range matrix[0] {
+		matrix[0][j] = j
+	}
+
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+
+			matrix[i][j] = min(
+				matrix[i-1][j]+1,      // deletion
+				matrix[i][j-1]+1,      // insertion
+				matrix[i-1][j-1]+cost, // substitution
+			)
+		}
+	}
+
+	return matrix[len(a)][len(b)]
+}
+
+// formatUnknownFieldError creates a user-friendly error message for unknown config fields.
+func formatUnknownFieldError(unknownFields []string) string {
+	var msgs []string
+
+	for _, field := range unknownFields {
+		similar := findSimilarField(field)
+		if similar != "" {
+			msgs = append(msgs, fmt.Sprintf("unknown config field %q, did you mean %q?", field, similar))
+		} else {
+			msgs = append(msgs, fmt.Sprintf("unknown config field %q", field))
+		}
+	}
+
+	return strings.Join(msgs, "; ")
+}
+
+// extractUnknownFields parses mapstructure error messages to extract unknown field names.
+// The error format is: "” has invalid keys: field1, field2" or similar.
+func extractUnknownFields(errMsg string) []string {
+	// Look for "invalid keys:" pattern
+	idx := strings.Index(errMsg, "invalid keys:")
+	if idx == -1 {
+		return nil
+	}
+
+	// Extract everything after "invalid keys:"
+	keysStr := strings.TrimSpace(errMsg[idx+len("invalid keys:"):])
+
+	// Split by comma and clean up each field name
+	var fields []string
+
+	for _, field := range strings.Split(keysStr, ",") {
+		field = strings.TrimSpace(field)
+		if field != "" {
+			fields = append(fields, field)
+		}
+	}
+
+	return fields
 }
 
 // Load initializes and loads the configuration.
@@ -263,8 +466,11 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	var cfg Config
-	if err := viper.Unmarshal(&cfg); err != nil {
-		return nil, cerrors.NewConfigInvalid(fmt.Sprintf("failed to unmarshal: %v", err))
+	// Use strict unmarshaling to detect unknown config fields (typos, etc.)
+	if err := viper.Unmarshal(&cfg, func(config *mapstructure.DecoderConfig) {
+		config.ErrorUnused = true
+	}); err != nil {
+		return nil, handleUnmarshalError(err)
 	}
 
 	// Expand tilde
@@ -272,6 +478,9 @@ func Load(configPath string) (*Config, error) {
 	cfg.WorkspacesRoot = expandPath(cfg.WorkspacesRoot, home)
 	cfg.ClosedRoot = expandPath(cfg.ClosedRoot, home)
 	cfg.CloseDefault = strings.ToLower(cfg.CloseDefault)
+
+	// Check for deprecated keys and collect warnings
+	cfg.Warnings = checkDeprecatedKeys(viper.AllSettings())
 
 	registry, err := LoadRepoRegistry("")
 	if err != nil {
@@ -281,6 +490,21 @@ func Load(configPath string) (*Config, error) {
 	cfg.Registry = registry
 
 	return &cfg, nil
+}
+
+// handleUnmarshalError processes viper unmarshal errors and provides helpful suggestions
+// for unknown fields (typos, etc.).
+func handleUnmarshalError(err error) error {
+	errMsg := err.Error()
+	if strings.Contains(errMsg, "has invalid keys") {
+		// Extract the unknown field names from the error
+		unknownFields := extractUnknownFields(errMsg)
+		if len(unknownFields) > 0 {
+			return cerrors.NewConfigValidation("config", formatUnknownFieldError(unknownFields))
+		}
+	}
+
+	return cerrors.NewConfigInvalid(fmt.Sprintf("failed to unmarshal: %v", err))
 }
 
 func expandPath(path, home string) string {
@@ -523,6 +747,11 @@ func validateHook(h Hook, hookType string, index int) error {
 		return cerrors.NewConfigValidation(field, fmt.Sprintf("timeout must be non-negative, got %d", h.Timeout))
 	}
 
+	// Validate shell is non-empty if specified
+	if h.Shell != "" && strings.TrimSpace(h.Shell) == "" {
+		return cerrors.NewConfigValidation(field, "shell cannot be empty or whitespace-only when specified")
+	}
+
 	return nil
 }
 
@@ -643,6 +872,17 @@ func (c *Config) GetUseEmoji() bool {
 func (c *Config) GetGitRetryConfig() ParsedRetryConfig {
 	parsed, _ := c.Git.Retry.Parse()
 	return parsed
+}
+
+// GetWarnings returns any warnings collected during config loading.
+// These may include deprecation warnings or other non-fatal issues.
+func (c *Config) GetWarnings() []string {
+	return c.Warnings
+}
+
+// HasWarnings returns true if there are any warnings from config loading.
+func (c *Config) HasWarnings() bool {
+	return len(c.Warnings) > 0
 }
 
 // copyKeys creates a copy of a string slice to avoid sharing references.

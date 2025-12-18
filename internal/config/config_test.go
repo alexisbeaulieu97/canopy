@@ -1429,3 +1429,390 @@ func TestTUIConfig_GetUseEmoji(t *testing.T) {
 func boolPtr(b bool) *bool {
 	return &b
 }
+
+// TestLoadWithUnknownField tests that unknown config fields are rejected with helpful suggestions
+func TestLoadWithUnknownField(t *testing.T) {
+	t.Cleanup(func() {
+		viper.Reset()
+	})
+
+	tmpDir, err := os.MkdirTemp("", "canopy-strict-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	tests := []struct {
+		name           string
+		configContent  string
+		wantErr        bool
+		errSubstr      string
+		suggestionHint string // If present, error should suggest this field
+	}{
+		{
+			name: "unknown top-level field rejected",
+			configContent: `
+projects_root: /tmp/projects
+workspaces_root: /tmp/workspaces
+closed_root: /tmp/closed
+unknown_field: some_value
+`,
+			wantErr:   true,
+			errSubstr: "unknown config field",
+		},
+		{
+			name: "typo in known field triggers error with suggestion",
+			configContent: `
+projects_root: /tmp/projects
+workspaces_root: /tmp/workspaces
+closed_root: /tmp/closed
+parrallel_workers: 8
+`,
+			wantErr:        true,
+			errSubstr:      "unknown config field",
+			suggestionHint: "parallel_workers",
+		},
+		{
+			name: "typo in stale_threshold_days",
+			configContent: `
+projects_root: /tmp/projects
+workspaces_root: /tmp/workspaces
+closed_root: /tmp/closed
+stale_treshold_days: 14
+`,
+			wantErr:        true,
+			errSubstr:      "unknown config field",
+			suggestionHint: "stale_threshold_days",
+		},
+		{
+			name: "valid config passes strict validation",
+			configContent: `
+projects_root: /tmp/projects
+workspaces_root: /tmp/workspaces
+closed_root: /tmp/closed
+workspace_close_default: delete
+stale_threshold_days: 14
+parallel_workers: 4
+`,
+			wantErr: false,
+		},
+		{
+			name: "valid config with nested fields passes",
+			configContent: `
+projects_root: /tmp/projects
+workspaces_root: /tmp/workspaces
+closed_root: /tmp/closed
+git:
+  retry:
+    max_attempts: 5
+    initial_delay: "2s"
+    max_delay: "60s"
+    multiplier: 2.0
+    jitter_factor: 0.1
+`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Reset()
+
+			configPath := filepath.Join(tmpDir, "config.yaml")
+			if err := os.WriteFile(configPath, []byte(tt.configContent), 0o644); err != nil {
+				t.Fatalf("failed to write config file: %v", err)
+			}
+
+			_, err := Load(configPath)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Load() expected error containing %q, got nil", tt.errSubstr)
+					return
+				}
+
+				if !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("Load() error = %q, want substring %q", err.Error(), tt.errSubstr)
+				}
+
+				if tt.suggestionHint != "" && !strings.Contains(err.Error(), tt.suggestionHint) {
+					t.Errorf("Load() error = %q, should suggest %q", err.Error(), tt.suggestionHint)
+				}
+			} else if err != nil {
+				t.Errorf("Load() unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestLevenshteinDistance tests the edit distance calculation
+func TestLevenshteinDistance(t *testing.T) {
+	tests := []struct {
+		a, b string
+		want int
+	}{
+		{"", "", 0},
+		{"a", "", 1},
+		{"", "b", 1},
+		{"abc", "abc", 0},
+		{"abc", "abd", 1},
+		{"parallel", "parrallel", 1},
+		{"threshold", "treshold", 1},
+		{"projects_root", "project_root", 1},
+		{"completely_different", "xyz", 19}, // Long string vs short string
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.a+"_vs_"+tt.b, func(t *testing.T) {
+			got := levenshteinDistance(tt.a, tt.b)
+			if got != tt.want {
+				t.Errorf("levenshteinDistance(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestFindSimilarField tests the field suggestion logic
+func TestFindSimilarField(t *testing.T) {
+	tests := []struct {
+		unknown string
+		want    string // Expected suggestion or empty if none expected
+	}{
+		{"parrallel_workers", "parallel_workers"},
+		{"parallel_worker", "parallel_workers"},
+		{"stale_treshold_days", "stale_threshold_days"},
+		{"project_root", "projects_root"},
+		{"workspace_root", "workspaces_root"},
+		{"completely_random_field_xyz", ""}, // No similar field
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.unknown, func(t *testing.T) {
+			got := findSimilarField(tt.unknown)
+			if got != tt.want {
+				t.Errorf("findSimilarField(%q) = %q, want %q", tt.unknown, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestExtractUnknownFields tests parsing of mapstructure error messages
+func TestExtractUnknownFields(t *testing.T) {
+	tests := []struct {
+		errMsg string
+		want   []string
+	}{
+		{
+			errMsg: "'' has invalid keys: unknown_field",
+			want:   []string{"unknown_field"},
+		},
+		{
+			errMsg: "'' has invalid keys: field1, field2, field3",
+			want:   []string{"field1", "field2", "field3"},
+		},
+		{
+			errMsg: "some other error without invalid keys",
+			want:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.errMsg, func(t *testing.T) {
+			got := extractUnknownFields(tt.errMsg)
+
+			if len(got) != len(tt.want) {
+				t.Errorf("extractUnknownFields() returned %d fields, want %d", len(got), len(tt.want))
+				return
+			}
+
+			for i, field := range got {
+				if field != tt.want[i] {
+					t.Errorf("extractUnknownFields()[%d] = %q, want %q", i, field, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+// TestHookValidation tests hook field validation including shell validation
+func TestHookValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		hook      Hook
+		hookType  string
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name:     "valid hook",
+			hook:     Hook{Command: "echo hello", Timeout: 30},
+			hookType: "post_create",
+			wantErr:  false,
+		},
+		{
+			name:     "valid hook with shell",
+			hook:     Hook{Command: "echo hello", Shell: "/bin/bash"},
+			hookType: "post_create",
+			wantErr:  false,
+		},
+		{
+			name:      "negative timeout rejected",
+			hook:      Hook{Command: "echo hello", Timeout: -5},
+			hookType:  "post_create",
+			wantErr:   true,
+			errSubstr: "timeout must be non-negative",
+		},
+		{
+			name:      "whitespace-only shell rejected",
+			hook:      Hook{Command: "echo hello", Shell: "   "},
+			hookType:  "post_create",
+			wantErr:   true,
+			errSubstr: "shell cannot be empty or whitespace-only",
+		},
+		{
+			name:     "empty shell is valid (uses default)",
+			hook:     Hook{Command: "echo hello", Shell: ""},
+			hookType: "post_create",
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateHook(tt.hook, tt.hookType, 0)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("validateHook() expected error containing %q, got nil", tt.errSubstr)
+					return
+				}
+
+				if !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("validateHook() error = %q, want substring %q", err.Error(), tt.errSubstr)
+				}
+			} else if err != nil {
+				t.Errorf("validateHook() unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestDeprecatedKeysWarning tests the deprecated key warning mechanism
+func TestDeprecatedKeysWarning(t *testing.T) {
+	// Test checkDeprecatedKeys with a mock deprecated key
+	// First, we need to temporarily add a deprecated key for testing
+	originalDeprecated := deprecatedKeys
+
+	deprecatedKeys = map[string]DeprecatedKey{
+		"old_setting": {
+			OldKey:    "old_setting",
+			NewKey:    "new_setting",
+			Message:   "Use 'new_setting' instead",
+			RemovedIn: "v2.0.0",
+		},
+		"removed_feature": {
+			OldKey:    "removed_feature",
+			NewKey:    "",
+			Message:   "This feature has been removed",
+			RemovedIn: "v1.5.0",
+		},
+	}
+
+	t.Cleanup(func() {
+		deprecatedKeys = originalDeprecated
+	})
+
+	tests := []struct {
+		name        string
+		settings    map[string]interface{}
+		wantWarning bool
+		warnSubstr  string
+	}{
+		{
+			name: "deprecated key with replacement",
+			settings: map[string]interface{}{
+				"old_setting": "value",
+			},
+			wantWarning: true,
+			warnSubstr:  "use \"new_setting\" instead",
+		},
+		{
+			name: "deprecated key without replacement",
+			settings: map[string]interface{}{
+				"removed_feature": "value",
+			},
+			wantWarning: true,
+			warnSubstr:  "removed",
+		},
+		{
+			name: "no deprecated keys",
+			settings: map[string]interface{}{
+				"projects_root": "/tmp/projects",
+			},
+			wantWarning: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := checkDeprecatedKeys(tt.settings)
+
+			if tt.wantWarning {
+				if len(warnings) == 0 {
+					t.Errorf("checkDeprecatedKeys() expected warnings, got none")
+					return
+				}
+
+				found := false
+
+				for _, w := range warnings {
+					if strings.Contains(strings.ToLower(w), strings.ToLower(tt.warnSubstr)) {
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					t.Errorf("checkDeprecatedKeys() warnings = %v, want warning containing %q", warnings, tt.warnSubstr)
+				}
+			} else {
+				if len(warnings) > 0 {
+					t.Errorf("checkDeprecatedKeys() got unexpected warnings: %v", warnings)
+				}
+			}
+		})
+	}
+}
+
+// TestConfigWarningsAccessors tests the warning getter methods
+func TestConfigWarningsAccessors(t *testing.T) {
+	t.Run("no warnings", func(t *testing.T) {
+		cfg := &Config{}
+
+		if cfg.HasWarnings() {
+			t.Error("HasWarnings() should return false for empty config")
+		}
+
+		if len(cfg.GetWarnings()) != 0 {
+			t.Error("GetWarnings() should return empty slice")
+		}
+	})
+
+	t.Run("with warnings", func(t *testing.T) {
+		cfg := &Config{
+			Warnings: []string{"warning 1", "warning 2"},
+		}
+
+		if !cfg.HasWarnings() {
+			t.Error("HasWarnings() should return true")
+		}
+
+		warnings := cfg.GetWarnings()
+		if len(warnings) != 2 {
+			t.Errorf("GetWarnings() returned %d warnings, want 2", len(warnings))
+		}
+	})
+}

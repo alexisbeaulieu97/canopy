@@ -7,6 +7,10 @@ Canopy uses a YAML configuration file for all settings.
 - [Configuration Reference](#configuration-reference)
   - [Table of Contents](#table-of-contents)
   - [File Locations](#file-locations)
+  - [Configuration Validation](#configuration-validation)
+    - [Strict Field Validation](#strict-field-validation)
+    - [Config Validate Command](#config-validate-command)
+    - [Common Configuration Mistakes](#common-configuration-mistakes)
   - [Core Settings](#core-settings)
     - [Workspace Naming Template](#workspace-naming-template)
   - [Workspace Patterns](#workspace-patterns)
@@ -45,6 +49,64 @@ canopy workspace list
 # Per-project config (useful in CI/CD)
 CANOPY_CONFIG=./ci-config.yaml canopy workspace create PROJ-123
 ```
+
+## Configuration Validation
+
+Canopy performs strict validation on configuration files to catch errors early. This includes detecting unknown fields, typos, and invalid values at startup.
+
+### Strict Field Validation
+
+Canopy rejects configuration files containing unknown or misspelled fields. When a typo is detected, Canopy suggests the correct field name:
+
+```bash
+$ canopy workspace list
+Error: configuration validation failed for config: unknown config field "parrallel_workers", did you mean "parallel_workers"?
+```
+
+This helps catch common mistakes like:
+- Typos in field names (`parrallel_workers` → `parallel_workers`)
+- Obsolete field names from older versions
+- Made-up fields that have no effect
+
+### Config Validate Command
+
+Use `canopy config validate` to check your configuration file without running other commands:
+
+```bash
+# Validate current config
+canopy config validate
+
+# Validate a specific config file
+canopy config validate --config /path/to/config.yaml
+
+# JSON output for scripting
+canopy config validate --json
+```
+
+Exit codes:
+- `0` - Configuration is valid
+- `1` - Configuration has errors
+
+Example output:
+```
+Configuration is valid.
+  Projects root:   /home/user/.canopy/projects
+  Workspaces root: /home/user/.canopy/workspaces
+  Closed root:     /home/user/.canopy/closed
+  Workspace naming: {{.ID}}
+  Registry file:   /home/user/.canopy/repos.yaml
+```
+
+### Common Configuration Mistakes
+
+| Mistake | Error | Fix |
+|---------|-------|-----|
+| `parrallel_workers: 4` | unknown config field "parrallel_workers" | Use `parallel_workers` |
+| `stale_treshold_days: 14` | unknown config field "stale_treshold_days" | Use `stale_threshold_days` |
+| `project_root: ~/projects` | unknown config field "project_root" | Use `projects_root` (plural) |
+| `workspace_root: ~/ws` | unknown config field "workspace_root" | Use `workspaces_root` (plural) |
+| Hook `timeout: -5` | timeout must be non-negative | Use positive timeout value |
+| Hook `shell: "   "` | shell cannot be empty or whitespace-only | Provide valid shell path or omit |
 
 ## Core Settings
 
