@@ -196,12 +196,12 @@ type WorkspaceStorage interface {
 │       └── worktrees/    # Git worktree tracking
 ├── workspaces/           # Active workspaces
 │   └── TICKET-123/       # Workspace directory
-│       ├── .canopy.yaml  # Workspace metadata
+│       ├── workspace.yaml  # Workspace metadata
 │       ├── backend/      # Git worktree (linked to canonical)
 │       └── frontend/     # Git worktree (linked to canonical)
 └── closed/               # Archived workspace metadata
     └── TICKET-100/
-        └── .canopy.yaml
+        └── workspace.yaml
 ```
 
 ## Git Worktree Architecture
@@ -234,6 +234,26 @@ Workspaces created before this implementation used full clones instead of true w
 2. Create a new workspace with the same repositories
 
 Existing workspaces continue to function normally.
+
+### Git Implementation Notes
+
+Canopy uses [go-git](https://github.com/go-git/go-git) for pure Go git operations, with CLI fallbacks for unsupported features.
+
+**Known Limitations:**
+
+- **SSH Authentication Only**: go-git relies on SSH agents for authentication. Ensure your SSH keys are properly configured (`ssh-add`). HTTPS with credentials requires additional setup.
+- **Worktree Creation**: Uses CLI fallback (`git worktree add`) since go-git doesn't fully support branch creation during worktree setup.
+- **No Sparse Checkout**: Sparse checkout is not supported.
+- **No Interactive Operations**: Rebase, merge conflict resolution, and other interactive git operations must be performed manually outside Canopy.
+
+**Timeouts:**
+
+- Network operations (clone, fetch, push, pull): 5 minutes default
+- Local operations (status, checkout, list): 30 seconds default
+
+**CLI Fallback:**
+
+When go-git cannot perform an operation, Canopy falls back to the git CLI via `exec.Command`. This requires git to be installed on the system.
 
 ## Error Handling
 
