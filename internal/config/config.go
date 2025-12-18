@@ -260,11 +260,6 @@ var deprecatedKeys = map[string]DeprecatedKey{
 	// },
 }
 
-// Warnings holds warnings encountered during config loading.
-type Warnings struct {
-	DeprecatedKeys []string
-}
-
 // checkDeprecatedKeys checks for deprecated keys in the raw config map
 // and returns warnings for any that are found.
 func checkDeprecatedKeys(allSettings map[string]interface{}) []string {

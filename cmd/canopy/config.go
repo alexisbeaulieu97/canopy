@@ -26,6 +26,11 @@ This command loads and validates the config file, checking for:
 Exit codes:
   0 - Configuration is valid
   1 - Configuration has errors`,
+	// Override PersistentPreRunE to skip the root command's config loading.
+	// The validate command handles its own config loading and error reporting.
+	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		jsonOutput, _ := cmd.Flags().GetBool("json")
 		validateConfigPath, _ := cmd.Flags().GetString("config")
@@ -41,24 +46,32 @@ Exit codes:
 		if err != nil {
 			if jsonOutput {
 				_ = output.PrintErrorJSON(err)
+				cmd.SilenceErrors = true
 			}
+
 			return err
 		}
 
 		// Run value validation (checks required fields, patterns, etc.)
 		if err := cfg.ValidateValues(); err != nil {
+			wrappedErr := cerrors.Wrap(cerrors.ErrConfigValidation, "configuration validation failed", err)
 			if jsonOutput {
-				_ = output.PrintErrorJSON(err)
+				_ = output.PrintErrorJSON(wrappedErr)
+				cmd.SilenceErrors = true
 			}
-			return cerrors.Wrap(cerrors.ErrConfigValidation, "configuration validation failed", err)
+
+			return wrappedErr
 		}
 
 		// Run environment validation (checks filesystem paths)
 		if err := cfg.ValidateEnvironment(); err != nil {
+			wrappedErr := cerrors.Wrap(cerrors.ErrConfigValidation, "configuration validation failed", err)
 			if jsonOutput {
-				_ = output.PrintErrorJSON(err)
+				_ = output.PrintErrorJSON(wrappedErr)
+				cmd.SilenceErrors = true
 			}
-			return cerrors.Wrap(cerrors.ErrConfigValidation, "configuration validation failed", err)
+
+			return wrappedErr
 		}
 
 		if jsonOutput {
