@@ -114,7 +114,7 @@ Configuration is valid.
 |-----|---------|-------------|
 | `projects_root` | `~/.canopy/projects` | Directory for bare git repositories |
 | `workspaces_root` | `~/.canopy/workspaces` | Directory for active worktrees |
-| `archives_root` | `~/.canopy/archives` | Directory for archived workspace metadata |
+| `closed_root` | `~/.canopy/closed` | Directory for archived workspace metadata |
 | `workspace_close_default` | `delete` | Default behavior for `workspace close`. Set to `archive` to archive by default |
 | `workspace_naming` | `{{.ID}}` | Template for workspace directory names |
 
@@ -177,8 +177,8 @@ See [Hooks Documentation](hooks.md) for complete details on template variables a
 ```yaml
 projects_root: ~/projects
 workspaces_root: ~/workspaces
-archives_root: ~/.canopy/archives
-workspace_close_default: archive
+closed_root: ~/.canopy/closed
+workspace_close_default: delete  # default; set to "archive" to keep metadata
 workspace_naming: "{{.ID}}"
 
 defaults:
