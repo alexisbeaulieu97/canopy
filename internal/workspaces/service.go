@@ -1114,6 +1114,7 @@ func (s *Service) aggregateSyncResults(workspaceID string, results []domain.Repo
 		if r.Status == domain.SyncStatusUpdated {
 			syncResult.TotalUpdated += r.Updated
 		}
+
 		if r.Status == domain.SyncStatusError || r.Status == domain.SyncStatusTimeout || r.Status == domain.SyncStatusConflict {
 			syncResult.TotalErrors++
 		}
