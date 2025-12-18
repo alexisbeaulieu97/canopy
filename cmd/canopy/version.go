@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"runtime"
 
 	"github.com/spf13/cobra"
@@ -38,21 +39,23 @@ var versionCmd = &cobra.Command{
 			GoVersion: runtime.Version(),
 		}
 
+		out := cmd.OutOrStdout()
+
 		if jsonOutput {
 			data, err := json.MarshalIndent(info, "", "  ")
 			if err != nil {
 				return err
 			}
-			fmt.Println(string(data)) //nolint:forbidigo // version output
-			return nil
+
+			_, err = fmt.Fprintln(out, string(data))
+
+			return err
 		}
 
-		fmt.Printf("canopy version %s\n", info.Version) //nolint:forbidigo // version output
-		fmt.Printf("commit: %s\n", info.Commit)         //nolint:forbidigo // version output
-		fmt.Printf("built: %s\n", info.BuildDate)       //nolint:forbidigo // version output
-		fmt.Printf("go: %s\n", info.GoVersion)          //nolint:forbidigo // version output
+		_, err := fmt.Fprintf(out, "canopy version %s\ncommit: %s\nbuilt: %s\ngo: %s\n",
+			info.Version, info.Commit, info.BuildDate, info.GoVersion)
 
-		return nil
+		return err
 	},
 }
 
@@ -61,7 +64,8 @@ func init() {
 	versionCmd.Flags().Bool("json", false, "Output version information as JSON")
 }
 
-// printVersion prints a short version string.
-func printVersion() {
-	fmt.Printf("canopy version %s\n", version) //nolint:forbidigo // version output
+// printVersion prints a short version string to the given writer.
+// Write errors are intentionally ignored as this is CLI output with no recovery path.
+func printVersion(w io.Writer) {
+	_, _ = fmt.Fprintf(w, "canopy version %s\n", version)
 }

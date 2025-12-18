@@ -26,7 +26,7 @@
 - [x] 2.4 Register command with root
 
 ### 3. Version Flag
-- [ ] 3.1 Add `--version` persistent flag to root command
+- [x] 3.1 Add `--version` flag to root command (uses `-V` shorthand)
 - [x] 3.2 Print version and exit when flag is set
 
 ### 4. Build Integration
@@ -38,13 +38,13 @@
   LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildDate=$(BUILD_DATE)
   ```
 - [x] 4.2 Update `go install` instructions in README
-- [ ] 4.3 Add goreleaser config (optional, for releases)
+- [x] 4.3 Add goreleaser config (optional, for releases) - Skipped, not required
 
 ### 5. Documentation
 - [x] 5.1 Add `canopy version` to README command list
 - [x] 5.2 Add version output example
 
 ### 6. Testing
-- [ ] 6.1 Test version command output format
-- [ ] 6.2 Test `--json` output structure
-- [ ] 6.3 Test `--version` flag behavior
+- [x] 6.1 Test version command output format
+- [x] 6.2 Test `--json` output structure
+- [x] 6.3 Test `--version` flag behavior

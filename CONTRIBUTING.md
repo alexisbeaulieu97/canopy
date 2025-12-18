@@ -156,6 +156,34 @@ Integration tests are located in `test/integration/`. They test the full applica
 make test-integration
 ```
 
+### Test Helpers
+
+The `internal/testutil/` package provides shared test utilities to avoid code duplication across test files:
+
+**Git Helpers** (`testutil/git.go`):
+- `CreateRepoWithCommit(t, path)` - Initialize a git repo with an initial commit
+- `RunGit(t, dir, args...)` - Execute a git command, fail on error
+- `RunGitOutput(t, dir, args...)` - Execute git and return output
+- `CloneToBare(t, source, dest)` - Clone a repo as bare
+
+**Filesystem Helpers** (`testutil/fs.go`):
+- `MustMkdir(t, path)` - Create directory, fail on error
+- `MustWriteFile(t, path, content)` - Write file, fail on error
+- `MustReadFile(t, path)` - Read file, fail on error
+- `MustTempDir(t, pattern)` - Create temp dir with cleanup
+
+Example usage:
+
+```go
+import "github.com/alexisbeaulieu97/canopy/internal/testutil"
+
+func TestSomething(t *testing.T) {
+    dir := testutil.MustTempDir(t, "test-")
+    testutil.CreateRepoWithCommit(t, dir)
+    testutil.RunGit(t, dir, "status")
+}
+```
+
 ## Code Style
 
 ### Go Conventions

@@ -1030,3 +1030,197 @@ func TestService_RunHooksHooksOnly(t *testing.T) {
 		t.Fatalf("pre_close hook did not run, got %q", string(preData))
 	}
 }
+
+func TestRenameWorkspace_Success(t *testing.T) {
+	t.Parallel()
+
+	deps := newTestService(t)
+
+	// Create a workspace to rename
+	ws := domain.Workspace{
+		ID:         "OLD-WS",
+		BranchName: "OLD-WS",
+	}
+
+	if err := deps.wsEngine.Create(context.Background(), ws); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Rename without branch rename (since we don't have actual git repos)
+	err := deps.svc.RenameWorkspace(context.Background(), "OLD-WS", "NEW-WS", false, false)
+	if err != nil {
+		t.Fatalf("RenameWorkspace failed: %v", err)
+	}
+
+	// Verify old workspace doesn't exist
+	_, loadErr := deps.wsEngine.Load(context.Background(), "OLD-WS")
+	if loadErr == nil {
+		t.Error("expected old workspace to not exist")
+	}
+
+	// Verify new workspace exists
+	renamed, loadErr := deps.wsEngine.Load(context.Background(), "NEW-WS")
+	if loadErr != nil {
+		t.Fatalf("failed to load renamed workspace: %v", loadErr)
+	}
+
+	if renamed.ID != "NEW-WS" {
+		t.Errorf("expected ID NEW-WS, got %s", renamed.ID)
+	}
+}
+
+func TestRenameWorkspace_ConflictFails(t *testing.T) {
+	t.Parallel()
+
+	deps := newTestService(t)
+
+	// Create source workspace
+	ws1 := domain.Workspace{ID: "WS-A", BranchName: "WS-A"}
+	if err := deps.wsEngine.Create(context.Background(), ws1); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Create target workspace
+	ws2 := domain.Workspace{ID: "WS-B", BranchName: "WS-B"}
+	if err := deps.wsEngine.Create(context.Background(), ws2); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Try to rename WS-A to WS-B without force - should fail
+	err := deps.svc.RenameWorkspace(context.Background(), "WS-A", "WS-B", false, false)
+	if err == nil {
+		t.Fatal("expected error when renaming to existing workspace")
+	}
+
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("expected 'already exists' error, got: %v", err)
+	}
+}
+
+func TestRenameWorkspace_ForceOverwrites(t *testing.T) {
+	t.Parallel()
+
+	deps := newTestService(t)
+
+	// Create source workspace
+	ws1 := domain.Workspace{ID: "WS-SRC", BranchName: "WS-SRC"}
+	if err := deps.wsEngine.Create(context.Background(), ws1); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Create target workspace
+	ws2 := domain.Workspace{ID: "WS-DST", BranchName: "WS-DST"}
+	if err := deps.wsEngine.Create(context.Background(), ws2); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Rename with force - should succeed
+	err := deps.svc.RenameWorkspace(context.Background(), "WS-SRC", "WS-DST", false, true)
+	if err != nil {
+		t.Fatalf("RenameWorkspace with force failed: %v", err)
+	}
+
+	// Verify source is gone
+	_, loadErr := deps.wsEngine.Load(context.Background(), "WS-SRC")
+	if loadErr == nil {
+		t.Error("expected source workspace to not exist")
+	}
+
+	// Verify target has source's data
+	renamed, loadErr := deps.wsEngine.Load(context.Background(), "WS-DST")
+	if loadErr != nil {
+		t.Fatalf("failed to load workspace: %v", loadErr)
+	}
+
+	// The renamed workspace should have the new ID
+	if renamed.ID != "WS-DST" {
+		t.Errorf("expected ID WS-DST, got %s", renamed.ID)
+	}
+}
+
+func TestRenameWorkspace_ClosedWorkspaceFails(t *testing.T) {
+	t.Parallel()
+
+	deps := newTestService(t)
+
+	// Create and close a workspace
+	ws := domain.Workspace{ID: "CLOSED-WS", BranchName: "CLOSED-WS"}
+	if err := deps.wsEngine.Create(context.Background(), ws); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Close the workspace (archive metadata)
+	closedAt := time.Now()
+	if _, err := deps.wsEngine.Close(context.Background(), ws.ID, closedAt); err != nil {
+		t.Fatalf("failed to close workspace: %v", err)
+	}
+
+	// Delete the workspace from active storage (this is what the service does)
+	if err := deps.wsEngine.Delete(context.Background(), ws.ID); err != nil {
+		t.Fatalf("failed to delete closed workspace: %v", err)
+	}
+
+	// Try to rename closed workspace - should fail with helpful message
+	err := deps.svc.RenameWorkspace(context.Background(), "CLOSED-WS", "NEW-NAME", false, false)
+	if err == nil {
+		t.Fatal("expected error when renaming closed workspace")
+	}
+
+	if !strings.Contains(err.Error(), "cannot rename closed workspace") {
+		t.Errorf("expected 'cannot rename closed workspace' error, got: %v", err)
+	}
+}
+
+func TestRenameWorkspace_InvalidNewIDFails(t *testing.T) {
+	t.Parallel()
+
+	deps := newTestService(t)
+
+	// Create workspace
+	ws := domain.Workspace{ID: "VALID-WS", BranchName: "VALID-WS"}
+	if err := deps.wsEngine.Create(context.Background(), ws); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Try to rename with invalid new ID (contains path separator)
+	err := deps.svc.RenameWorkspace(context.Background(), "VALID-WS", "invalid/name", false, false)
+	if err == nil {
+		t.Fatal("expected error when renaming with invalid ID")
+	}
+
+	if !strings.Contains(err.Error(), "path separator") {
+		t.Errorf("expected validation error about path separator, got: %v", err)
+	}
+}
+
+func TestRenameWorkspace_SameIDFails(t *testing.T) {
+	t.Parallel()
+
+	deps := newTestService(t)
+
+	// Create workspace
+	ws := domain.Workspace{ID: "SAME-ID", BranchName: "SAME-ID"}
+	if err := deps.wsEngine.Create(context.Background(), ws); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Try to rename to the same ID (even with force)
+	err := deps.svc.RenameWorkspace(context.Background(), "SAME-ID", "SAME-ID", false, true)
+	if err == nil {
+		t.Fatal("expected error when renaming to the same ID")
+	}
+
+	if !strings.Contains(err.Error(), "same ID") {
+		t.Errorf("expected error about same ID, got: %v", err)
+	}
+
+	// Verify workspace still exists
+	loaded, loadErr := deps.wsEngine.Load(context.Background(), "SAME-ID")
+	if loadErr != nil {
+		t.Fatalf("workspace should still exist after failed rename: %v", loadErr)
+	}
+
+	if loaded.ID != "SAME-ID" {
+		t.Errorf("expected workspace ID to be SAME-ID, got: %s", loaded.ID)
+	}
+}

@@ -3,6 +3,7 @@ package workspaces
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -368,4 +369,38 @@ func TestConfigParallelWorkersDefault(t *testing.T) {
 	if config.MaxParallelWorkers != 10 {
 		t.Errorf("expected max parallel workers to be 10, got %d", config.MaxParallelWorkers)
 	}
+}
+
+// BenchmarkRunParallelCanonical benchmarks parallel execution performance.
+func BenchmarkRunParallelCanonical(b *testing.B) {
+	mockGit := mocks.NewMockGitOperations()
+	mockCfg := mocks.NewMockConfigProvider()
+
+	// Simulate some work
+	mockGit.EnsureCanonicalFunc = func(_ context.Context, _, _ string) (*git.Repository, error) {
+		time.Sleep(time.Microsecond) // Minimal simulated work
+		return nil, nil
+	}
+
+	svc := &Service{
+		config:    mockCfg,
+		gitEngine: mockGit,
+	}
+
+	repos := make([]domain.Repo, 10)
+	for i := range repos {
+		repos[i] = domain.Repo{Name: "repo" + strconv.Itoa(i), URL: "https://github.com/org/repo.git"}
+	}
+
+	b.Run("parallel-4-workers", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_ = svc.runParallelCanonical(context.Background(), repos, parallelCanonicalOptions{workers: 4})
+		}
+	})
+
+	b.Run("sequential-1-worker", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_ = svc.runParallelCanonical(context.Background(), repos, parallelCanonicalOptions{workers: 1})
+		}
+	})
 }

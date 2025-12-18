@@ -42,7 +42,7 @@ var (
 		Run: func(cmd *cobra.Command, _ []string) {
 			// Handle --version flag on root command
 			if showVersion {
-				printVersion()
+				printVersion(cmd.OutOrStdout())
 				return
 			}
 			// Show help when no subcommand is provided
