@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	"github.com/alexisbeaulieu97/canopy/internal/mocks"
@@ -583,6 +584,160 @@ func TestServiceWithNewMockInterfaces(t *testing.T) {
 
 		if svc.cache == nil {
 			t.Error("default cache was not created")
+		}
+	})
+}
+
+func TestCloseWorkspaceWithUnpushedCommits(t *testing.T) {
+	t.Parallel()
+
+	t.Run("close blocked when repo has unpushed commits", func(t *testing.T) {
+		t.Parallel()
+
+		mockStorage := mocks.NewMockWorkspaceStorage()
+		mockStorage.Workspaces["ws-unpushed"] = domain.Workspace{
+			ID:         "ws-unpushed",
+			BranchName: "ws-unpushed",
+			Repos: []domain.Repo{
+				{Name: "repo-a", URL: "https://example.com/repo-a"},
+			},
+		}
+
+		mockConfig := mocks.NewMockConfigProvider()
+		mockConfig.WorkspacesRoot = t.TempDir()
+
+		mockGit := mocks.NewMockGitOperations()
+		mockGit.StatusFunc = func(_ context.Context, _ string) (bool, int, int, string, error) {
+			// Return: isDirty=false, unpushed=2, behind=0, branch="ws-unpushed"
+			return false, 2, 0, "ws-unpushed", nil
+		}
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil)
+
+		// Attempt to close without force - should fail due to unpushed commits
+		_, err := svc.CloseWorkspaceKeepMetadata(context.Background(), "ws-unpushed", false)
+		if err == nil {
+			t.Fatal("expected close to fail when repo has unpushed commits")
+		}
+	})
+
+	t.Run("close allowed when repo is clean (no dirty, no unpushed)", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		mockStorage := mocks.NewMockWorkspaceStorage()
+		mockStorage.Workspaces["ws-clean"] = domain.Workspace{
+			ID:         "ws-clean",
+			BranchName: "ws-clean",
+			Repos: []domain.Repo{
+				{Name: "repo-a", URL: "https://example.com/repo-a"},
+			},
+		}
+
+		mockConfig := mocks.NewMockConfigProvider()
+		mockConfig.WorkspacesRoot = tmpDir
+
+		mockGit := mocks.NewMockGitOperations()
+		mockGit.StatusFunc = func(_ context.Context, _ string) (bool, int, int, string, error) {
+			// Return: isDirty=false, unpushed=0, behind=0, branch="ws-clean"
+			return false, 0, 0, "ws-clean", nil
+		}
+		mockGit.RemoveWorktreeFunc = func(_ context.Context, _, _ string) error {
+			return nil
+		}
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil)
+
+		// Close should succeed
+		_, err := svc.CloseWorkspaceKeepMetadata(context.Background(), "ws-clean", false)
+		if err != nil {
+			t.Fatalf("expected close to succeed when repo is clean: %v", err)
+		}
+	})
+
+	t.Run("force bypasses unpushed check", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		mockStorage := mocks.NewMockWorkspaceStorage()
+		mockStorage.Workspaces["ws-force"] = domain.Workspace{
+			ID:         "ws-force",
+			BranchName: "ws-force",
+			Repos: []domain.Repo{
+				{Name: "repo-a", URL: "https://example.com/repo-a"},
+			},
+		}
+
+		mockConfig := mocks.NewMockConfigProvider()
+		mockConfig.WorkspacesRoot = tmpDir
+
+		mockGit := mocks.NewMockGitOperations()
+		mockGit.StatusFunc = func(_ context.Context, _ string) (bool, int, int, string, error) {
+			// Return: isDirty=false, unpushed=5, behind=0, branch="ws-force"
+			return false, 5, 0, "ws-force", nil
+		}
+		mockGit.RemoveWorktreeFunc = func(_ context.Context, _, _ string) error {
+			return nil
+		}
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil)
+
+		// Force close should succeed despite unpushed commits
+		_, err := svc.CloseWorkspaceKeepMetadata(context.Background(), "ws-force", true)
+		if err != nil {
+			t.Fatalf("expected force close to succeed despite unpushed commits: %v", err)
+		}
+	})
+
+	t.Run("preview shows unpushed commit warning", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		mockStorage := mocks.NewMockWorkspaceStorage()
+		mockStorage.Workspaces["ws-preview"] = domain.Workspace{
+			ID:         "ws-preview",
+			BranchName: "ws-preview",
+			Repos: []domain.Repo{
+				{Name: "repo-a", URL: "https://example.com/repo-a"},
+			},
+		}
+
+		mockConfig := mocks.NewMockConfigProvider()
+		mockConfig.WorkspacesRoot = tmpDir
+
+		mockGit := mocks.NewMockGitOperations()
+		mockGit.StatusFunc = func(_ context.Context, _ string) (bool, int, int, string, error) {
+			// Return: isDirty=true, unpushed=3, behind=0, branch="ws-preview"
+			return true, 3, 0, "ws-preview", nil
+		}
+
+		mockDiskUsage := mocks.NewMockDiskUsage()
+		mockDiskUsage.CachedUsageFunc = func(_ string) (int64, time.Time, error) {
+			return 1024, time.Time{}, nil
+		}
+
+		svc := NewService(mockConfig, mockGit, mockStorage, nil, WithDiskUsage(mockDiskUsage))
+
+		preview, err := svc.PreviewCloseWorkspace("ws-preview", true)
+		if err != nil {
+			t.Fatalf("PreviewCloseWorkspace failed: %v", err)
+		}
+
+		if len(preview.RepoStatuses) != 1 {
+			t.Fatalf("expected 1 repo status, got %d", len(preview.RepoStatuses))
+		}
+
+		status := preview.RepoStatuses[0]
+		if status.Name != "repo-a" {
+			t.Errorf("expected repo name repo-a, got %s", status.Name)
+		}
+
+		if !status.IsDirty {
+			t.Error("expected IsDirty=true")
+		}
+
+		if status.UnpushedCount != 3 {
+			t.Errorf("expected unpushed count 3, got %d", status.UnpushedCount)
 		}
 	})
 }

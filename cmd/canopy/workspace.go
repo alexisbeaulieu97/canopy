@@ -760,6 +760,17 @@ func printWorkspaceClosePreview(preview *domain.WorkspaceClosePreview) {
 		output.Infof("  Repos affected: %s", strings.Join(preview.ReposAffected, ", "))
 	}
 
+	// Show warnings for repos with uncommitted changes or unpushed commits
+	for _, status := range preview.RepoStatuses {
+		if status.IsDirty {
+			output.Printf("  \033[33m⚠ %s has uncommitted changes\033[0m\n", status.Name)
+		}
+
+		if status.UnpushedCount > 0 {
+			output.Printf("  \033[33m⚠ %s has %d unpushed commit(s)\033[0m\n", status.Name, status.UnpushedCount)
+		}
+	}
+
 	if preview.DiskUsageBytes > 0 {
 		output.Infof("  Total size: %s", output.FormatBytes(preview.DiskUsageBytes))
 	}

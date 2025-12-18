@@ -126,14 +126,22 @@ func (o OrphanedWorktree) ReasonDescription() string {
 	}
 }
 
+// RepoCloseStatus describes the status of a repository when closing a workspace.
+type RepoCloseStatus struct {
+	Name          string `json:"name"`
+	IsDirty       bool   `json:"is_dirty"`
+	UnpushedCount int    `json:"unpushed_count"`
+}
+
 // WorkspaceClosePreview describes what would happen when closing a workspace.
 type WorkspaceClosePreview struct {
-	WorkspaceID    string   `json:"workspace_id"`
-	WorkspacePath  string   `json:"workspace_path"`
-	BranchName     string   `json:"branch_name"`
-	ReposAffected  []string `json:"repos_affected"`
-	DiskUsageBytes int64    `json:"disk_usage_bytes"`
-	KeepMetadata   bool     `json:"keep_metadata"`
+	WorkspaceID    string            `json:"workspace_id"`
+	WorkspacePath  string            `json:"workspace_path"`
+	BranchName     string            `json:"branch_name"`
+	ReposAffected  []string          `json:"repos_affected"`
+	RepoStatuses   []RepoCloseStatus `json:"repo_statuses,omitempty"`
+	DiskUsageBytes int64             `json:"disk_usage_bytes"`
+	KeepMetadata   bool              `json:"keep_metadata"`
 }
 
 // RepoRemovePreview describes what would happen when removing a canonical repo.
