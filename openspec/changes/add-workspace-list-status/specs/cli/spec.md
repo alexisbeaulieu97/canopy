@@ -24,5 +24,5 @@ The `workspace list` command SHALL display all active workspaces. When `--status
 
 #### Scenario: List with status JSON output
 - **WHEN** I run `canopy workspace list --status --json`
-- **THEN** output SHALL be valid JSON following standard envelope
-- **AND** each workspace SHALL include `repos` array with status per repo
+- **THEN** output SHALL be valid JSON following the standard envelope format
+- **AND** each workspace in `data.workspaces` SHALL include `repos` array with status per repo
