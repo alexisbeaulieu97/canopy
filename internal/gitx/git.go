@@ -312,9 +312,16 @@ func (g *GitEngine) checkDirtyStatus(ctx context.Context, path string) (bool, er
 
 // getAheadBehindCounts returns the number of commits ahead and behind the remote.
 func (g *GitEngine) getAheadBehindCounts(ctx context.Context, path, branchName string) (unpushed, behind int) {
-	remoteBranch := fmt.Sprintf("origin/%s", branchName)
-	verifyResult, verifyErr := g.RunCommand(ctx, path, "rev-parse", "--verify", remoteBranch)
+	// Get the upstream branch for this branch
+	upstreamResult, upstreamErr := g.RunCommand(ctx, path, "rev-parse", "--symbolic-full-name", branchName+"@{upstream}")
+	if upstreamErr != nil || upstreamResult.ExitCode != 0 {
+		return 0, 0
+	}
 
+	remoteBranch := strings.TrimSpace(upstreamResult.Stdout)
+
+	// Verify the remote branch exists
+	verifyResult, verifyErr := g.RunCommand(ctx, path, "rev-parse", "--verify", remoteBranch)
 	if verifyErr != nil || verifyResult.ExitCode != 0 {
 		return 0, 0
 	}

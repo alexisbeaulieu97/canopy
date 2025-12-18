@@ -815,6 +815,10 @@ func TestSyncWorkspace(t *testing.T) {
 
 	// Manually ensure origin remote is set for the test (workaround for test environment)
 	worktreePath := filepath.Join(deps.workspacesRoot, "SYNC-WS", "sync-repo")
+	canonicalPath := filepath.Join(deps.projectsRoot, "sync-repo")
+	// Ensure canonical has the correct remote URL for fetch
+	_ = testutil.RunGitOutput(t, canonicalPath, "remote", "set-url", "origin", repoURL)
+	// Ensure worktree has the remote for pull
 	_ = testutil.RunGitOutput(t, worktreePath, "remote", "remove", "origin")
 	testutil.RunGit(t, worktreePath, "remote", "add", "origin", repoURL)
 	testutil.RunGit(t, worktreePath, "fetch", "origin")
@@ -843,6 +847,7 @@ func TestSyncWorkspace(t *testing.T) {
 	if err := os.WriteFile(filePath, []byte("new content"), 0o644); err != nil {
 		t.Fatalf("failed to write file: %v", err)
 	}
+
 	testutil.RunGit(t, sourceRepo, "add", ".")
 	testutil.RunGit(t, sourceRepo, "commit", "-m", "new commit")
 

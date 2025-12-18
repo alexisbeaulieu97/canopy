@@ -1058,20 +1058,40 @@ func (s *Service) SyncWorkspace(ctx context.Context, id string, opts SyncOptions
 		mu sync.Mutex
 	)
 
+	numWorkers := s.config.GetParallelWorkers()
+	if numWorkers <= 0 {
+		numWorkers = 1
+	}
+
+	reposChan := make(chan struct {
+		index int
+		repo  domain.Repo
+	}, len(ws.Repos))
+
 	for i, repo := range ws.Repos {
+		reposChan <- struct {
+			index int
+			repo  domain.Repo
+		}{i, repo}
+	}
+	close(reposChan)
+
+	if numWorkers > len(ws.Repos) {
+		numWorkers = len(ws.Repos)
+	}
+
+	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
-
-		go func(i int, repo domain.Repo) {
+		go func() {
 			defer wg.Done()
+			for r := range reposChan {
+				repoResult := s.syncRepo(ctx, id, r.repo, opts.Timeout)
 
-			repoResult := s.syncRepo(ctx, id, repo, opts.Timeout)
-
-			mu.Lock()
-
-			results[i] = repoResult
-
-			mu.Unlock()
-		}(i, repo)
+				mu.Lock()
+				results[r.index] = repoResult
+				mu.Unlock()
+			}
+		}()
 	}
 
 	wg.Wait()
@@ -1102,6 +1122,7 @@ func (s *Service) syncRepo(ctx context.Context, wsID string, repo domain.Repo, t
 
 	// 1. Fetch canonical
 	if err := s.gitEngine.Fetch(repoCtx, repo.Name); err != nil {
+		result.Updated = 0
 		if errors.Is(err, context.DeadlineExceeded) {
 			result.Status = domain.SyncStatusTimeout
 			result.Error = "timeout during fetch"
@@ -1122,31 +1143,33 @@ func (s *Service) syncRepo(ctx context.Context, wsID string, repo domain.Repo, t
 	if err != nil {
 		result.Status = domain.SyncStatusError
 		result.Error = fmt.Sprintf("status failed: %v", err)
+		result.Updated = 0
 
 		return result
 	}
 
 	result.Updated = behind
 
-	// 3. Pull worktree
-	err = s.gitEngine.Pull(repoCtx, worktreePath)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			result.Status = domain.SyncStatusTimeout
-			result.Error = "timeout during pull"
+	// 3. Pull worktree only if behind remote
+	if result.Updated > 0 {
+		err = s.gitEngine.Pull(repoCtx, worktreePath)
+		if err != nil {
+			result.Updated = 0
+			if errors.Is(err, context.DeadlineExceeded) {
+				result.Status = domain.SyncStatusTimeout
+				result.Error = "timeout during pull"
+
+				return result
+			}
+
+			// Check for conflicts - Usually go-git returns error if pull cannot be done cleanly.
+			// For now we treat it as error, but we could improve detection.
+			result.Status = domain.SyncStatusError
+			result.Error = fmt.Sprintf("pull failed: %v", err)
 
 			return result
 		}
 
-		// Check for conflicts - Usually go-git returns error if pull cannot be done cleanly.
-		// For now we treat it as error, but we could improve detection.
-		result.Status = domain.SyncStatusError
-		result.Error = fmt.Sprintf("pull failed: %v", err)
-
-		return result
-	}
-
-	if result.Updated > 0 {
 		result.Status = domain.SyncStatusUpdated
 	}
 

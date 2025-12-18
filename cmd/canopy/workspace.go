@@ -766,7 +766,16 @@ Per-repository timeouts can be configured to prevent slow remotes from blocking 
 					updatedStr = "-"
 				}
 
-				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Name, status, updatedStr, r.Error)
+				// Sanitize error message to prevent breaking tabwriter layout
+				errDetail := r.Error
+				errDetail = strings.ReplaceAll(errDetail, "\n", " ")
+				errDetail = strings.ReplaceAll(errDetail, "\r", " ")
+				errDetail = strings.ReplaceAll(errDetail, "\t", " ")
+				if len(errDetail) > 100 {
+					errDetail = errDetail[:97] + "..."
+				}
+
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Name, status, updatedStr, errDetail)
 			}
 			_ = w.Flush()
 
