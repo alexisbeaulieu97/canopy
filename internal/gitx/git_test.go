@@ -741,9 +741,9 @@ func TestGitEngine_LastFetchTime(t *testing.T) {
 		projectsRoot := t.TempDir()
 		repoName := "test-repo"
 		repoPath := filepath.Join(projectsRoot, repoName)
-		_ = os.MkdirAll(filepath.Join(repoPath, ".git"), 0o755)
+		_ = os.MkdirAll(repoPath, 0o755)
 
-		fetchHeadPath := filepath.Join(repoPath, ".git", "FETCH_HEAD")
+		fetchHeadPath := filepath.Join(repoPath, "FETCH_HEAD")
 		if err := os.WriteFile(fetchHeadPath, []byte("some content"), 0o644); err != nil {
 			t.Fatalf("failed to write FETCH_HEAD: %v", err)
 		}
@@ -755,25 +755,6 @@ func TestGitEngine_LastFetchTime(t *testing.T) {
 		}
 
 		engine := New(projectsRoot)
-		// We expect .git/FETCH_HEAD for LastFetchTime in the implementation
-		// Wait, the implementation uses filepath.Join(g.ProjectsRoot, repoName, "FETCH_HEAD")
-		// NOT .git/FETCH_HEAD. Bare repos usually have FETCH_HEAD at the root of the repo directory.
-		// Let me double check implementation.
-
-		// Checking git.go implementation again...
-		// func (g *GitEngine) LastFetchTime(repoName string) (*time.Time, error) {
-		//     path := filepath.Join(g.ProjectsRoot, repoName, "FETCH_HEAD")
-		// ...
-
-		// Correct. For a bare repo, FETCH_HEAD is in the root.
-		fetchHeadPath = filepath.Join(repoPath, "FETCH_HEAD")
-		if err := os.WriteFile(fetchHeadPath, []byte("some content"), 0o644); err != nil {
-			t.Fatalf("failed to write FETCH_HEAD: %v", err)
-		}
-
-		if err := os.Chtimes(fetchHeadPath, expectedTime, expectedTime); err != nil {
-			t.Fatalf("failed to set mtime: %v", err)
-		}
 
 		lastFetch, err := engine.LastFetchTime(repoName)
 		if err != nil {
