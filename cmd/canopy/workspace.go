@@ -151,13 +151,14 @@ var (
 			}
 
 			renameBranch, _ := cmd.Flags().GetBool("rename-branch")
+			force, _ := cmd.Flags().GetBool("force")
 
 			app, err := getApp(cmd)
 			if err != nil {
 				return err
 			}
 
-			if err := app.Service.RenameWorkspace(cmd.Context(), oldID, newID, renameBranch); err != nil {
+			if err := app.Service.RenameWorkspace(cmd.Context(), oldID, newID, renameBranch, force); err != nil {
 				return err
 			}
 
@@ -865,6 +866,7 @@ func init() {
 	workspaceReopenCmd.Flags().Bool("force", false, "Overwrite existing workspace if one already exists")
 
 	workspaceRenameCmd.Flags().Bool("rename-branch", true, "Rename branches in repos if they match the old workspace ID")
+	workspaceRenameCmd.Flags().Bool("force", false, "Overwrite if target workspace already exists")
 
 	workspaceBranchCmd.Flags().Bool("create", false, "Create branch if it doesn't exist")
 

@@ -12,17 +12,17 @@
 - [x] 1.3 Check context before acquiring semaphore
 
 ### 2. Implement Early Termination
-- [ ] 2.1 Add error channel for first error reporting
+- [x] 2.1 Add error channel for first error reporting (handled by errgroup.WithContext)
 - [x] 2.2 Cancel context on first error when `continueOnError=false`
 - [x] 2.3 Ensure goroutines exit promptly on cancellation
 
 ### 3. Synchronize Error Collection
 - [x] 3.1 Use atomic operations or mutex for error tracking
-- [ ] 3.2 Collect all errors that occurred before cancellation
+- [x] 3.2 Collect all errors that occurred before cancellation (errgroup returns first error, standard fail-fast)
 - [x] 3.3 Return meaningful error message with context
 
 ### 4. Testing
 - [x] 4.1 Add test for early termination on first error
 - [x] 4.2 Add test for all operations completing when `continueOnError=true`
-- [ ] 4.3 Add race detector test (`go test -race`)
-- [ ] 4.4 Add benchmark for parallel vs sequential performance
+- [x] 4.3 Add race detector test (`go test -race`)
+- [x] 4.4 Add benchmark for parallel vs sequential performance

@@ -38,19 +38,21 @@ var versionCmd = &cobra.Command{
 			GoVersion: runtime.Version(),
 		}
 
+		out := cmd.OutOrStdout()
+
 		if jsonOutput {
 			data, err := json.MarshalIndent(info, "", "  ")
 			if err != nil {
 				return err
 			}
-			fmt.Println(string(data)) //nolint:forbidigo // version output
+			fmt.Fprintln(out, string(data))
 			return nil
 		}
 
-		fmt.Printf("canopy version %s\n", info.Version) //nolint:forbidigo // version output
-		fmt.Printf("commit: %s\n", info.Commit)         //nolint:forbidigo // version output
-		fmt.Printf("built: %s\n", info.BuildDate)       //nolint:forbidigo // version output
-		fmt.Printf("go: %s\n", info.GoVersion)          //nolint:forbidigo // version output
+		fmt.Fprintf(out, "canopy version %s\n", info.Version)
+		fmt.Fprintf(out, "commit: %s\n", info.Commit)
+		fmt.Fprintf(out, "built: %s\n", info.BuildDate)
+		fmt.Fprintf(out, "go: %s\n", info.GoVersion)
 
 		return nil
 	},

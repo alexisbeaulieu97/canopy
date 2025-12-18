@@ -495,9 +495,17 @@ func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspac
 
 // RenameWorkspace renames a workspace to a new ID.
 // If renameBranch is true and the branch name matches the old ID, it will also rename branches.
-func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, renameBranch bool) error {
+// If force is true, an existing workspace with the new ID will be deleted first.
+func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, renameBranch, force bool) error {
 	workspace, _, err := s.findWorkspace(ctx, oldID)
 	if err != nil {
+		// Check if this is a closed workspace - provide a more helpful error message
+		if errors.Is(err, cerrors.WorkspaceNotFound) {
+			if closed, closedErr := s.wsEngine.LatestClosed(ctx, oldID); closedErr == nil && closed != nil {
+				return cerrors.NewInvalidArgument("workspace", "cannot rename closed workspace; reopen first with 'workspace open'")
+			}
+		}
+
 		return err
 	}
 
@@ -505,8 +513,17 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 		return err
 	}
 
-	if err := s.ensureNewIDAvailable(ctx, newID); err != nil {
-		return err
+	// Check if target exists
+	existingErr := s.ensureNewIDAvailable(ctx, newID)
+	if existingErr != nil {
+		if !force {
+			return existingErr
+		}
+
+		// Force mode: delete the existing workspace
+		if deleteErr := s.wsEngine.Delete(ctx, newID); deleteErr != nil {
+			return cerrors.NewInternalError("failed to delete existing workspace for force rename", deleteErr)
+		}
 	}
 
 	shouldRenameBranch := renameBranch && workspace.BranchName == oldID
