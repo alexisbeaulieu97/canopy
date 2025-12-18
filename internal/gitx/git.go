@@ -451,40 +451,21 @@ func (g *GitEngine) Fetch(ctx context.Context, name string) error {
 	return nil
 }
 
-// Pull pulls updates for a repository worktree
+// Pull pulls updates for a repository worktree.
 func (g *GitEngine) Pull(ctx context.Context, path string) error {
-	// Open the repository
-	r, err := git.PlainOpen(path)
-	if err != nil {
-		return cerrors.WrapGitError(err, "open repo")
-	}
-
-	// Get the worktree
-	w, err := r.Worktree()
-	if err != nil {
-		return cerrors.WrapGitError(err, "get worktree")
-	}
-
 	// Apply default timeout if context has no deadline
 	ctx, cancel := g.withDefaultTimeout(ctx)
 	defer cancel()
 
-	// Pull changes, with retry for transient failures
-	err = WithRetryNoResult(ctx, g.RetryConfig, func() error {
-		return w.PullContext(ctx, &git.PullOptions{
-			RemoteName: "origin",
-		})
-	})
-	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		if errors.Is(err, context.Canceled) {
-			return cerrors.NewOperationCanceledWithTarget("pull", path)
-		}
+	// Use CLI pull with --ff-only to avoid merge commits/conflicts in automated sync
+	res, err := g.RunCommand(ctx, path, "pull", "origin", "--ff-only")
+	if err != nil {
+		return err
+	}
 
-		if errors.Is(err, context.DeadlineExceeded) {
-			return cerrors.NewOperationTimeout("pull", path)
-		}
-
-		return cerrors.WrapGitError(err, "pull")
+	if res.ExitCode != 0 {
+		// git pull returns exit code 1 if it can't fast-forward or other errors
+		return cerrors.WrapGitError(fmt.Errorf("%s", res.Stderr), "pull")
 	}
 
 	return nil
