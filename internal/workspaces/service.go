@@ -1074,6 +1074,7 @@ func (s *Service) SyncWorkspace(ctx context.Context, id string, opts SyncOptions
 			repo  domain.Repo
 		}{i, repo}
 	}
+
 	close(reposChan)
 
 	if numWorkers > len(ws.Repos) {
@@ -1082,13 +1083,17 @@ func (s *Service) SyncWorkspace(ctx context.Context, id string, opts SyncOptions
 
 	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
+
 			for r := range reposChan {
 				repoResult := s.syncRepo(ctx, id, r.repo, opts.Timeout)
 
 				mu.Lock()
+
 				results[r.index] = repoResult
+
 				mu.Unlock()
 			}
 		}()
@@ -1096,8 +1101,12 @@ func (s *Service) SyncWorkspace(ctx context.Context, id string, opts SyncOptions
 
 	wg.Wait()
 
+	return s.aggregateSyncResults(id, results), nil
+}
+
+func (s *Service) aggregateSyncResults(workspaceID string, results []domain.RepoSyncStatus) *domain.SyncResult {
 	syncResult := &domain.SyncResult{
-		WorkspaceID: id,
+		WorkspaceID: workspaceID,
 		Repos:       results,
 	}
 
@@ -1108,7 +1117,7 @@ func (s *Service) SyncWorkspace(ctx context.Context, id string, opts SyncOptions
 		}
 	}
 
-	return syncResult, nil
+	return syncResult
 }
 
 func (s *Service) syncRepo(ctx context.Context, wsID string, repo domain.Repo, timeout time.Duration) domain.RepoSyncStatus {
