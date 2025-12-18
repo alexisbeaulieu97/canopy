@@ -250,12 +250,12 @@ var (
 
 				if showStatus {
 					ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
-					status, statusErr := service.GetStatus(w.ID)
+					status, statusErr := service.GetStatus(ctx, w.ID)
 					cancel()
 
 					if statusErr == nil && status != nil {
 						ws.RepoStatuses = status.Repos
-					} else if ctx.Err() == context.DeadlineExceeded {
+					} else if errors.Is(statusErr, context.DeadlineExceeded) {
 						// Timeout - add placeholder status
 						for range w.Repos {
 							ws.RepoStatuses = append(ws.RepoStatuses, domain.RepoStatus{
@@ -497,7 +497,7 @@ var (
 
 			service := app.Service
 
-			status, err := service.GetStatus(id)
+			status, err := service.GetStatus(cmd.Context(), id)
 			if err != nil {
 				return err
 			}

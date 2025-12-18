@@ -1002,8 +1002,8 @@ func (s *Service) ListClosedWorkspaces() ([]domain.ClosedWorkspace, error) {
 }
 
 // GetStatus returns the aggregate status of a workspace
-func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error) {
-	targetWorkspace, _, err := s.findWorkspace(context.Background(), workspaceID)
+func (s *Service) GetStatus(ctx context.Context, workspaceID string) (*domain.WorkspaceStatus, error) {
+	targetWorkspace, _, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1012,9 +1012,14 @@ func (s *Service) GetStatus(workspaceID string) (*domain.WorkspaceStatus, error)
 	var repoStatuses []domain.RepoStatus
 
 	for _, repo := range targetWorkspace.Repos {
+		// Check for context cancellation before each repo
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repo.Name)
 
-		isDirty, unpushed, behind, branch, err := s.gitEngine.Status(context.Background(), worktreePath)
+		isDirty, unpushed, behind, branch, err := s.gitEngine.Status(ctx, worktreePath)
 		if err != nil {
 			repoStatuses = append(repoStatuses, domain.RepoStatus{
 				Name:   repo.Name,
