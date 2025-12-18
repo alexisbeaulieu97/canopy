@@ -1253,3 +1253,85 @@ func (s *Service) ExportWorkspace(ctx context.Context, workspaceID string) (*dom
 func (s *Service) ImportWorkspace(ctx context.Context, export *domain.WorkspaceExport, idOverride, branchOverride string, force bool) (string, error) {
 	return s.exportService.ImportWorkspace(ctx, export, idOverride, branchOverride, force)
 }
+
+// GetCanonicalRepoStatus returns detailed status for a single canonical repository.
+func (s *Service) GetCanonicalRepoStatus(ctx context.Context, name string) (*domain.CanonicalRepoStatus, error) {
+	if s.gitEngine == nil {
+		return nil, errors.New("git engine not initialized")
+	}
+
+	path := filepath.Join(s.config.GetProjectsRoot(), name)
+
+	// Check if repo exists
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil, cerrors.NewRepoNotFound(name)
+	}
+
+	// Get disk usage
+	size, err := s.gitEngine.GetRepoSize(name)
+	if err != nil {
+		return nil, fmt.Errorf("get repo size: %w", err)
+	}
+
+	// Get last fetch time
+	lastFetch, err := s.gitEngine.LastFetchTime(name)
+	if err != nil {
+		return nil, fmt.Errorf("get last fetch time: %w", err)
+	}
+
+	// Get workspace usage
+	workspaces, err := s.wsEngine.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list workspaces: %w", err)
+	}
+
+	var usedBy []string
+
+	for _, ws := range workspaces {
+		for _, repo := range ws.Repos {
+			if repo.Name == name {
+				usedBy = append(usedBy, ws.ID)
+				break
+			}
+		}
+	}
+
+	return &domain.CanonicalRepoStatus{
+		Name:           name,
+		Path:           path,
+		DiskUsageBytes: size,
+		LastFetchTime:  lastFetch,
+		UsedByCount:    len(usedBy),
+		UsedBy:         usedBy,
+	}, nil
+}
+
+// GetAllCanonicalRepoStatuses returns status for all canonical repositories.
+func (s *Service) GetAllCanonicalRepoStatuses(ctx context.Context) ([]domain.CanonicalRepoStatus, error) {
+	if s.gitEngine == nil {
+		return nil, errors.New("git engine not initialized")
+	}
+
+	repoNames, err := s.gitEngine.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list canonical repos: %w", err)
+	}
+
+	statuses := make([]domain.CanonicalRepoStatus, 0, len(repoNames))
+	for _, name := range repoNames {
+		status, err := s.GetCanonicalRepoStatus(ctx, name)
+		if err != nil {
+			// Log error and skip this repo
+			if s.logger != nil {
+				s.logger.Warn("failed to get canonical repo status", "repo", name, "error", err)
+			}
+
+			continue
+		}
+
+		statuses = append(statuses, *status)
+	}
+
+	return statuses, nil
+}

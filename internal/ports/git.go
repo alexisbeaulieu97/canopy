@@ -3,6 +3,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 )
@@ -57,4 +58,10 @@ type GitOperations interface {
 
 	// PruneWorktrees cleans up stale worktree references from a canonical repository.
 	PruneWorktrees(ctx context.Context, repoName string) error
+
+	// LastFetchTime returns the last time the canonical repository was fetched.
+	LastFetchTime(repoName string) (*time.Time, error)
+
+	// GetRepoSize returns the disk usage of the canonical repository in bytes.
+	GetRepoSize(repoName string) (int64, error)
 }
