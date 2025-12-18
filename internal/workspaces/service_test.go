@@ -801,6 +801,65 @@ func TestImportWorkspaceWithIDOverride(t *testing.T) {
 	}
 }
 
+func TestSyncWorkspace(t *testing.T) {
+	deps := newTestService(t)
+
+	sourceRepo := filepath.Join(deps.projectsRoot, "source-sync")
+	testutil.CreateRepoWithCommit(t, sourceRepo)
+
+	repoURL := "file://" + sourceRepo
+
+	if _, err := deps.svc.CreateWorkspace(context.Background(), "SYNC-WS", "", []domain.Repo{{Name: "sync-repo", URL: repoURL}}); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Manually ensure origin remote is set for the test (workaround for test environment)
+	worktreePath := filepath.Join(deps.workspacesRoot, "SYNC-WS", "sync-repo")
+	_ = testutil.RunGitOutput(t, worktreePath, "remote", "remove", "origin")
+	testutil.RunGit(t, worktreePath, "remote", "add", "origin", repoURL)
+	testutil.RunGit(t, worktreePath, "fetch", "origin")
+	testutil.RunGit(t, worktreePath, "branch", "--set-upstream-to=origin/main", "SYNC-WS")
+
+	// 1. Sync when already up to date
+	result, err := deps.svc.SyncWorkspace(context.Background(), "SYNC-WS", SyncOptions{})
+	if err != nil {
+		t.Fatalf("SyncWorkspace failed: %v", err)
+	}
+
+	if result.TotalUpdated != 0 {
+		t.Errorf("expected 0 updated commits, got %d", result.TotalUpdated)
+	}
+
+	if len(result.Repos) != 1 {
+		t.Fatalf("expected 1 repo result, got %d", len(result.Repos))
+	}
+
+	if result.Repos[0].Status != domain.SyncStatusUpToDate {
+		t.Errorf("expected status UP-TO-DATE, got %s (Error: %s)", result.Repos[0].Status, result.Repos[0].Error)
+	}
+
+	// 2. Add a commit to source and sync
+	filePath := filepath.Join(sourceRepo, "NEW.txt")
+	if err := os.WriteFile(filePath, []byte("new content"), 0o644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	testutil.RunGit(t, sourceRepo, "add", ".")
+	testutil.RunGit(t, sourceRepo, "commit", "-m", "new commit")
+
+	result, err = deps.svc.SyncWorkspace(context.Background(), "SYNC-WS", SyncOptions{})
+	if err != nil {
+		t.Fatalf("SyncWorkspace failed: %v", err)
+	}
+
+	if result.TotalUpdated != 1 {
+		t.Errorf("expected 1 updated commit, got %d", result.TotalUpdated)
+	}
+
+	if result.Repos[0].Status != domain.SyncStatusUpdated {
+		t.Errorf("expected status UPDATED, got %s (Error: %s)", result.Repos[0].Status, result.Repos[0].Error)
+	}
+}
+
 func TestGetCanonicalRepoStatus(t *testing.T) {
 	deps := newTestService(t)
 

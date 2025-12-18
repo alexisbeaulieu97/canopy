@@ -194,6 +194,27 @@ canopy workspace branch PROJ-123 develop
 canopy workspace branch PROJ-123 feature/new --create
 ```
 
+### Syncing Workspaces
+
+The `workspace sync` command pulls updates for all repositories in a workspace and displays a curated summary instead of raw git output.
+
+```bash
+# Sync all repos in a workspace
+canopy workspace sync PROJ-123
+
+# Sync with a custom timeout (default: 60s per repo)
+canopy workspace sync PROJ-123 --timeout 30s
+
+# Output JSON for automation
+canopy workspace sync PROJ-123 --json
+```
+
+The output displays a table with:
+- **REPOSITORY**: Name of the repositories
+- **STATUS**: Outcome (UPDATED, UP-TO-DATE, CONFLICT, TIMEOUT, ERROR)
+- **UPDATED**: Number of new commits pulled
+- **DETAILS**: Error messages if any
+
 ### Running Git Commands Across Repos
 
 Execute any git command in all repositories within a workspace:

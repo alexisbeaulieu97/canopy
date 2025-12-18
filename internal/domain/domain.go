@@ -165,6 +165,38 @@ type CanonicalRepoStatus struct {
 	UsedBy         []string   `json:"used_by"`
 }
 
+// SyncStatus identifies the outcome of a repository sync operation.
+type SyncStatus string
+
+const (
+	// SyncStatusUpdated means the repository was pulled and updated with new commits.
+	SyncStatusUpdated SyncStatus = "updated"
+	// SyncStatusUpToDate means the repository was already up-to-date.
+	SyncStatusUpToDate SyncStatus = "up-to-date"
+	// SyncStatusConflict means the pull operation failed due to merge conflicts.
+	SyncStatusConflict SyncStatus = "conflict"
+	// SyncStatusTimeout means the sync operation timed out for this repository.
+	SyncStatusTimeout SyncStatus = "timeout"
+	// SyncStatusError means an unexpected error occurred during sync.
+	SyncStatusError SyncStatus = "error"
+)
+
+// RepoSyncStatus describes the sync result for a single repository.
+type RepoSyncStatus struct {
+	Name    string     `json:"name"`
+	Status  SyncStatus `json:"status"`
+	Updated int        `json:"updated"` // Number of commits pulled
+	Error   string     `json:"error,omitempty"`
+}
+
+// SyncResult aggregates sync results for an entire workspace.
+type SyncResult struct {
+	WorkspaceID  string           `json:"workspace_id"`
+	Repos        []RepoSyncStatus `json:"repos"`
+	TotalUpdated int              `json:"total_updated"`
+	TotalErrors  int              `json:"total_errors"`
+}
+
 // WorkspaceExport is the portable format for exporting/importing workspaces.
 type WorkspaceExport struct {
 	Version          string       `yaml:"version" json:"version"`
