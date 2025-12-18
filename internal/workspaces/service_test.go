@@ -865,6 +865,31 @@ func TestSyncWorkspace(t *testing.T) {
 	}
 }
 
+func TestAggregateSyncResultsCountsOnlySuccessfulUpdates(t *testing.T) {
+	deps := newTestService(t)
+
+	results := []domain.RepoSyncStatus{
+		{Name: "ok", Status: domain.SyncStatusUpdated, Updated: 3},
+		{Name: "fail", Status: domain.SyncStatusError, Updated: 2},
+		{Name: "timeout", Status: domain.SyncStatusTimeout, Updated: 1},
+		{Name: "conflict", Status: domain.SyncStatusConflict, Updated: 4},
+	}
+
+	syncResult := deps.svc.aggregateSyncResults("ws-1", results)
+
+	if syncResult.TotalUpdated != 3 {
+		t.Fatalf("expected TotalUpdated to count only successful updates, got %d", syncResult.TotalUpdated)
+	}
+
+	if syncResult.TotalErrors != 3 {
+		t.Fatalf("expected TotalErrors to count error, timeout and conflict statuses, got %d", syncResult.TotalErrors)
+	}
+
+	if syncResult.WorkspaceID != "ws-1" {
+		t.Fatalf("expected workspace id ws-1, got %s", syncResult.WorkspaceID)
+	}
+}
+
 func TestGetCanonicalRepoStatus(t *testing.T) {
 	deps := newTestService(t)
 
