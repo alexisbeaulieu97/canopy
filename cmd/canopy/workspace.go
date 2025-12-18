@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -185,6 +186,18 @@ var (
 
 			jsonOutput, _ := cmd.Flags().GetBool("json")
 			closedOnly, _ := cmd.Flags().GetBool("closed")
+			showStatus, _ := cmd.Flags().GetBool("status")
+			timeoutStr, _ := cmd.Flags().GetString("timeout")
+
+			// Parse timeout duration
+			timeout := 5 * time.Second // default
+			if timeoutStr != "" {
+				var parseErr error
+				timeout, parseErr = time.ParseDuration(timeoutStr)
+				if parseErr != nil {
+					return cerrors.NewInvalidArgument("timeout", fmt.Sprintf("invalid duration: %v", parseErr))
+				}
+			}
 
 			if closedOnly {
 				archives, err := service.ListClosedWorkspaces()
@@ -224,16 +237,59 @@ var (
 				return err
 			}
 
+			// Collect status for each workspace if --status flag is set
+			type workspaceWithStatus struct {
+				domain.Workspace
+				RepoStatuses []domain.RepoStatus `json:"repo_statuses,omitempty"`
+			}
+
+			var workspacesWithStatus []workspaceWithStatus
+
+			for _, w := range list {
+				ws := workspaceWithStatus{Workspace: w}
+
+				if showStatus {
+					ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
+					status, statusErr := service.GetStatus(ctx, w.ID)
+					cancel()
+
+					if statusErr == nil && status != nil {
+						ws.RepoStatuses = status.Repos
+					} else if errors.Is(statusErr, context.DeadlineExceeded) {
+						// Timeout - add placeholder status
+						for range w.Repos {
+							ws.RepoStatuses = append(ws.RepoStatuses, domain.RepoStatus{
+								Branch: "timeout",
+							})
+						}
+					}
+				}
+
+				workspacesWithStatus = append(workspacesWithStatus, ws)
+			}
+
 			if jsonOutput {
+				if showStatus {
+					return output.PrintJSON(map[string]interface{}{
+						"workspaces": workspacesWithStatus,
+					})
+				}
+
 				return output.PrintJSON(map[string]interface{}{
 					"workspaces": list,
 				})
 			}
 
-			for _, w := range list {
-				output.Infof("%s (Branch: %s)", w.ID, w.BranchName)
-				for _, r := range w.Repos {
-					output.Infof("  - %s (%s)", r.Name, r.URL)
+			for _, ws := range workspacesWithStatus {
+				output.Infof("%s (Branch: %s)", ws.ID, ws.BranchName)
+				for i, r := range ws.Repos {
+					if showStatus && i < len(ws.RepoStatuses) {
+						status := ws.RepoStatuses[i]
+						statusStr := formatRepoStatusIndicator(status)
+						output.Infof("  - %s (%s) %s", r.Name, r.URL, statusStr)
+					} else {
+						output.Infof("  - %s (%s)", r.Name, r.URL)
+					}
 				}
 			}
 			return nil
@@ -441,7 +497,7 @@ var (
 
 			service := app.Service
 
-			status, err := service.GetStatus(id)
+			status, err := service.GetStatus(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -896,6 +952,33 @@ func isInteractiveTerminal() bool {
 	return (info.Mode() & os.ModeCharDevice) != 0
 }
 
+// formatRepoStatusIndicator creates a human-readable status indicator for a repo.
+func formatRepoStatusIndicator(status domain.RepoStatus) string {
+	if status.Branch == "timeout" {
+		return "[timeout]"
+	}
+
+	var parts []string
+
+	if status.IsDirty {
+		parts = append(parts, "dirty")
+	}
+
+	if status.UnpushedCommits > 0 {
+		parts = append(parts, fmt.Sprintf("%d ahead", status.UnpushedCommits))
+	}
+
+	if status.BehindRemote > 0 {
+		parts = append(parts, fmt.Sprintf("%d behind", status.BehindRemote))
+	}
+
+	if len(parts) == 0 {
+		return "[clean]"
+	}
+
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
 func init() {
 	rootCmd.AddCommand(workspaceCmd)
 	workspaceCmd.AddCommand(workspaceNewCmd)
@@ -928,6 +1011,8 @@ func init() {
 
 	workspaceListCmd.Flags().Bool("json", false, "Output in JSON format")
 	workspaceListCmd.Flags().Bool("closed", false, "List closed workspaces")
+	workspaceListCmd.Flags().Bool("status", false, "Show git status for each repository")
+	workspaceListCmd.Flags().String("timeout", "5s", "Timeout for status check per workspace (e.g. 5s, 10s)")
 
 	workspaceViewCmd.Flags().Bool("json", false, "Output in JSON format")
 	workspacePathCmd.Flags().Bool("json", false, "Output in JSON format")

@@ -41,7 +41,7 @@ var statusCmd = &cobra.Command{
 		}
 		workspaceID := parts[0]
 
-		status, err := app.Service.GetStatus(workspaceID)
+		status, err := app.Service.GetStatus(cmd.Context(), workspaceID)
 		if err != nil {
 			return err
 		}

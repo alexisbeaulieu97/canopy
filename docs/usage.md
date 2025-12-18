@@ -106,8 +106,17 @@ canopy workspace list
 # List closed workspaces
 canopy workspace list --closed
 
+# Show git status for each repository
+canopy workspace list --status
+
+# With custom timeout for status check
+canopy workspace list --status --timeout 10s
+
 # JSON output for scripting
 canopy workspace list --json
+
+# JSON output with status data
+canopy workspace list --status --json
 ```
 
 ### Viewing Workspace Details

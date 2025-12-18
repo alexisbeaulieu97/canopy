@@ -56,7 +56,7 @@ func (m Model) loadWorkspaces() tea.Msg {
 // loadWorkspaceStatus creates a command to load status for a specific workspace.
 func (m Model) loadWorkspaceStatus(id string) tea.Cmd {
 	return func() tea.Msg {
-		status, err := m.svc.GetStatus(id)
+		status, err := m.svc.GetStatus(context.Background(), id)
 		if err != nil {
 			return workspaceStatusErrMsg{id: id, err: err}
 		}
@@ -73,7 +73,7 @@ func (m Model) loadWorkspaceDetails(id string) tea.Cmd {
 			return workspaceDetailsErrMsg{id: id, err: cerrors.NewWorkspaceNotFound(id)}
 		}
 
-		status, err := m.svc.GetStatus(id)
+		status, err := m.svc.GetStatus(context.Background(), id)
 		if err != nil {
 			return workspaceDetailsErrMsg{id: id, err: err}
 		}

@@ -109,6 +109,12 @@ See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 - `--no-hooks` — Skip post_create hooks
 - `--hooks-only` — Run post_create hooks without creating workspace
 
+**Flags for `workspace list`:**
+- `--status` — Show git status for each repository
+- `--timeout` — Timeout for status check per workspace (default: 5s)
+- `--closed` — List closed workspaces
+- `--json` — Output in JSON format
+
 **Flags for `workspace close`:**
 - `--keep` — Keep metadata for later restoration
 - `--delete` — Delete without keeping metadata
