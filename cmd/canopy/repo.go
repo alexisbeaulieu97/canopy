@@ -329,6 +329,48 @@ var repoShowCmd = &cobra.Command{
 	},
 }
 
+var repoStatusCmd = &cobra.Command{
+	Use:   "status [NAME]",
+	Short: "Show status of canonical repositories",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		app, err := getApp(cmd)
+		if err != nil {
+			return err
+		}
+
+		svc := app.Service
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+
+		if len(args) > 0 {
+			name := args[0]
+			status, err := svc.GetCanonicalRepoStatus(cmd.Context(), name)
+			if err != nil {
+				return err
+			}
+
+			if jsonOutput {
+				return output.PrintJSON(status)
+			}
+
+			printSingleRepoStatus(status)
+			return nil
+		}
+
+		statuses, err := svc.GetAllCanonicalRepoStatuses(cmd.Context())
+		if err != nil {
+			return err
+		}
+
+		if jsonOutput {
+			return output.PrintJSON(statuses)
+		}
+
+		printRepoStatusesTable(statuses)
+		return nil
+	},
+}
+
 var repoPathCmd = &cobra.Command{
 	Use:   "path <NAME>",
 	Short: "Print the absolute path of a canonical repository",
@@ -497,12 +539,57 @@ func printRepoRemovePreview(preview *domain.RepoRemovePreview) {
 	}
 }
 
+func printSingleRepoStatus(status *domain.CanonicalRepoStatus) {
+	output.Infof("Repository:    %s", status.Name)
+	output.Infof("Path:          %s", status.Path)
+	output.Infof("Size:          %s", output.FormatBytes(status.DiskUsageBytes))
+
+	if status.LastFetchTime != nil {
+		output.Infof("Last Fetch:    %s", status.LastFetchTime.Format("2006-01-02 15:04:05"))
+	} else {
+		output.Infof("Last Fetch:    never")
+	}
+
+	if status.UsedByCount > 0 {
+		output.Infof("Workspaces:    %d (%s)", status.UsedByCount, strings.Join(status.UsedBy, ", "))
+	} else {
+		output.Infof("Workspaces:    0 (orphaned)")
+	}
+}
+
+func printRepoStatusesTable(statuses []domain.CanonicalRepoStatus) {
+	if len(statuses) == 0 {
+		output.Infof("No canonical repositories found.")
+		return
+	}
+
+	output.Printf("%-20s %-10s %-20s %s\n", "NAME", "SIZE", "LAST FETCH", "WORKSPACES")
+	output.Printf("%-20s %-10s %-20s %s\n", strings.Repeat("-", 20), strings.Repeat("-", 10), strings.Repeat("-", 20), strings.Repeat("-", 10))
+
+	for _, s := range statuses {
+		fetchTime := "never"
+		if s.LastFetchTime != nil {
+			fetchTime = s.LastFetchTime.Format("2006-01-02 15:04")
+		}
+
+		output.Printf("%-20s %-10s %-20s %d\n",
+			s.Name,
+			output.FormatBytes(s.DiskUsageBytes),
+			fetchTime,
+			s.UsedByCount,
+		)
+	}
+
+	output.Infof("\n%d repositories", len(statuses))
+}
+
 func init() {
 	rootCmd.AddCommand(repoCmd)
 	repoCmd.AddCommand(repoListCmd)
 	repoCmd.AddCommand(repoAddCmd)
 	repoCmd.AddCommand(repoRemoveCmd)
 	repoCmd.AddCommand(repoSyncCmd)
+	repoCmd.AddCommand(repoStatusCmd)
 	repoCmd.AddCommand(repoRegisterCmd)
 	repoCmd.AddCommand(repoUnregisterCmd)
 	repoCmd.AddCommand(repoListRegistryCmd)
@@ -521,4 +608,6 @@ func init() {
 	repoRegisterCmd.Flags().String("description", "", "Description for the repository")
 	repoRegisterCmd.Flags().String("tags", "", "Comma-separated tags for filtering")
 	repoListRegistryCmd.Flags().String("tags", "", "Filter registry entries by comma-separated tags")
+
+	repoStatusCmd.Flags().Bool("json", false, "Output in JSON format")
 }

@@ -333,3 +333,46 @@ func createLocalRepo(t *testing.T, name string) string {
 
 	return "file://" + bare
 }
+
+func TestRepoStatus(t *testing.T) {
+	setupConfig(t)
+
+	// 1. Initially there might be repos from other tests, so we just check if it runs
+	out, err := runCanopy("repo", "status")
+	if err != nil {
+		t.Fatalf("repo status failed: %v\nOutput: %s", err, out)
+	}
+
+	// 2. Add a repo
+	remoteURL := createLocalRepo(t, "status-test")
+	if _, err := runCanopy("repo", "add", remoteURL, "--alias", "status-test"); err != nil {
+		t.Fatalf("repo add failed: %v", err)
+	}
+
+	// 3. Check status
+	out, err = runCanopy("repo", "status")
+	if err != nil {
+		t.Fatalf("repo status failed: %v\nOutput: %s", err, out)
+	}
+	if !strings.Contains(out, "status-test") {
+		t.Errorf("repo status missing repo:\n%s", out)
+	}
+
+	// 4. Check specific status
+	out, err = runCanopy("repo", "status", "status-test")
+	if err != nil {
+		t.Fatalf("repo status <NAME> failed: %v", err)
+	}
+	if !strings.Contains(out, "Repository:    status-test") {
+		t.Errorf("repo status <NAME> output incorrect:\n%s", out)
+	}
+
+	// 5. JSON output
+	out, err = runCanopy("repo", "status", "--json")
+	if err != nil {
+		t.Fatalf("repo status --json failed: %v", err)
+	}
+	if !strings.Contains(out, `"name": "status-test"`) {
+		t.Errorf("JSON output incorrect:\n%s", out)
+	}
+}

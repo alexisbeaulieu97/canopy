@@ -24,6 +24,9 @@
 // Orphan detection:
 //   - OrphanedWorktree: A worktree with missing or invalid references
 //   - OrphanReason: Why a worktree is considered orphaned
+//
+// Canonical repository status:
+//   - CanonicalRepoStatus: Detailed status of a bare repository
 package domain
 
 import "time"
@@ -150,6 +153,16 @@ type RepoRemovePreview struct {
 	RepoPath           string   `json:"repo_path"`
 	DiskUsageBytes     int64    `json:"disk_usage_bytes"`
 	WorkspacesAffected []string `json:"workspaces_affected"`
+}
+
+// CanonicalRepoStatus describes the health and usage of a canonical repository.
+type CanonicalRepoStatus struct {
+	Name           string     `json:"name"`
+	Path           string     `json:"path"`
+	DiskUsageBytes int64      `json:"disk_usage_bytes"`
+	LastFetchTime  *time.Time `json:"last_fetch_time"`
+	UsedByCount    int        `json:"used_by_count"`
+	UsedBy         []string   `json:"used_by"`
 }
 
 // WorkspaceExport is the portable format for exporting/importing workspaces.

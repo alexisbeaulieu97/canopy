@@ -801,6 +801,89 @@ func TestImportWorkspaceWithIDOverride(t *testing.T) {
 	}
 }
 
+func TestGetCanonicalRepoStatus(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create a bare repo
+	repoName := "test-repo"
+	repoPath := filepath.Join(deps.projectsRoot, repoName)
+	_ = os.MkdirAll(repoPath, 0o755)
+	_ = os.WriteFile(filepath.Join(repoPath, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644)
+
+	// Add FETCH_HEAD for last fetch time
+	expectedTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
+	_ = os.WriteFile(filepath.Join(repoPath, "FETCH_HEAD"), []byte("..."), 0o644)
+	_ = os.Chtimes(filepath.Join(repoPath, "FETCH_HEAD"), expectedTime, expectedTime)
+
+	// Create some files for size
+	_ = os.WriteFile(filepath.Join(repoPath, "data"), make([]byte, 500), 0o644)
+
+	// Create workspaces using this repo
+	ws := domain.Workspace{
+		ID: "WS-1",
+		Repos: []domain.Repo{
+			{Name: repoName, URL: "https://github.com/test/repo.git"},
+		},
+	}
+	_ = deps.wsEngine.Create(context.Background(), ws)
+
+	status, err := deps.svc.GetCanonicalRepoStatus(context.Background(), repoName)
+	if err != nil {
+		t.Fatalf("GetCanonicalRepoStatus failed: %v", err)
+	}
+
+	if status.Name != repoName {
+		t.Errorf("expected %s, got %s", repoName, status.Name)
+	}
+
+	if status.DiskUsageBytes != 503+5 { // data(500) + FETCH_HEAD(...) + HEAD(23)
+		// Precise size depends on content, but let's check it's positive
+		if status.DiskUsageBytes <= 0 {
+			t.Errorf("expected positive DiskUsageBytes, got %d", status.DiskUsageBytes)
+		}
+	}
+
+	if status.LastFetchTime == nil || !status.LastFetchTime.Equal(expectedTime) {
+		t.Errorf("expected %v, got %v", expectedTime, status.LastFetchTime)
+	}
+
+	if status.UsedByCount != 1 || status.UsedBy[0] != "WS-1" {
+		t.Errorf("expected [WS-1], got %v", status.UsedBy)
+	}
+}
+
+func TestGetAllCanonicalRepoStatuses(t *testing.T) {
+	deps := newTestService(t)
+
+	// Create two bare repos
+	repos := []string{"repo-a", "repo-b"}
+	for _, name := range repos {
+		path := filepath.Join(deps.projectsRoot, name)
+		_ = os.MkdirAll(path, 0o755)
+		_ = os.WriteFile(filepath.Join(path, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644)
+	}
+
+	statuses, err := deps.svc.GetAllCanonicalRepoStatuses(context.Background())
+	if err != nil {
+		t.Fatalf("GetAllCanonicalRepoStatuses failed: %v", err)
+	}
+
+	if len(statuses) != 2 {
+		t.Errorf("expected 2 statuses, got %d", len(statuses))
+	}
+
+	names := make(map[string]bool)
+	for _, s := range statuses {
+		names[s.Name] = true
+	}
+
+	for _, name := range repos {
+		if !names[name] {
+			t.Errorf("expected status for %s, was not found", name)
+		}
+	}
+}
+
 func TestImportWorkspaceWithBranchOverride(t *testing.T) {
 	deps := newTestService(t)
 

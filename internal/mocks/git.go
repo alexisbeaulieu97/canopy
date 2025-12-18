@@ -3,6 +3,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 
@@ -28,6 +29,8 @@ type MockGitOperations struct {
 	GetUpstreamURLFunc  func(repoName string) (string, error)
 	RemoveWorktreeFunc  func(ctx context.Context, repoName, worktreePath string) error
 	PruneWorktreesFunc  func(ctx context.Context, repoName string) error
+	LastFetchTimeFunc   func(repoName string) (*time.Time, error)
+	GetRepoSizeFunc     func(repoName string) (int64, error)
 }
 
 // NewMockGitOperations creates a new MockGitOperations with default no-op behavior.
@@ -159,4 +162,22 @@ func (m *MockGitOperations) PruneWorktrees(ctx context.Context, repoName string)
 	}
 
 	return nil
+}
+
+// LastFetchTime calls the mock function if set, otherwise returns nil.
+func (m *MockGitOperations) LastFetchTime(repoName string) (*time.Time, error) {
+	if m.LastFetchTimeFunc != nil {
+		return m.LastFetchTimeFunc(repoName)
+	}
+
+	return nil, nil
+}
+
+// GetRepoSize calls the mock function if set, otherwise returns 0.
+func (m *MockGitOperations) GetRepoSize(repoName string) (int64, error) {
+	if m.GetRepoSizeFunc != nil {
+		return m.GetRepoSizeFunc(repoName)
+	}
+
+	return 0, nil
 }

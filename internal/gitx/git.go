@@ -923,3 +923,46 @@ func (g *GitEngine) PruneWorktrees(ctx context.Context, repoName string) error {
 
 	return nil
 }
+
+// LastFetchTime returns the last time the canonical repository was fetched.
+// It checks the modification time of .git/FETCH_HEAD.
+func (g *GitEngine) LastFetchTime(repoName string) (*time.Time, error) {
+	path := filepath.Join(g.ProjectsRoot, repoName, "FETCH_HEAD")
+
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+
+		return nil, cerrors.NewIOFailed(fmt.Sprintf("stat %s", path), err)
+	}
+
+	mtime := info.ModTime()
+
+	return &mtime, nil
+}
+
+// GetRepoSize returns the disk usage of the canonical repository in bytes.
+func (g *GitEngine) GetRepoSize(repoName string) (int64, error) {
+	path := filepath.Join(g.ProjectsRoot, repoName)
+
+	var size int64
+
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			size += info.Size()
+		}
+
+		return nil
+	})
+	if err != nil {
+		return 0, cerrors.NewIOFailed(fmt.Sprintf("walk %s", path), err)
+	}
+
+	return size, nil
+}
