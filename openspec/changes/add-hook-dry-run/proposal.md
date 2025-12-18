@@ -8,7 +8,7 @@ Users configuring hooks have no safe way to verify their commands before executi
 - When enabled, print the hook commands that would execute without running them
 - Show resolved variables (workspace ID, repo name, branch) in the preview
 - Support `canopy hooks list` command to show configured hooks and their triggers
-- Add `canopy hooks test <hook-name> --workspace <id>` to dry-run a specific hook
+- Add `canopy hooks test <event> --workspace <id>` to dry-run a specific hook event
 
 ## Impact
 - Affected specs: `specs/cli/spec.md`

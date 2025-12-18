@@ -28,6 +28,7 @@ The `canopy doctor` command SHALL validate the environment and configuration, re
 - **WHEN** I run `canopy doctor --fix`
 - **THEN** the system SHALL create the missing directory
 - **AND** report that it was auto-fixed
+- **AND** the exit code SHALL be 0
 
 #### Scenario: JSON output for scripting
 - **WHEN** I run `canopy doctor --json`
