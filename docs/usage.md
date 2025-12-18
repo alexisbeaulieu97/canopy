@@ -284,6 +284,27 @@ Fetch updates from remote:
 canopy repo sync backend
 ```
 
+### Checking Repository Status
+
+View detailed information about canonical repositories, including disk usage, last fetch time, and workspace usage:
+
+```bash
+# List status for all repositories
+canopy repo status
+
+# Show status for a specific repository
+canopy repo status backend
+
+# Output in JSON format
+canopy repo status --json
+```
+
+Output includes:
+- **NAME**: Repository alias
+- **SIZE**: Disk usage on the local system
+- **LAST FETCH**: Time of the last `repo sync` or `workspace update`
+- **WORKSPACES**: Number of active/archived workspaces using this repository
+
 ### Getting Repository Path
 
 Print the absolute path of a canonical repository:

@@ -1257,70 +1257,36 @@ func (s *Service) ImportWorkspace(ctx context.Context, export *domain.WorkspaceE
 // GetCanonicalRepoStatus returns detailed status for a single canonical repository.
 func (s *Service) GetCanonicalRepoStatus(ctx context.Context, name string) (*domain.CanonicalRepoStatus, error) {
 	if s.gitEngine == nil {
-		return nil, errors.New("git engine not initialized")
+		return nil, cerrors.NewInternalError("git engine not initialized", nil)
 	}
 
-	path := filepath.Join(s.config.GetProjectsRoot(), name)
-
-	// Check if repo exists
-	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return nil, cerrors.NewRepoNotFound(name)
-	}
-
-	// Get disk usage
-	size, err := s.gitEngine.GetRepoSize(name)
+	usageMap, err := s.buildRepoUsageMap(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get repo size: %w", err)
+		return nil, err
 	}
 
-	// Get last fetch time
-	lastFetch, err := s.gitEngine.LastFetchTime(name)
-	if err != nil {
-		return nil, fmt.Errorf("get last fetch time: %w", err)
-	}
-
-	// Get workspace usage
-	workspaces, err := s.wsEngine.List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list workspaces: %w", err)
-	}
-
-	var usedBy []string
-
-	for _, ws := range workspaces {
-		for _, repo := range ws.Repos {
-			if repo.Name == name {
-				usedBy = append(usedBy, ws.ID)
-				break
-			}
-		}
-	}
-
-	return &domain.CanonicalRepoStatus{
-		Name:           name,
-		Path:           path,
-		DiskUsageBytes: size,
-		LastFetchTime:  lastFetch,
-		UsedByCount:    len(usedBy),
-		UsedBy:         usedBy,
-	}, nil
+	return s.getCanonicalRepoStatus(ctx, name, usageMap)
 }
 
 // GetAllCanonicalRepoStatuses returns status for all canonical repositories.
 func (s *Service) GetAllCanonicalRepoStatuses(ctx context.Context) ([]domain.CanonicalRepoStatus, error) {
 	if s.gitEngine == nil {
-		return nil, errors.New("git engine not initialized")
+		return nil, cerrors.NewInternalError("git engine not initialized", nil)
 	}
 
 	repoNames, err := s.gitEngine.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list canonical repos: %w", err)
+		return nil, cerrors.WrapGitError(err, "list canonical repos")
+	}
+
+	usageMap, err := s.buildRepoUsageMap(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	statuses := make([]domain.CanonicalRepoStatus, 0, len(repoNames))
 	for _, name := range repoNames {
-		status, err := s.GetCanonicalRepoStatus(ctx, name)
+		status, err := s.getCanonicalRepoStatus(ctx, name, usageMap)
 		if err != nil {
 			// Log error and skip this repo
 			if s.logger != nil {
@@ -1334,4 +1300,56 @@ func (s *Service) GetAllCanonicalRepoStatuses(ctx context.Context) ([]domain.Can
 	}
 
 	return statuses, nil
+}
+
+// getCanonicalRepoStatus is a helper that performs the status lookup with a precomputed usage map.
+func (s *Service) getCanonicalRepoStatus(_ context.Context, name string, usageMap map[string][]string) (*domain.CanonicalRepoStatus, error) {
+	path := filepath.Join(s.config.GetProjectsRoot(), name)
+
+	// Check if repo exists
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil, cerrors.NewRepoNotFound(name)
+	}
+
+	// Get disk usage
+	size, err := s.gitEngine.GetRepoSize(name)
+	if err != nil {
+		return nil, cerrors.NewIOFailed(fmt.Sprintf("get repo size for %s", name), err)
+	}
+
+	// Get last fetch time
+	lastFetch, err := s.gitEngine.LastFetchTime(name)
+	if err != nil {
+		return nil, cerrors.WrapGitError(err, fmt.Sprintf("get last fetch time for %s", name))
+	}
+
+	usedBy := usageMap[name]
+
+	return &domain.CanonicalRepoStatus{
+		Name:           name,
+		Path:           path,
+		DiskUsageBytes: size,
+		LastFetchTime:  lastFetch,
+		UsedByCount:    len(usedBy),
+		UsedBy:         usedBy,
+	}, nil
+}
+
+// buildRepoUsageMap builds a map of repository names to the IDs of workspaces that use them.
+func (s *Service) buildRepoUsageMap(ctx context.Context) (map[string][]string, error) {
+	workspaces, err := s.wsEngine.List(ctx)
+	if err != nil {
+		return nil, cerrors.NewIOFailed("list workspaces", err)
+	}
+
+	usageMap := make(map[string][]string)
+
+	for _, ws := range workspaces {
+		for _, repo := range ws.Repos {
+			usageMap[repo.Name] = append(usageMap[repo.Name], ws.ID)
+		}
+	}
+
+	return usageMap, nil
 }

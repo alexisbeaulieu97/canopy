@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -727,6 +728,112 @@ func TestGitEngine_ContextCancellation(t *testing.T) {
 		err := engine.CreateWorktree(ctx, "test-repo", worktreePath, "feature-branch")
 		if err == nil {
 			t.Error("expected error with canceled context, got nil")
+		}
+	})
+}
+
+func TestGitEngine_LastFetchTime(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns mtime of FETCH_HEAD", func(t *testing.T) {
+		t.Parallel()
+
+		projectsRoot := t.TempDir()
+		repoName := "test-repo"
+		repoPath := filepath.Join(projectsRoot, repoName)
+		_ = os.MkdirAll(filepath.Join(repoPath, ".git"), 0o755)
+
+		fetchHeadPath := filepath.Join(repoPath, ".git", "FETCH_HEAD")
+		if err := os.WriteFile(fetchHeadPath, []byte("some content"), 0o644); err != nil {
+			t.Fatalf("failed to write FETCH_HEAD: %v", err)
+		}
+
+		// Set a specific mtime
+		expectedTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
+		if err := os.Chtimes(fetchHeadPath, expectedTime, expectedTime); err != nil {
+			t.Fatalf("failed to set mtime: %v", err)
+		}
+
+		engine := New(projectsRoot)
+		// We expect .git/FETCH_HEAD for LastFetchTime in the implementation
+		// Wait, the implementation uses filepath.Join(g.ProjectsRoot, repoName, "FETCH_HEAD")
+		// NOT .git/FETCH_HEAD. Bare repos usually have FETCH_HEAD at the root of the repo directory.
+		// Let me double check implementation.
+
+		// Checking git.go implementation again...
+		// func (g *GitEngine) LastFetchTime(repoName string) (*time.Time, error) {
+		//     path := filepath.Join(g.ProjectsRoot, repoName, "FETCH_HEAD")
+		// ...
+
+		// Correct. For a bare repo, FETCH_HEAD is in the root.
+		fetchHeadPath = filepath.Join(repoPath, "FETCH_HEAD")
+		if err := os.WriteFile(fetchHeadPath, []byte("some content"), 0o644); err != nil {
+			t.Fatalf("failed to write FETCH_HEAD: %v", err)
+		}
+
+		if err := os.Chtimes(fetchHeadPath, expectedTime, expectedTime); err != nil {
+			t.Fatalf("failed to set mtime: %v", err)
+		}
+
+		lastFetch, err := engine.LastFetchTime(repoName)
+		if err != nil {
+			t.Fatalf("LastFetchTime failed: %v", err)
+		}
+
+		if lastFetch == nil {
+			t.Fatal("expected lastFetch to be non-nil")
+		}
+
+		if !lastFetch.Equal(expectedTime) {
+			t.Errorf("expected %v, got %v", expectedTime, lastFetch)
+		}
+	})
+
+	t.Run("returns nil if FETCH_HEAD does not exist", func(t *testing.T) {
+		t.Parallel()
+
+		projectsRoot := t.TempDir()
+		engine := New(projectsRoot)
+
+		lastFetch, err := engine.LastFetchTime("non-existent")
+		if err != nil {
+			t.Fatalf("LastFetchTime failed: %v", err)
+		}
+
+		if lastFetch != nil {
+			t.Errorf("expected nil lastFetch, got %v", lastFetch)
+		}
+	})
+}
+
+func TestGitEngine_GetRepoSize(t *testing.T) {
+	t.Parallel()
+
+	t.Run("calculates total directory size", func(t *testing.T) {
+		t.Parallel()
+
+		projectsRoot := t.TempDir()
+		repoName := "test-repo"
+		repoPath := filepath.Join(projectsRoot, repoName)
+		_ = os.MkdirAll(repoPath, 0o755)
+
+		// Create some files with known sizes
+		file1 := filepath.Join(repoPath, "file1")
+		_ = os.WriteFile(file1, make([]byte, 100), 0o644)
+
+		file2 := filepath.Join(repoPath, "subdir", "file2")
+		_ = os.MkdirAll(filepath.Join(repoPath, "subdir"), 0o755)
+		_ = os.WriteFile(file2, make([]byte, 200), 0o644)
+
+		engine := New(projectsRoot)
+
+		size, err := engine.GetRepoSize(repoName)
+		if err != nil {
+			t.Fatalf("GetRepoSize failed: %v", err)
+		}
+
+		if size != 300 {
+			t.Errorf("expected 300, got %d", size)
 		}
 	})
 }

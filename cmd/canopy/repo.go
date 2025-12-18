@@ -332,6 +332,7 @@ var repoShowCmd = &cobra.Command{
 var repoStatusCmd = &cobra.Command{
 	Use:   "status [NAME]",
 	Short: "Show status of canonical repositories",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		app, err := getApp(cmd)
 		if err != nil {
