@@ -46,16 +46,16 @@ var versionCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(out, string(data))
-			return nil
+
+			_, err = fmt.Fprintln(out, string(data))
+
+			return err
 		}
 
-		fmt.Fprintf(out, "canopy version %s\n", info.Version)
-		fmt.Fprintf(out, "commit: %s\n", info.Commit)
-		fmt.Fprintf(out, "built: %s\n", info.BuildDate)
-		fmt.Fprintf(out, "go: %s\n", info.GoVersion)
+		_, err := fmt.Fprintf(out, "canopy version %s\ncommit: %s\nbuilt: %s\ngo: %s\n",
+			info.Version, info.Commit, info.BuildDate, info.GoVersion)
 
-		return nil
+		return err
 	},
 }
 
@@ -65,6 +65,7 @@ func init() {
 }
 
 // printVersion prints a short version string to the given writer.
+// Write errors are intentionally ignored as this is CLI output with no recovery path.
 func printVersion(w io.Writer) {
-	fmt.Fprintf(w, "canopy version %s\n", version)
+	_, _ = fmt.Fprintf(w, "canopy version %s\n", version)
 }
