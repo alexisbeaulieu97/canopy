@@ -95,6 +95,7 @@ See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 | `canopy workspace reopen <ID>` | Restore an archived workspace |
 | `canopy workspace rename <OLD> <NEW>` | Rename a workspace |
 | `canopy workspace branch <ID> <BRANCH>` | Switch branch for all repos |
+| `canopy workspace sync <ID>` | Pull updates for all repositories |
 | `canopy workspace git <ID> <git-args...>` | Run git command across all repos |
 | `canopy workspace export <ID>` | Export workspace definition |
 | `canopy workspace import <file>` | Import workspace from file |
@@ -115,6 +116,10 @@ See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 - `--dry-run` — Preview what would be deleted
 - `--no-hooks` — Skip pre_close hooks
 - `--hooks-only` — Run pre_close hooks without closing workspace
+
+**Flags for `workspace sync`:**
+- `--timeout` — Timeout for each repository sync (default: 60s)
+- `--json` — Output in JSON format
 
 ### Repositories
 

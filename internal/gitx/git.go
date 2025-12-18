@@ -312,9 +312,16 @@ func (g *GitEngine) checkDirtyStatus(ctx context.Context, path string) (bool, er
 
 // getAheadBehindCounts returns the number of commits ahead and behind the remote.
 func (g *GitEngine) getAheadBehindCounts(ctx context.Context, path, branchName string) (unpushed, behind int) {
-	remoteBranch := fmt.Sprintf("origin/%s", branchName)
-	verifyResult, verifyErr := g.RunCommand(ctx, path, "rev-parse", "--verify", remoteBranch)
+	// Get the upstream branch for this branch
+	upstreamResult, upstreamErr := g.RunCommand(ctx, path, "rev-parse", "--symbolic-full-name", branchName+"@{upstream}")
+	if upstreamErr != nil || upstreamResult.ExitCode != 0 {
+		return 0, 0
+	}
 
+	remoteBranch := strings.TrimSpace(upstreamResult.Stdout)
+
+	// Verify the remote branch exists
+	verifyResult, verifyErr := g.RunCommand(ctx, path, "rev-parse", "--verify", remoteBranch)
 	if verifyErr != nil || verifyResult.ExitCode != 0 {
 		return 0, 0
 	}
@@ -444,40 +451,21 @@ func (g *GitEngine) Fetch(ctx context.Context, name string) error {
 	return nil
 }
 
-// Pull pulls updates for a repository worktree
+// Pull pulls updates for a repository worktree.
 func (g *GitEngine) Pull(ctx context.Context, path string) error {
-	// Open the repository
-	r, err := git.PlainOpen(path)
-	if err != nil {
-		return cerrors.WrapGitError(err, "open repo")
-	}
-
-	// Get the worktree
-	w, err := r.Worktree()
-	if err != nil {
-		return cerrors.WrapGitError(err, "get worktree")
-	}
-
 	// Apply default timeout if context has no deadline
 	ctx, cancel := g.withDefaultTimeout(ctx)
 	defer cancel()
 
-	// Pull changes, with retry for transient failures
-	err = WithRetryNoResult(ctx, g.RetryConfig, func() error {
-		return w.PullContext(ctx, &git.PullOptions{
-			RemoteName: "origin",
-		})
-	})
-	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		if errors.Is(err, context.Canceled) {
-			return cerrors.NewOperationCanceledWithTarget("pull", path)
-		}
+	// Use CLI pull with --ff-only to avoid merge commits/conflicts in automated sync
+	res, err := g.RunCommand(ctx, path, "pull", "origin", "--ff-only")
+	if err != nil {
+		return err
+	}
 
-		if errors.Is(err, context.DeadlineExceeded) {
-			return cerrors.NewOperationTimeout("pull", path)
-		}
-
-		return cerrors.WrapGitError(err, "pull")
+	if res.ExitCode != 0 {
+		// git pull returns exit code 1 if it can't fast-forward or other errors
+		return cerrors.WrapGitError(fmt.Errorf("%s", res.Stderr), "pull")
 	}
 
 	return nil
