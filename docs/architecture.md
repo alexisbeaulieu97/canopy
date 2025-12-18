@@ -25,10 +25,10 @@ internal/
 ├── mocks/        # Mock implementations for testing
 ├── output/       # CLI output formatting
 ├── ports/        # Interface definitions (the "ports")
+├── storage/      # Workspace storage adapter
 ├── testutil/     # Test utilities
 ├── tui/          # Terminal UI components
 ├── validation/   # Input validation
-├── workspace/    # Workspace storage adapter
 └── workspaces/   # Core business logic (the "core")
 ```
 
@@ -107,7 +107,7 @@ func (s *Service) CreateWorkspace(ctx context.Context, id string, repos []domain
 Concrete implementations of ports:
 
 - **`internal/gitx`**: Git operations using go-git
-- **`internal/workspace`**: File-based workspace storage
+- **`internal/storage`**: File-based workspace storage
 - **`internal/config`**: YAML configuration via Viper
 - **`internal/hooks`**: Shell command execution
 

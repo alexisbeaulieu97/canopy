@@ -93,15 +93,27 @@ See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 | `canopy workspace path <ID>` | Print workspace path |
 | `canopy workspace close <ID>` | Close and optionally archive workspace |
 | `canopy workspace reopen <ID>` | Restore an archived workspace |
+| `canopy workspace rename <OLD> <NEW>` | Rename a workspace |
+| `canopy workspace branch <ID> <BRANCH>` | Switch branch for all repos |
+| `canopy workspace git <ID> <git-args...>` | Run git command across all repos |
+| `canopy workspace export <ID>` | Export workspace definition |
+| `canopy workspace import <file>` | Import workspace from file |
+| `canopy workspace repo add <ID> <REPO>` | Add a repository to workspace |
+| `canopy workspace repo remove <ID> <REPO>` | Remove a repository from workspace |
 
 **Flags for `workspace new`:**
 - `--repos` — Comma-separated list of repositories
 - `--branch` — Custom branch name (defaults to ID)
+- `--print-path` — Print the created workspace path
+- `--no-hooks` — Skip post_create hooks
 - `--hooks-only` — Run post_create hooks without creating workspace
 
 **Flags for `workspace close`:**
 - `--keep` — Keep metadata for later restoration
 - `--delete` — Delete without keeping metadata
+- `--force` — Force close even with uncommitted changes
+- `--dry-run` — Preview what would be deleted
+- `--no-hooks` — Skip pre_close hooks
 - `--hooks-only` — Run pre_close hooks without closing workspace
 
 ### Repositories
@@ -112,6 +124,7 @@ See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 | `canopy repo add <URL>` | Clone and register a repository |
 | `canopy repo remove <NAME>` | Remove a repository |
 | `canopy repo sync <NAME>` | Fetch updates from remote |
+| `canopy repo path <NAME>` | Print canonical repository path |
 
 ### Registry
 
@@ -168,7 +181,7 @@ Configuration is stored in `~/.canopy/config.yaml`:
 ```yaml
 projects_root: ~/projects
 workspaces_root: ~/workspaces
-archives_root: ~/.canopy/archives
+closed_root: ~/.canopy/closed
 workspace_close_default: archive  # or delete
 
 defaults:

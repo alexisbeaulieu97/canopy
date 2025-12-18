@@ -68,11 +68,11 @@ git push origin PROJ-123
 When finished:
 
 ```bash
-# Archive for later restoration
-canopy workspace close PROJ-123 --archive
+# Keep metadata for later restoration
+canopy workspace close PROJ-123 --keep
 
 # Or delete completely
-canopy workspace close PROJ-123 --no-archive
+canopy workspace close PROJ-123 --delete
 ```
 
 ### 6. Restore if Needed
@@ -172,6 +172,89 @@ canopy workspace reopen PROJ-123
 
 This recreates worktrees from the archived metadata.
 
+### Renaming Workspaces
+
+```bash
+# Rename workspace (also renames branches by default)
+canopy workspace rename PROJ-123 PROJ-456
+
+# Rename workspace only, keep branches as-is
+canopy workspace rename PROJ-123 PROJ-456 --rename-branch=false
+```
+
+### Switching Branches
+
+Switch all repositories in a workspace to a different branch:
+
+```bash
+# Switch to existing branch
+canopy workspace branch PROJ-123 develop
+
+# Create and switch to new branch
+canopy workspace branch PROJ-123 feature/new --create
+```
+
+### Running Git Commands Across Repos
+
+Execute any git command in all repositories within a workspace:
+
+```bash
+# Check status in all repos
+canopy workspace git PROJ-123 status
+
+# Fetch all remotes
+canopy workspace git PROJ-123 -- fetch --all
+
+# Run in parallel for faster execution
+canopy workspace git PROJ-123 --parallel pull
+
+# Continue even if some repos fail
+canopy workspace git PROJ-123 --continue-on-error status
+```
+
+### Exporting and Importing Workspaces
+
+Export a workspace definition to share or backup:
+
+```bash
+# Export to stdout
+canopy workspace export PROJ-123
+
+# Export to file
+canopy workspace export PROJ-123 --output workspace.yaml
+
+# Export as JSON
+canopy workspace export PROJ-123 --format json
+```
+
+Import a workspace from an exported file:
+
+```bash
+# Import from file
+canopy workspace import workspace.yaml
+
+# Import with different workspace ID
+canopy workspace import workspace.yaml --id NEW-WORKSPACE
+
+# Import with different branch
+canopy workspace import workspace.yaml --branch develop
+
+# Import from stdin
+canopy workspace import - < workspace.yaml
+```
+
+### Managing Workspace Repositories
+
+Add or remove repositories from an existing workspace:
+
+```bash
+# Add a repository
+canopy workspace repo add PROJ-123 backend
+
+# Remove a repository
+canopy workspace repo remove PROJ-123 frontend
+```
+
 ## Repository Management
 
 ### Adding Repositories
@@ -201,14 +284,16 @@ Fetch updates from remote:
 canopy repo sync backend
 ```
 
-### Checking Repository Status
+### Getting Repository Path
+
+Print the absolute path of a canonical repository:
 
 ```bash
-# Status of all repositories
-canopy repo status
+canopy repo path backend
+# /home/user/.canopy/projects/backend
 
-# Status of specific repository
-canopy repo status backend
+# JSON output for scripting
+canopy repo path backend --json
 ```
 
 ### Using the Registry
@@ -313,4 +398,4 @@ If you often reopen workspaces, set archiving as default:
 workspace_close_default: archive
 ```
 
-Then use `--no-archive` when you want to delete permanently.
+Then use `--delete` when you want to delete permanently.
