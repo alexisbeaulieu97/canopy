@@ -3,6 +3,7 @@ package workspaces
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -388,7 +389,7 @@ func BenchmarkRunParallelCanonical(b *testing.B) {
 
 	repos := make([]domain.Repo, 10)
 	for i := range repos {
-		repos[i] = domain.Repo{Name: "repo" + string(rune('0'+i)), URL: "https://github.com/org/repo.git"}
+		repos[i] = domain.Repo{Name: "repo" + strconv.Itoa(i), URL: "https://github.com/org/repo.git"}
 	}
 
 	b.Run("parallel-4-workers", func(b *testing.B) {

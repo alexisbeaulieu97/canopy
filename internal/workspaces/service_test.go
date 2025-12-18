@@ -1192,3 +1192,35 @@ func TestRenameWorkspace_InvalidNewIDFails(t *testing.T) {
 		t.Errorf("expected validation error about path separator, got: %v", err)
 	}
 }
+
+func TestRenameWorkspace_SameIDFails(t *testing.T) {
+	t.Parallel()
+
+	deps := newTestService(t)
+
+	// Create workspace
+	ws := domain.Workspace{ID: "SAME-ID", BranchName: "SAME-ID"}
+	if err := deps.wsEngine.Create(context.Background(), ws); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Try to rename to the same ID (even with force)
+	err := deps.svc.RenameWorkspace(context.Background(), "SAME-ID", "SAME-ID", false, true)
+	if err == nil {
+		t.Fatal("expected error when renaming to the same ID")
+	}
+
+	if !strings.Contains(err.Error(), "same ID") {
+		t.Errorf("expected error about same ID, got: %v", err)
+	}
+
+	// Verify workspace still exists
+	loaded, loadErr := deps.wsEngine.Load(context.Background(), "SAME-ID")
+	if loadErr != nil {
+		t.Fatalf("workspace should still exist after failed rename: %v", loadErr)
+	}
+
+	if loaded.ID != "SAME-ID" {
+		t.Errorf("expected workspace ID to be SAME-ID, got: %s", loaded.ID)
+	}
+}

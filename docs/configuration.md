@@ -114,7 +114,7 @@ Configuration is valid.
 |-----|---------|-------------|
 | `projects_root` | `~/.canopy/projects` | Directory for bare git repositories |
 | `workspaces_root` | `~/.canopy/workspaces` | Directory for active worktrees |
-| `closed_root` | `~/.canopy/closed` | Directory for archived workspace metadata |
+| `closed_root` | `~/.canopy/closed` | Directory for archived workspace metadata (used only when `workspace_close_default` is `archive` or `--keep` flag is passed to `workspace close`) |
 | `workspace_close_default` | `delete` | Default behavior for `workspace close`. Set to `archive` to archive by default |
 | `workspace_naming` | `{{.ID}}` | Template for workspace directory names |
 

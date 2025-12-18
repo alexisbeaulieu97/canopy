@@ -513,10 +513,20 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 		return err
 	}
 
+	// Reject renaming to the same ID
+	if oldID == newID {
+		return cerrors.NewInvalidArgument("new_id", "cannot rename workspace to the same ID")
+	}
+
 	// Check if target exists
 	existingErr := s.ensureNewIDAvailable(ctx, newID)
 	if existingErr != nil {
-		if !force {
+		// Only force-delete when the error is specifically "workspace exists"
+		var canopyErr *cerrors.CanopyError
+
+		isWorkspaceExists := errors.As(existingErr, &canopyErr) && canopyErr.Code == cerrors.ErrWorkspaceExists
+
+		if !force || !isWorkspaceExists {
 			return existingErr
 		}
 

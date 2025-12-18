@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"runtime"
 
 	"github.com/spf13/cobra"
@@ -63,7 +64,7 @@ func init() {
 	versionCmd.Flags().Bool("json", false, "Output version information as JSON")
 }
 
-// printVersion prints a short version string.
-func printVersion() {
-	fmt.Printf("canopy version %s\n", version) //nolint:forbidigo // version output
+// printVersion prints a short version string to the given writer.
+func printVersion(w io.Writer) {
+	fmt.Fprintf(w, "canopy version %s\n", version)
 }

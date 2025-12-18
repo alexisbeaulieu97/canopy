@@ -103,11 +103,15 @@ func TestVersionFlag(t *testing.T) {
 
 	version = "v2.0.0"
 
-	// Test that printVersion outputs the expected format
-	// Note: We can't easily capture stdout in this test setup,
-	// but we verify the function exists and version var is set correctly
-	if version != "v2.0.0" {
-		t.Errorf("expected version v2.0.0, got %s", version)
+	// Test that printVersion outputs the expected short format
+	var buf bytes.Buffer
+	printVersion(&buf)
+
+	output := buf.String()
+	expected := "canopy version v2.0.0\n"
+
+	if output != expected {
+		t.Errorf("printVersion() = %q, want %q", output, expected)
 	}
 }
 
