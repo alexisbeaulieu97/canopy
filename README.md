@@ -182,7 +182,7 @@ Configuration is stored in `~/.canopy/config.yaml`:
 projects_root: ~/projects
 workspaces_root: ~/workspaces
 closed_root: ~/.canopy/closed
-workspace_close_default: archive  # or delete
+workspace_close_default: delete  # default; set to "archive" to keep metadata
 
 defaults:
   workspace_patterns:

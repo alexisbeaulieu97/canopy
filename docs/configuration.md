@@ -178,7 +178,7 @@ See [Hooks Documentation](hooks.md) for complete details on template variables a
 projects_root: ~/projects
 workspaces_root: ~/workspaces
 closed_root: ~/.canopy/closed
-workspace_close_default: archive
+workspace_close_default: delete  # default; set to "archive" to keep metadata
 workspace_naming: "{{.ID}}"
 
 defaults:
