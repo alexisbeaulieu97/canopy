@@ -75,9 +75,9 @@ type GitOperations interface {
 
 // Workspace persistence
 type WorkspaceStorage interface {
-    Create(dirName, id, branch string, repos []domain.Repo) error
-    List() (map[string]domain.Workspace, error)
-    Load(dirName string) (*domain.Workspace, error)
+    Create(ctx context.Context, ws domain.Workspace) error
+    List(ctx context.Context) ([]domain.Workspace, error)
+    Load(ctx context.Context, id string) (*domain.Workspace, error)
     // ...
 }
 ```
@@ -154,12 +154,12 @@ Handles workspace persistence:
 
 ```go
 type WorkspaceStorage interface {
-    Create(dirName, id, branch string, repos []domain.Repo) error
-    Save(dirName string, ws domain.Workspace) error
-    Load(dirName string) (*domain.Workspace, error)
-    List() (map[string]domain.Workspace, error)
-    Delete(id string) error
-    Close(dirName string, ws domain.Workspace, closedAt time.Time) (*domain.ClosedWorkspace, error)
+    Create(ctx context.Context, ws domain.Workspace) error
+    Save(ctx context.Context, ws domain.Workspace) error
+    Load(ctx context.Context, id string) (*domain.Workspace, error)
+    List(ctx context.Context) ([]domain.Workspace, error)
+    Delete(ctx context.Context, id string) error
+    Close(ctx context.Context, id string, closedAt time.Time) (*domain.ClosedWorkspace, error)
 }
 ```
 

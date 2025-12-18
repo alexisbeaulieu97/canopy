@@ -305,7 +305,7 @@ internal/
 ├── gitx/         # Git operations (adapter)
 ├── hooks/        # Hook execution (adapter)
 ├── ports/        # Interface definitions
-├── workspace/    # Workspace storage (adapter)
+├── storage/      # Workspace storage (adapter)
 ├── workspaces/   # Business logic (core)
 └── validation/   # Input validation
 ```

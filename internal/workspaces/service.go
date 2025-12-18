@@ -254,7 +254,9 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 	// Manual cleanup helper
 	cleanup := func() {
 		path := filepath.Join(s.config.GetWorkspacesRoot(), id)
-		_ = os.RemoveAll(path)
+		if err := os.RemoveAll(path); err != nil {
+			s.logger.Warn("cleanup failed", "path", path, "error", err)
+		}
 	}
 
 	// Clone repositories (if any)
