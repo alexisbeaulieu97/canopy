@@ -205,3 +205,69 @@ func TestWorkspaceRenameWithBranch(t *testing.T) {
 		t.Errorf("Branch should be renamed to TEST-BRANCH-NEW, got %s", newBranch)
 	}
 }
+func TestWorkspaceListWithStatus(t *testing.T) {
+	tc := newTestContext(t)
+
+	repoAURL := createLocalRepo(t, "list-status-repo-a")
+	repoBURL := createLocalRepo(t, "list-status-repo-b")
+
+	tc.setupBasicConfig(map[string]string{
+		"list-status-repo-a": repoAURL,
+		"list-status-repo-b": repoBURL,
+	})
+
+	// Create workspace
+	tc.createWorkspace("TEST-LIST-STATUS", "list-status-repo-a", "list-status-repo-b")
+
+	wsDir := filepath.Join(tc.wsRoot, "TEST-LIST-STATUS")
+	repoADir := filepath.Join(wsDir, "list-status-repo-a")
+
+	// Make repo-a dirty
+	tc.makeDirty(repoADir)
+
+	// 1. Test list without --status (should work)
+	out, err := runCanopy("workspace", "list")
+	if err != nil {
+		t.Fatalf("Failed to list workspaces: %v\nOutput: %s", err, out)
+	}
+
+	if !strings.Contains(out, "TEST-LIST-STATUS") {
+		t.Errorf("List output should contain workspace ID: %s", out)
+	}
+
+	// 2. Test list with --status
+	out, err = runCanopy("workspace", "list", "--status")
+	if err != nil {
+		t.Fatalf("Failed to list workspaces with status: %v\nOutput: %s", err, out)
+	}
+
+	if !strings.Contains(out, "TEST-LIST-STATUS") {
+		t.Errorf("Status output should contain workspace ID: %s", out)
+	}
+
+	// Should show dirty indicator for repo-a
+	if !strings.Contains(out, "dirty") {
+		t.Errorf("Status output should show dirty indicator for repo-a: %s", out)
+	}
+
+	// repo-b should be clean
+	if !strings.Contains(out, "clean") {
+		t.Errorf("Status output should show clean indicator for repo-b: %s", out)
+	}
+
+	// 3. Test list with --status --json
+	out, err = runCanopy("workspace", "list", "--status", "--json")
+	if err != nil {
+		t.Fatalf("Failed to list workspaces with status in JSON: %v\nOutput: %s", err, out)
+	}
+
+	// JSON output should contain repo_statuses
+	if !strings.Contains(out, "repo_statuses") {
+		t.Errorf("JSON output should contain repo_statuses: %s", out)
+	}
+
+	// JSON should contain IsDirty field
+	if !strings.Contains(out, "IsDirty") {
+		t.Errorf("JSON output should contain IsDirty field: %s", out)
+	}
+}
