@@ -17,7 +17,7 @@ func CreateRepoWithCommit(t *testing.T, path string) {
 	t.Helper()
 
 	MustMkdir(t, path)
-	RunGit(t, path, "init")
+	RunGit(t, path, "init", "--initial-branch=main")
 	RunGit(t, path, "config", "user.email", "test@example.com")
 	RunGit(t, path, "config", "user.name", "Test User")
 	RunGit(t, path, "config", "credential.helper", "")
