@@ -127,11 +127,9 @@ The `workspace_naming` setting uses Go templates:
 | Variable | Description |
 |----------|-------------|
 | `{{.ID}}` | Workspace identifier |
-| `{{.Slug}}` | Optional slug (from `--slug` flag) |
 
 Examples:
 - `{{.ID}}` → `PROJ-123`
-- `{{.ID}}__{{.Slug}}` → `PROJ-123__authentication`
 
 ## Workspace Patterns
 

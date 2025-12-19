@@ -10,11 +10,23 @@ Canopy uses the following exit codes:
 |-----------|---------|
 | `0` | Success |
 | `1` | General error |
-| `2` | Configuration error |
-| `64` | Command line usage error |
-| `65` | Data format error |
-| `73` | Cannot create output file |
-| `74` | I/O error |
+| `2` | Workspace/resource not found |
+| `3` | Resource already exists |
+| `4` | Dirty workspace (uncommitted changes) |
+| `5` | Configuration error |
+| `6` | Git operation failed |
+| `7` | Unknown resource |
+| `8` | Not in workspace |
+| `9` | Invalid argument |
+| `10` | I/O error |
+| `11` | Registry error |
+| `12` | Command execution failed |
+| `13` | Internal error |
+| `14` | Repository in use |
+| `15` | Metadata error |
+| `16` | No repositories configured |
+| `17` | Missing branch configuration |
+| `18` | Operation aborted/cancelled |
 
 ## Error Code Reference
 
