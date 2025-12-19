@@ -184,7 +184,7 @@ func TestNewWorkspaceLocked(t *testing.T) {
 	}
 
 	if err.Context["workspace_id"] != "locked-ws" {
-		t.Errorf("workspace_id context: got %v, want %v", err.Context["workspace_id"], "locked-ws")
+		t.Errorf("Context[workspace_id] = %q, want %q", err.Context["workspace_id"], "locked-ws")
 	}
 }
 

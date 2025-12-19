@@ -703,7 +703,7 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 		return renameErr
 	}
 
-	return releaseErr
+	return nil
 }
 
 func (s *Service) renameWorkspaceUnlocked(ctx context.Context, oldID, newID string, renameBranch, force bool) error {

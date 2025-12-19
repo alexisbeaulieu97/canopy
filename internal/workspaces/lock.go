@@ -35,6 +35,7 @@ type LockHandle struct {
 	logger      *logging.Logger
 	stopOnce    sync.Once
 	stopCh      chan struct{}
+	mu          sync.RWMutex
 }
 
 // NewLockManager creates a new LockManager.
@@ -202,8 +203,14 @@ func (h *LockHandle) startHeartbeat(staleThreshold time.Duration, now func() tim
 			select {
 			case <-ticker.C:
 				ts := now()
-				if err := os.Chtimes(h.path, ts, ts); err != nil && h.logger != nil {
-					h.logger.Debug("workspace lock heartbeat failed", "workspace_id", h.workspaceID, "error", err)
+
+				h.mu.RLock()
+				path := h.path
+				workspaceID := h.workspaceID
+				h.mu.RUnlock()
+
+				if err := os.Chtimes(path, ts, ts); err != nil && h.logger != nil {
+					h.logger.Debug("workspace lock heartbeat failed", "workspace_id", workspaceID, "error", err)
 				}
 			case <-h.stopCh:
 				return
@@ -214,8 +221,10 @@ func (h *LockHandle) startHeartbeat(staleThreshold time.Duration, now func() tim
 
 // UpdateLocation updates the lock handle after a workspace rename.
 func (h *LockHandle) UpdateLocation(workspaceID, path string) {
+	h.mu.Lock()
 	h.workspaceID = workspaceID
 	h.path = path
+	h.mu.Unlock()
 }
 
 // Release releases the lock and removes the lock file.
@@ -230,16 +239,21 @@ func (h *LockHandle) Release() error {
 		_ = h.file.Close()
 	}
 
-	if err := os.Remove(h.path); err != nil {
+	h.mu.RLock()
+	path := h.path
+	workspaceID := h.workspaceID
+	h.mu.RUnlock()
+
+	if err := os.Remove(path); err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 
-		return cerrors.NewIOFailed(fmt.Sprintf("release lock %s", h.path), err)
+		return cerrors.NewIOFailed(fmt.Sprintf("release lock %s", path), err)
 	}
 
 	if h.logger != nil {
-		h.logger.Debug("workspace lock released", "workspace_id", h.workspaceID, "path", h.path)
+		h.logger.Debug("workspace lock released", "workspace_id", workspaceID, "path", path)
 	}
 
 	return nil
