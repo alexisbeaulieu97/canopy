@@ -456,6 +456,8 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("git.retry.jitter_factor", 0.25)
 
 	viper.SetEnvPrefix("CANOPY")
+	// Replace dots with underscores for nested keys (e.g., CANOPY_GIT_RETRY_MAX_ATTEMPTS)
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {

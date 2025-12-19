@@ -397,6 +397,39 @@ canopy tui
 
 See [Configuration - TUI Keybindings](configuration.md#tui-keybindings).
 
+## Health Checks
+
+### Checking Environment
+
+The `check` command validates your Canopy configuration:
+
+```bash
+# Validate configuration
+canopy check
+```
+
+### Detecting Orphaned Worktrees
+
+Orphaned worktrees are git worktrees that reference missing workspaces or have invalid git directories:
+
+```bash
+# Check for orphaned worktrees
+canopy check --orphans
+
+# JSON output for scripting
+canopy check --orphans --json
+
+# Automatically repair orphaned worktrees by removing them
+canopy check --orphans --repair
+```
+
+Common orphan scenarios:
+- Workspace directory was manually deleted
+- Git worktree reference points to non-existent workspace
+- Corrupted `.git` file in worktree
+
+The `--repair` flag removes orphaned worktrees safely. Always review the output first without `--repair` to see what would be affected.
+
 ## Troubleshooting
 
 ### Running Diagnostics

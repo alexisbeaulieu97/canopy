@@ -32,6 +32,11 @@ const (
 	ExitNoReposConfig    ExitCode = 16
 	ExitMissingBranch    ExitCode = 17
 	ExitOperationAborted ExitCode = 18
+	ExitWorkspaceLocked  ExitCode = 19
+	ExitUnpushedCommits  ExitCode = 20
+	ExitTimeout          ExitCode = 21
+	ExitHookFailed       ExitCode = 22
+	ExitPathError        ExitCode = 23
 )
 
 // CLIError represents an error with additional CLI context.
@@ -43,25 +48,33 @@ type CLIError struct {
 
 // errorCodeToExitCode maps error codes to CLI exit codes.
 var errorCodeToExitCode = map[cerrors.ErrorCode]ExitCode{
-	cerrors.ErrWorkspaceNotFound:   ExitNotFound,
-	cerrors.ErrRepoNotFound:        ExitNotFound,
-	cerrors.ErrWorkspaceExists:     ExitAlreadyExists,
-	cerrors.ErrRepoAlreadyExists:   ExitAlreadyExists,
-	cerrors.ErrRepoNotClean:        ExitDirtyWorkspace,
-	cerrors.ErrConfigInvalid:       ExitConfigError,
-	cerrors.ErrGitOperationFailed:  ExitGitError,
-	cerrors.ErrUnknownRepository:   ExitUnknownResource,
-	cerrors.ErrNotInWorkspace:      ExitNotInWorkspace,
-	cerrors.ErrInvalidArgument:     ExitInvalidArgument,
-	cerrors.ErrIOFailed:            ExitIOError,
-	cerrors.ErrRegistryError:       ExitRegistryError,
-	cerrors.ErrCommandFailed:       ExitCommandFailed,
-	cerrors.ErrInternalError:       ExitInternalError,
-	cerrors.ErrRepoInUse:           ExitRepoInUse,
-	cerrors.ErrWorkspaceMetadata:   ExitMetadataError,
-	cerrors.ErrNoReposConfigured:   ExitNoReposConfig,
-	cerrors.ErrMissingBranchConfig: ExitMissingBranch,
-	cerrors.ErrOperationCancelled:  ExitOperationAborted,
+	cerrors.ErrWorkspaceNotFound:      ExitNotFound,
+	cerrors.ErrRepoNotFound:           ExitNotFound,
+	cerrors.ErrWorkspaceExists:        ExitAlreadyExists,
+	cerrors.ErrRepoAlreadyExists:      ExitAlreadyExists,
+	cerrors.ErrRepoNotClean:           ExitDirtyWorkspace,
+	cerrors.ErrConfigInvalid:          ExitConfigError,
+	cerrors.ErrConfigValidation:       ExitConfigError,
+	cerrors.ErrGitOperationFailed:     ExitGitError,
+	cerrors.ErrUnknownRepository:      ExitUnknownResource,
+	cerrors.ErrNotInWorkspace:         ExitNotInWorkspace,
+	cerrors.ErrInvalidArgument:        ExitInvalidArgument,
+	cerrors.ErrIOFailed:               ExitIOError,
+	cerrors.ErrRegistryError:          ExitRegistryError,
+	cerrors.ErrCommandFailed:          ExitCommandFailed,
+	cerrors.ErrInternalError:          ExitInternalError,
+	cerrors.ErrRepoInUse:              ExitRepoInUse,
+	cerrors.ErrWorkspaceMetadata:      ExitMetadataError,
+	cerrors.ErrNoReposConfigured:      ExitNoReposConfig,
+	cerrors.ErrMissingBranchConfig:    ExitMissingBranch,
+	cerrors.ErrOperationCancelled:     ExitOperationAborted,
+	cerrors.ErrWorkspaceLocked:        ExitWorkspaceLocked,
+	cerrors.ErrRepoHasUnpushedCommits: ExitUnpushedCommits,
+	cerrors.ErrOperationTimeout:       ExitTimeout,
+	cerrors.ErrHookFailed:             ExitHookFailed,
+	cerrors.ErrHookTimeout:            ExitTimeout,
+	cerrors.ErrPathInvalid:            ExitPathError,
+	cerrors.ErrPathNotDirectory:       ExitPathError,
 }
 
 // exitCodeForError returns the appropriate exit code for an error.

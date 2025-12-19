@@ -236,7 +236,7 @@ var (
 			}
 
 			if closedOnly {
-				archives, err := service.ListClosedWorkspaces()
+				archives, err := service.ListClosedWorkspaces(cmd.Context())
 				if err != nil {
 					return err
 				}
@@ -268,7 +268,7 @@ var (
 				return nil
 			}
 
-			list, err := service.ListWorkspaces()
+			list, err := service.ListWorkspaces(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -661,7 +661,7 @@ var (
 				return err
 			}
 
-			path, err := app.Service.WorkspacePath(id)
+			path, err := app.Service.WorkspacePath(cmd.Context(), id)
 			if err != nil {
 				return err
 			}

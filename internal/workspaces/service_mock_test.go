@@ -30,7 +30,7 @@ func TestServiceWithMocks(t *testing.T) {
 
 		svc := NewService(mockConfig, mockGit, mockStorage, nil)
 
-		workspaces, err := svc.ListWorkspaces()
+		workspaces, err := svc.ListWorkspaces(context.Background())
 		if err != nil {
 			t.Fatalf("ListWorkspaces failed: %v", err)
 		}
@@ -57,7 +57,7 @@ func TestServiceWithMocks(t *testing.T) {
 
 		svc := NewService(mockConfig, mockGit, mockStorage, nil)
 
-		_, err := svc.ListWorkspaces()
+		_, err := svc.ListWorkspaces(context.Background())
 		if err == nil {
 			t.Fatal("expected error when storage fails")
 		}

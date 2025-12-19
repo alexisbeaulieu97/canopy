@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -229,7 +231,7 @@ func (m *Model) handleEnterWithState() (ViewState, tea.Cmd, bool) {
 	}
 
 	if m.printPath {
-		path, err := m.svc.WorkspacePath(selected.Workspace.ID)
+		path, err := m.svc.WorkspacePath(context.Background(), selected.Workspace.ID)
 		if err != nil {
 			m.err = err
 			return &ListViewState{}, nil, true
