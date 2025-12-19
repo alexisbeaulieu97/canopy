@@ -440,7 +440,7 @@ var (
 
 			if keepFlag {
 				if dryRunHooks && jsonOutput {
-					return closeWithHookPreviewJSON(service, id, force, true, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
 				}
 
 				return keepAndPrint(service, id, force, closeOpts)
@@ -448,7 +448,7 @@ var (
 
 			if deleteFlag {
 				if dryRunHooks && jsonOutput {
-					return closeWithHookPreviewJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
 				}
 
 				return closeAndPrint(service, id, force, closeOpts)
@@ -457,14 +457,14 @@ var (
 			if !interactive {
 				if configDefaultArchive {
 					if dryRunHooks && jsonOutput {
-						return closeWithHookPreviewJSON(service, id, force, true, closeOpts, hookPreviews)
+						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
 					}
 
 					return keepAndPrint(service, id, force, closeOpts)
 				}
 
 				if dryRunHooks && jsonOutput {
-					return closeWithHookPreviewJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
 				}
 
 				return closeAndPrint(service, id, force, closeOpts)
@@ -482,14 +482,14 @@ var (
 			if err != nil {
 				if configDefaultArchive {
 					if dryRunHooks && jsonOutput {
-						return closeWithHookPreviewJSON(service, id, force, true, closeOpts, hookPreviews)
+						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
 					}
 
 					return keepAndPrint(service, id, force, closeOpts)
 				}
 
 				if dryRunHooks && jsonOutput {
-					return closeWithHookPreviewJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
 				}
 
 				return closeAndPrint(service, id, force, closeOpts)
@@ -500,41 +500,41 @@ var (
 			switch answer {
 			case "y", "yes":
 				if dryRunHooks && jsonOutput {
-					return closeWithHookPreviewJSON(service, id, force, true, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
 				}
 
 				return keepAndPrint(service, id, force, closeOpts)
 			case "n", "no":
 				if dryRunHooks && jsonOutput {
-					return closeWithHookPreviewJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
 				}
 
 				return closeAndPrint(service, id, force, closeOpts)
 			case "":
 				if configDefaultArchive {
 					if dryRunHooks && jsonOutput {
-						return closeWithHookPreviewJSON(service, id, force, true, closeOpts, hookPreviews)
+						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
 					}
 
 					return keepAndPrint(service, id, force, closeOpts)
 				}
 
 				if dryRunHooks && jsonOutput {
-					return closeWithHookPreviewJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
 				}
 
 				return closeAndPrint(service, id, force, closeOpts)
 			default:
 				if configDefaultArchive {
 					if dryRunHooks && jsonOutput {
-						return closeWithHookPreviewJSON(service, id, force, true, closeOpts, hookPreviews)
+						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
 					}
 
 					return keepAndPrint(service, id, force, closeOpts)
 				}
 
 				if dryRunHooks && jsonOutput {
-					return closeWithHookPreviewJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
 				}
 
 				return closeAndPrint(service, id, force, closeOpts)

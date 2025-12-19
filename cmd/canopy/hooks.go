@@ -166,7 +166,7 @@ func printHookPreview(phase string, previews []domain.HookCommandPreview) {
 	}
 }
 
-func closeWithHookPreviewJSON(
+func closeWithHookDryRunJSON(
 	service *workspaces.Service,
 	id string,
 	force bool,
