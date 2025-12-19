@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"text/template"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
@@ -43,24 +44,41 @@ func NewExecutor(logger *logging.Logger) *Executor {
 
 // ExecuteHooks runs a list of hooks with the given context.
 // If continueOnError is true at the executor level, it continues even if a hook fails.
-func (e *Executor) ExecuteHooks(hks []config.Hook, ctx domain.HookContext, continueOnError bool) error {
+func (e *Executor) ExecuteHooks(
+	hks []config.Hook,
+	ctx domain.HookContext,
+	opts ports.HookExecuteOptions,
+) ([]domain.HookCommandPreview, error) {
+	var previews []domain.HookCommandPreview
+
 	for i, hook := range hks {
-		err := e.executeHook(hook, ctx, i)
+		hookPreviews, err := e.executeHook(hook, ctx, i, opts.DryRun)
+		if opts.DryRun {
+			previews = append(previews, hookPreviews...)
+		}
+
 		if err != nil {
-			if hook.ContinueOnError || continueOnError {
+			if hook.ContinueOnError || opts.ContinueOnError {
 				e.logger.Warn("Hook failed but continuing", "index", i, "command", hook.Command, "error", err)
 				continue
 			}
 
-			return err
+			return previews, err
 		}
 	}
 
-	return nil
+	return previews, nil
 }
 
 // executeHook runs a single hook command.
-func (e *Executor) executeHook(hook config.Hook, ctx domain.HookContext, index int) error {
+func (e *Executor) executeHook(
+	hook config.Hook,
+	ctx domain.HookContext,
+	index int,
+	dryRun bool,
+) ([]domain.HookCommandPreview, error) {
+	var previews []domain.HookCommandPreview
+
 	// Determine repos to run against
 	repos := ctx.Repos
 	if len(hook.Repos) > 0 {
@@ -71,27 +89,55 @@ func (e *Executor) executeHook(hook config.Hook, ctx domain.HookContext, index i
 	if len(hook.Repos) > 0 {
 		for _, repo := range repos {
 			repoPath := filepath.Join(ctx.WorkspacePath, repo.Name)
-			if err := e.runCommand(hook, ctx, repoPath, &repo, index); err != nil {
-				return err
+
+			resolvedCommand, err := e.resolveCommand(hook, ctx, &repo)
+			if err != nil {
+				return previews, err
+			}
+
+			if dryRun {
+				previews = append(previews, e.previewCommand(index, resolvedCommand, repoPath, ctx, &repo))
+				continue
+			}
+
+			if err := e.runCommand(hook, ctx, repoPath, &repo, index, resolvedCommand); err != nil {
+				return previews, err
 			}
 		}
 
-		return nil
+		return previews, nil
 	}
 
 	// No repos filter - run once in workspace root
-	return e.runCommand(hook, ctx, ctx.WorkspacePath, nil, index)
+	resolvedCommand, err := e.resolveCommand(hook, ctx, nil)
+	if err != nil {
+		return previews, err
+	}
+
+	if dryRun {
+		previews = append(previews, e.previewCommand(index, resolvedCommand, ctx.WorkspacePath, ctx, nil))
+		return previews, nil
+	}
+
+	return previews, e.runCommand(hook, ctx, ctx.WorkspacePath, nil, index, resolvedCommand)
 }
 
 // runCommand executes the hook command in the specified directory.
-func (e *Executor) runCommand(hook config.Hook, ctx domain.HookContext, workDir string, repo *domain.Repo, index int) error {
+func (e *Executor) runCommand(
+	hook config.Hook,
+	ctx domain.HookContext,
+	workDir string,
+	repo *domain.Repo,
+	index int,
+	resolvedCommand string,
+) error {
 	shell := resolveShell(hook.Shell)
 	timeout := resolveTimeout(hook.Timeout)
 
 	execCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := e.buildCommand(execCtx, shell, hook.Command, workDir, ctx, repo)
+	cmd := e.buildCommand(execCtx, shell, resolvedCommand, workDir, ctx, repo)
 
 	var stdout, stderr bytes.Buffer
 
@@ -100,7 +146,7 @@ func (e *Executor) runCommand(hook config.Hook, ctx domain.HookContext, workDir 
 
 	e.logger.Debug("Executing hook",
 		"index", index,
-		"command", hook.Command,
+		"command", resolvedCommand,
 		"working_dir", workDir,
 		"timeout", timeout,
 	)
@@ -110,7 +156,7 @@ func (e *Executor) runCommand(hook config.Hook, ctx domain.HookContext, workDir 
 	duration := time.Since(start)
 
 	if err != nil {
-		return e.handleCommandError(execCtx, err, hook, index, repo, timeout, stderr.String())
+		return e.handleCommandError(execCtx, err, resolvedCommand, index, repo, timeout, stderr.String())
 	}
 
 	e.logCommandSuccess(index, duration, stdout.String(), stderr.String())
@@ -174,18 +220,69 @@ func (e *Executor) buildEnvVars(ctx domain.HookContext, repo *domain.Repo) []str
 	return env
 }
 
+func (e *Executor) resolveCommand(hook config.Hook, ctx domain.HookContext, repo *domain.Repo) (string, error) {
+	tmpl, err := template.New("hook").Option("missingkey=error").Parse(hook.Command)
+	if err != nil {
+		return "", err
+	}
+
+	data := hookTemplateContext{
+		WorkspaceID:   ctx.WorkspaceID,
+		WorkspacePath: ctx.WorkspacePath,
+		BranchName:    ctx.BranchName,
+		Repos:         ctx.Repos,
+		Repo:          repo,
+	}
+
+	if repo != nil {
+		data.RepoName = repo.Name
+		data.RepoPath = filepath.Join(ctx.WorkspacePath, repo.Name)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
+}
+
+func (e *Executor) previewCommand(
+	index int,
+	resolvedCommand string,
+	workDir string,
+	ctx domain.HookContext,
+	repo *domain.Repo,
+) domain.HookCommandPreview {
+	preview := domain.HookCommandPreview{
+		Index:         index,
+		Command:       resolvedCommand,
+		WorkingDir:    workDir,
+		WorkspaceID:   ctx.WorkspaceID,
+		WorkspacePath: ctx.WorkspacePath,
+		BranchName:    ctx.BranchName,
+	}
+
+	if repo != nil {
+		preview.RepoName = repo.Name
+		preview.RepoPath = filepath.Join(ctx.WorkspacePath, repo.Name)
+	}
+
+	return preview
+}
+
 // handleCommandError processes errors from hook command execution.
 func (e *Executor) handleCommandError(
 	execCtx context.Context,
 	err error,
-	hook config.Hook,
+	command string,
 	index int,
 	repo *domain.Repo,
 	timeout time.Duration,
 	stderrOutput string,
 ) error {
 	if execCtx.Err() == context.DeadlineExceeded {
-		return cerrors.NewHookTimeout(index, hook.Command, timeout)
+		return cerrors.NewHookTimeout(index, command, timeout)
 	}
 
 	exitCode := -1
@@ -200,7 +297,7 @@ func (e *Executor) handleCommandError(
 		repoName = repo.Name
 	}
 
-	return cerrors.NewHookFailed(index, hook.Command, exitCode, repoName, stderrOutput)
+	return cerrors.NewHookFailed(index, command, exitCode, repoName, stderrOutput)
 }
 
 // logCommandSuccess logs successful hook completion and any output.
@@ -232,4 +329,14 @@ func filterRepos(repos []domain.Repo, filter []string) []domain.Repo {
 	}
 
 	return result
+}
+
+type hookTemplateContext struct {
+	WorkspaceID   string
+	WorkspacePath string
+	BranchName    string
+	Repos         []domain.Repo
+	Repo          *domain.Repo
+	RepoName      string
+	RepoPath      string
 }

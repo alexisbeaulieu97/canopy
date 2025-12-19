@@ -221,3 +221,15 @@ type HookContext struct {
 	BranchName    string
 	Repos         []Repo
 }
+
+// HookCommandPreview describes a resolved hook command in dry-run mode.
+type HookCommandPreview struct {
+	Index         int    `json:"index"`
+	Command       string `json:"command"`
+	WorkingDir    string `json:"working_dir"`
+	WorkspaceID   string `json:"workspace_id"`
+	WorkspacePath string `json:"workspace_path"`
+	BranchName    string `json:"branch_name"`
+	RepoName      string `json:"repo_name,omitempty"`
+	RepoPath      string `json:"repo_path,omitempty"`
+}

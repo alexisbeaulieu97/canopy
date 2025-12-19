@@ -8,6 +8,7 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	"github.com/alexisbeaulieu97/canopy/internal/mocks"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
 func TestMockHookExecutor(t *testing.T) {
@@ -21,7 +22,7 @@ func TestMockHookExecutor(t *testing.T) {
 		hooks := []config.Hook{{Command: "echo test"}}
 		ctx := domain.HookContext{WorkspaceID: "test-ws"}
 
-		err := mock.ExecuteHooks(hooks, ctx, false)
+		_, err := mock.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -41,7 +42,7 @@ func TestMockHookExecutor(t *testing.T) {
 		mock := mocks.NewMockHookExecutor()
 		mock.ExecuteHooksErr = errors.New("hook failed")
 
-		err := mock.ExecuteHooks(nil, domain.HookContext{}, false)
+		_, err := mock.ExecuteHooks(nil, domain.HookContext{}, ports.HookExecuteOptions{})
 		if err == nil || err.Error() != "hook failed" {
 			t.Errorf("expected 'hook failed' error, got %v", err)
 		}
@@ -52,12 +53,12 @@ func TestMockHookExecutor(t *testing.T) {
 
 		called := false
 		mock := mocks.NewMockHookExecutor()
-		mock.ExecuteHooksFunc = func(_ []config.Hook, _ domain.HookContext, _ bool) error {
+		mock.ExecuteHooksFunc = func(_ []config.Hook, _ domain.HookContext, _ ports.HookExecuteOptions) ([]domain.HookCommandPreview, error) {
 			called = true
-			return nil
+			return nil, nil
 		}
 
-		_ = mock.ExecuteHooks(nil, domain.HookContext{}, false)
+		_, _ = mock.ExecuteHooks(nil, domain.HookContext{}, ports.HookExecuteOptions{})
 
 		if !called {
 			t.Error("custom function was not called")
@@ -68,7 +69,7 @@ func TestMockHookExecutor(t *testing.T) {
 		t.Parallel()
 
 		mock := mocks.NewMockHookExecutor()
-		_ = mock.ExecuteHooks(nil, domain.HookContext{}, false)
+		_, _ = mock.ExecuteHooks(nil, domain.HookContext{}, ports.HookExecuteOptions{})
 
 		mock.ResetCalls()
 

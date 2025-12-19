@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -45,9 +46,23 @@ var (
 			printPath, _ := cmd.Flags().GetBool("print-path")
 			noHooks, _ := cmd.Flags().GetBool("no-hooks")
 			hooksOnly, _ := cmd.Flags().GetBool("hooks-only")
+			dryRunHooks, _ := cmd.Flags().GetBool("dry-run-hooks")
+			jsonOutput, _ := cmd.Flags().GetBool("json")
 
 			if hooksOnly && noHooks {
 				return cerrors.NewInvalidArgument("flags", "cannot use --hooks-only with --no-hooks")
+			}
+
+			if dryRunHooks && noHooks {
+				return cerrors.NewInvalidArgument("flags", "cannot use --dry-run-hooks with --no-hooks")
+			}
+
+			if dryRunHooks && hooksOnly {
+				return cerrors.NewInvalidArgument("flags", "cannot use --dry-run-hooks with --hooks-only")
+			}
+
+			if jsonOutput && !dryRunHooks {
+				return cerrors.NewInvalidArgument("flags", "--json is only supported with --dry-run-hooks")
 			}
 
 			app, err := getApp(cmd)
@@ -98,12 +113,32 @@ var (
 			}
 
 			opts := workspaces.CreateOptions{
-				SkipHooks: noHooks,
+				SkipHooks: noHooks || dryRunHooks,
 			}
 
 			dirName, err := service.CreateWorkspaceWithOptions(cmd.Context(), id, branch, resolvedRepos, opts)
 			if err != nil {
 				return err
+			}
+
+			if dryRunHooks {
+				previews, err := service.PreviewHooks(id, workspaces.HookPhasePostCreate)
+				if err != nil {
+					return err
+				}
+
+				if jsonOutput {
+					return output.PrintJSON(hookPreviewEnvelope{
+						DryRunHooks:   true,
+						Phase:         string(workspaces.HookPhasePostCreate),
+						WorkspaceID:   id,
+						WorkspacePath: filepath.Join(cfg.GetWorkspacesRoot(), dirName),
+						Commands:      previews,
+						Action:        "create",
+					})
+				}
+
+				printHookPreview(string(workspaces.HookPhasePostCreate), previews)
 			}
 
 			if printPath {
@@ -309,6 +344,7 @@ var (
 			jsonOutput, _ := cmd.Flags().GetBool("json")
 			noHooks, _ := cmd.Flags().GetBool("no-hooks")
 			hooksOnly, _ := cmd.Flags().GetBool("hooks-only")
+			dryRunHooks, _ := cmd.Flags().GetBool("dry-run-hooks")
 
 			if keepFlag && deleteFlag {
 				return cerrors.NewInvalidArgument("flags", "cannot use --keep and --delete together")
@@ -316,6 +352,18 @@ var (
 
 			if hooksOnly && noHooks {
 				return cerrors.NewInvalidArgument("flags", "cannot use --hooks-only with --no-hooks")
+			}
+
+			if dryRunHooks && noHooks {
+				return cerrors.NewInvalidArgument("flags", "cannot use --dry-run-hooks with --no-hooks")
+			}
+
+			if dryRunHooks && hooksOnly {
+				return cerrors.NewInvalidArgument("flags", "cannot use --dry-run-hooks with --hooks-only")
+			}
+
+			if dryRunHooks && dryRun {
+				return cerrors.NewInvalidArgument("flags", "cannot use --dry-run-hooks with --dry-run")
 			}
 
 			app, err := getApp(cmd)
@@ -328,7 +376,7 @@ var (
 			interactive := isInteractiveTerminal()
 
 			closeOpts := workspaces.CloseOptions{
-				SkipHooks: noHooks,
+				SkipHooks: noHooks || dryRunHooks,
 			}
 
 			if hooksOnly {
@@ -350,6 +398,14 @@ var (
 
 				output.Success("Ran pre_close hooks for workspace", id)
 				return nil
+			}
+
+			var hookPreviews []domain.HookCommandPreview
+			if dryRunHooks {
+				hookPreviews, err = service.PreviewHooks(id, workspaces.HookPhasePreClose)
+				if err != nil {
+					return err
+				}
 			}
 
 			// Determine keepMetadata based on flags and config
@@ -378,17 +434,37 @@ var (
 				return nil
 			}
 
+			if dryRunHooks && !jsonOutput {
+				printHookPreview(string(workspaces.HookPhasePreClose), hookPreviews)
+			}
+
 			if keepFlag {
+				if dryRunHooks && jsonOutput {
+					return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+				}
+
 				return keepAndPrint(service, id, force, closeOpts)
 			}
 
 			if deleteFlag {
+				if dryRunHooks && jsonOutput {
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
+				}
+
 				return closeAndPrint(service, id, force, closeOpts)
 			}
 
 			if !interactive {
 				if configDefaultArchive {
+					if dryRunHooks && jsonOutput {
+						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+					}
+
 					return keepAndPrint(service, id, force, closeOpts)
+				}
+
+				if dryRunHooks && jsonOutput {
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
 				}
 
 				return closeAndPrint(service, id, force, closeOpts)
@@ -405,7 +481,15 @@ var (
 			answer, err := reader.ReadString('\n')
 			if err != nil {
 				if configDefaultArchive {
+					if dryRunHooks && jsonOutput {
+						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+					}
+
 					return keepAndPrint(service, id, force, closeOpts)
+				}
+
+				if dryRunHooks && jsonOutput {
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
 				}
 
 				return closeAndPrint(service, id, force, closeOpts)
@@ -415,18 +499,42 @@ var (
 
 			switch answer {
 			case "y", "yes":
+				if dryRunHooks && jsonOutput {
+					return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+				}
+
 				return keepAndPrint(service, id, force, closeOpts)
 			case "n", "no":
+				if dryRunHooks && jsonOutput {
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
+				}
+
 				return closeAndPrint(service, id, force, closeOpts)
 			case "":
 				if configDefaultArchive {
+					if dryRunHooks && jsonOutput {
+						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+					}
+
 					return keepAndPrint(service, id, force, closeOpts)
+				}
+
+				if dryRunHooks && jsonOutput {
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
 				}
 
 				return closeAndPrint(service, id, force, closeOpts)
 			default:
 				if configDefaultArchive {
+					if dryRunHooks && jsonOutput {
+						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+					}
+
 					return keepAndPrint(service, id, force, closeOpts)
+				}
+
+				if dryRunHooks && jsonOutput {
+					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
 				}
 
 				return closeAndPrint(service, id, force, closeOpts)
@@ -1008,6 +1116,8 @@ func init() {
 	workspaceNewCmd.Flags().Bool("print-path", false, "Print the created workspace path to stdout")
 	workspaceNewCmd.Flags().Bool("no-hooks", false, "Skip post_create hooks")
 	workspaceNewCmd.Flags().Bool("hooks-only", false, "Run post_create hooks without creating the workspace")
+	workspaceNewCmd.Flags().Bool("dry-run-hooks", false, "Preview post_create hooks without executing them")
+	workspaceNewCmd.Flags().Bool("json", false, "Output in JSON format (use with --dry-run-hooks)")
 
 	workspaceListCmd.Flags().Bool("json", false, "Output in JSON format")
 	workspaceListCmd.Flags().Bool("closed", false, "List closed workspaces")
@@ -1024,6 +1134,7 @@ func init() {
 	workspaceCloseCmd.Flags().Bool("json", false, "Output in JSON format (use with --dry-run)")
 	workspaceCloseCmd.Flags().Bool("no-hooks", false, "Skip pre_close hooks")
 	workspaceCloseCmd.Flags().Bool("hooks-only", false, "Run pre_close hooks without closing the workspace")
+	workspaceCloseCmd.Flags().Bool("dry-run-hooks", false, "Preview pre_close hooks without executing them")
 	workspaceReopenCmd.Flags().Bool("force", false, "Overwrite existing workspace if one already exists")
 
 	workspaceRenameCmd.Flags().Bool("rename-branch", true, "Rename branches in repos if they match the old workspace ID")
