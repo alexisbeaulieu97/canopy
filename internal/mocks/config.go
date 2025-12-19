@@ -22,6 +22,8 @@ type MockConfigProvider struct {
 	GetWorkspaceNamingFunc    func() string
 	GetStaleThresholdDaysFunc func() int
 	GetParallelWorkersFunc    func() int
+	GetLockTimeoutFunc        func() time.Duration
+	GetLockStaleThresholdFunc func() time.Duration
 	GetRegistryFunc           func() *config.RepoRegistry
 	GetHooksFunc              func() config.Hooks
 
@@ -33,6 +35,8 @@ type MockConfigProvider struct {
 	WorkspaceNaming    string
 	StaleThresholdDays int
 	ParallelWorkers    int
+	LockTimeout        time.Duration
+	LockStaleThreshold time.Duration
 	Registry           *config.RepoRegistry
 	Hooks              config.Hooks
 	RepoNames          []string
@@ -48,6 +52,8 @@ func NewMockConfigProvider() *MockConfigProvider {
 		WorkspaceNaming:    "{{.ID}}",
 		StaleThresholdDays: 14,
 		ParallelWorkers:    config.DefaultParallelWorkers,
+		LockTimeout:        0,
+		LockStaleThreshold: 0,
 		Registry:           &config.RepoRegistry{},
 		RepoNames:          []string{},
 	}
@@ -132,6 +138,24 @@ func (m *MockConfigProvider) GetParallelWorkers() int {
 	}
 
 	return m.ParallelWorkers
+}
+
+// GetLockTimeout calls the mock function if set, otherwise returns LockTimeout.
+func (m *MockConfigProvider) GetLockTimeout() time.Duration {
+	if m.GetLockTimeoutFunc != nil {
+		return m.GetLockTimeoutFunc()
+	}
+
+	return m.LockTimeout
+}
+
+// GetLockStaleThreshold calls the mock function if set, otherwise returns LockStaleThreshold.
+func (m *MockConfigProvider) GetLockStaleThreshold() time.Duration {
+	if m.GetLockStaleThresholdFunc != nil {
+		return m.GetLockStaleThresholdFunc()
+	}
+
+	return m.LockStaleThreshold
 }
 
 // GetRegistry calls the mock function if set, otherwise returns Registry.

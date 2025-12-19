@@ -176,6 +176,18 @@ func TestNewWorkspaceExists(t *testing.T) {
 	}
 }
 
+func TestNewWorkspaceLocked(t *testing.T) {
+	err := cerrors.NewWorkspaceLocked("locked-ws")
+
+	if err.Code != cerrors.ErrWorkspaceLocked {
+		t.Errorf("Code = %q, want %q", err.Code, cerrors.ErrWorkspaceLocked)
+	}
+
+	if err.Context["workspace_id"] != "locked-ws" {
+		t.Errorf("Context[workspace_id] = %q, want %q", err.Context["workspace_id"], "locked-ws")
+	}
+}
+
 func TestNewRepoNotClean(t *testing.T) {
 	err := cerrors.NewRepoNotClean("dirty-repo", "close")
 

@@ -176,6 +176,8 @@ type Config struct {
 	WorkspaceNaming    string        `mapstructure:"workspace_naming"`
 	StaleThresholdDays int           `mapstructure:"stale_threshold_days"`
 	ParallelWorkers    int           `mapstructure:"parallel_workers"`
+	LockTimeout        string        `mapstructure:"lock_timeout"`
+	LockStaleThreshold string        `mapstructure:"lock_stale_threshold"`
 	Defaults           Defaults      `mapstructure:"defaults"`
 	Hooks              Hooks         `mapstructure:"hooks"`
 	TUI                TUIConfig     `mapstructure:"tui"`
@@ -205,6 +207,8 @@ var knownConfigFields = []string{
 	"workspace_naming",
 	"stale_threshold_days",
 	"parallel_workers",
+	"lock_timeout",
+	"lock_stale_threshold",
 	"defaults",
 	"defaults.workspace_patterns",
 	"hooks",
@@ -438,6 +442,8 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("workspace_close_default", CloseDefaultDelete)
 	viper.SetDefault("workspace_naming", "{{.ID}}")
 	viper.SetDefault("stale_threshold_days", 14)
+	viper.SetDefault("lock_timeout", DefaultLockTimeout.String())
+	viper.SetDefault("lock_stale_threshold", DefaultLockStaleThreshold.String())
 
 	// Parallel workers default
 	viper.SetDefault("parallel_workers", DefaultParallelWorkers)
@@ -575,6 +581,10 @@ func (c *Config) ValidateValues() error {
 		return err
 	}
 
+	if err := c.validateLockSettings(); err != nil {
+		return err
+	}
+
 	return c.validateKeybindings()
 }
 
@@ -644,6 +654,36 @@ func (c *Config) validateParallelWorkers() error {
 	return nil
 }
 
+func (c *Config) validateLockSettings() error {
+	if c.LockTimeout == "" {
+		c.LockTimeout = DefaultLockTimeout.String()
+	}
+
+	if c.LockStaleThreshold == "" {
+		c.LockStaleThreshold = DefaultLockStaleThreshold.String()
+	}
+
+	lockTimeout, err := time.ParseDuration(c.LockTimeout)
+	if err != nil {
+		return cerrors.NewConfigValidation("lock_timeout", fmt.Sprintf("invalid duration %q: %v", c.LockTimeout, err))
+	}
+
+	if lockTimeout <= 0 {
+		return cerrors.NewConfigValidation("lock_timeout", fmt.Sprintf("must be positive, got %s", lockTimeout))
+	}
+
+	lockStale, err := time.ParseDuration(c.LockStaleThreshold)
+	if err != nil {
+		return cerrors.NewConfigValidation("lock_stale_threshold", fmt.Sprintf("invalid duration %q: %v", c.LockStaleThreshold, err))
+	}
+
+	if lockStale <= 0 {
+		return cerrors.NewConfigValidation("lock_stale_threshold", fmt.Sprintf("must be positive, got %s", lockStale))
+	}
+
+	return nil
+}
+
 // Close behavior constants
 const (
 	CloseDefaultDelete  = "delete"
@@ -654,6 +694,10 @@ const (
 const (
 	// DefaultParallelWorkers is the default number of parallel workers for repository operations.
 	DefaultParallelWorkers = 4
+	// DefaultLockTimeout is the default time to wait for a workspace lock.
+	DefaultLockTimeout = 30 * time.Second
+	// DefaultLockStaleThreshold is the default age before a lock is considered stale.
+	DefaultLockStaleThreshold = 5 * time.Minute
 	// MinParallelWorkers is the minimum allowed value for parallel workers.
 	MinParallelWorkers = 1
 	// MaxParallelWorkers is the maximum allowed value for parallel workers.
@@ -840,6 +884,34 @@ func (c *Config) GetStaleThresholdDays() int {
 // GetParallelWorkers returns the number of parallel workers for repository operations.
 func (c *Config) GetParallelWorkers() int {
 	return c.ParallelWorkers
+}
+
+// GetLockTimeout returns the workspace lock timeout.
+func (c *Config) GetLockTimeout() time.Duration {
+	if c.LockTimeout == "" {
+		return DefaultLockTimeout
+	}
+
+	parsed, err := time.ParseDuration(c.LockTimeout)
+	if err != nil {
+		return DefaultLockTimeout
+	}
+
+	return parsed
+}
+
+// GetLockStaleThreshold returns the stale lock threshold.
+func (c *Config) GetLockStaleThreshold() time.Duration {
+	if c.LockStaleThreshold == "" {
+		return DefaultLockStaleThreshold
+	}
+
+	parsed, err := time.ParseDuration(c.LockStaleThreshold)
+	if err != nil {
+		return DefaultLockStaleThreshold
+	}
+
+	return parsed
 }
 
 // GetRegistry returns the repository registry.

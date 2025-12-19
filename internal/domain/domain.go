@@ -50,6 +50,7 @@ type Workspace struct {
 	BranchName     string     `yaml:"branch_name,omitempty"`
 	Repos          []Repo     `yaml:"repos"`
 	ClosedAt       *time.Time `yaml:"closed_at,omitempty"`
+	Locked         bool       `yaml:"-" json:"locked,omitempty"`
 	LastModified   time.Time  `yaml:"-"`
 	DiskUsageBytes int64      `yaml:"-"`
 }

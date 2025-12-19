@@ -72,6 +72,8 @@ type Service struct {
 	// cache provides in-memory caching of workspace metadata
 	cache ports.WorkspaceCache
 
+	lockManager *LockManager
+
 	// Extracted sub-services
 	gitService    *WorkspaceGitService
 	orphanService *WorkspaceOrphanService
@@ -99,6 +101,7 @@ type serviceOptions struct {
 	hookExecutor ports.HookExecutor
 	diskUsage    ports.DiskUsage
 	cache        ports.WorkspaceCache
+	lockManager  *LockManager
 }
 
 // WithHookExecutor sets a custom HookExecutor implementation.
@@ -119,6 +122,13 @@ func WithDiskUsage(d ports.DiskUsage) ServiceOption {
 func WithCache(c ports.WorkspaceCache) ServiceOption {
 	return func(o *serviceOptions) {
 		o.cache = c
+	}
+}
+
+// WithLockManager sets a custom LockManager implementation.
+func WithLockManager(l *LockManager) ServiceOption {
+	return func(o *serviceOptions) {
+		o.lockManager = l
 	}
 }
 
@@ -149,6 +159,14 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 		cache = NewWorkspaceCache(DefaultCacheTTL)
 	}
 
+	lockManager := options.lockManager
+	if lockManager == nil {
+		lockTimeout := cfg.GetLockTimeout()
+		if lockTimeout > 0 {
+			lockManager = NewLockManager(cfg.GetWorkspacesRoot(), lockTimeout, cfg.GetLockStaleThreshold(), logger)
+		}
+	}
+
 	svc := &Service{
 		config:       cfg,
 		gitEngine:    gitEngine,
@@ -159,6 +177,7 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 		diskUsage:    diskUsage,
 		canonical:    NewCanonicalRepoService(gitEngine, wsEngine, cfg.GetProjectsRoot(), logger, diskUsage, cfg.GetRegistry()),
 		cache:        cache,
+		lockManager:  lockManager,
 	}
 
 	// Initialize sub-services with the main service as the workspace finder/creator
@@ -226,8 +245,18 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 		return "", err
 	}
 
+	if err := s.withWorkspaceLock(ctx, id, true, func() error {
+		return s.createWorkspaceWithOptionsUnlocked(ctx, id, branchName, repos, opts)
+	}); err != nil {
+		return id, err
+	}
+
+	return id, nil
+}
+
+func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, branchName string, repos []domain.Repo, opts CreateOptions) error {
 	if err := s.ensureWorkspaceAvailable(id); err != nil {
-		return "", err
+		return err
 	}
 
 	ws := domain.Workspace{
@@ -237,7 +266,7 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 	}
 
 	if err := s.executeWorkspaceCreate(ctx, ws, repos); err != nil {
-		return "", err
+		return err
 	}
 
 	// Invalidate cache for this workspace ID
@@ -248,10 +277,10 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 	if err := s.runPostCreateHooks(id, id, branchName, repos, opts); err != nil {
 		// Hook failures don't rollback the workspace (per design.md)
 		// But we return the error if not continuing on hook errors
-		return id, err
+		return err
 	}
 
-	return id, nil
+	return nil
 }
 
 func (s *Service) resolveCreateBranchName(id, branchName string) (string, error) {
@@ -282,7 +311,7 @@ func (s *Service) executeWorkspaceCreate(ctx context.Context, ws domain.Workspac
 	op.AddStep(func() error {
 		if err := os.Mkdir(workspacePath, 0o750); err != nil {
 			if os.IsExist(err) {
-				return cerrors.NewWorkspaceExists(ws.ID)
+				return nil
 			}
 
 			return cerrors.NewIOFailed("create workspace directory", err)
@@ -308,12 +337,37 @@ func (s *Service) executeWorkspaceCreate(ctx context.Context, ws domain.Workspac
 	return op.Execute()
 }
 
+func (s *Service) withWorkspaceLock(ctx context.Context, workspaceID string, createDir bool, fn func() error) error {
+	if s.lockManager == nil {
+		return fn()
+	}
+
+	handle, err := s.lockManager.Acquire(ctx, workspaceID, createDir)
+	if err != nil {
+		return err
+	}
+
+	runErr := fn()
+
+	releaseErr := handle.Release()
+	if releaseErr != nil && s.logger != nil {
+		s.logger.Warn("workspace lock release failed", "workspace_id", workspaceID, "error", releaseErr)
+	}
+
+	if runErr != nil {
+		return runErr
+	}
+
+	// Only log release failures; successful operations shouldn't be marked as failed.
+	return nil
+}
+
 func (s *Service) ensureWorkspaceAvailable(workspaceID string) error {
-	path := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID)
-	if _, err := os.Stat(path); err == nil {
+	metaPath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, "workspace.yaml")
+	if _, err := os.Stat(metaPath); err == nil {
 		return cerrors.NewWorkspaceExists(workspaceID)
 	} else if err != nil && !os.IsNotExist(err) {
-		return cerrors.NewIOFailed("check workspace directory", err)
+		return cerrors.NewIOFailed("check workspace metadata", err)
 	}
 
 	return nil
@@ -620,6 +674,39 @@ func (s *Service) executeRename(ctx context.Context, workspace domain.Workspace,
 // If renameBranch is true and the branch name matches the old ID, it will also rename branches.
 // If force is true, an existing workspace with the new ID will be deleted first.
 func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, renameBranch, force bool) error {
+	if s.lockManager != nil {
+		if _, _, err := s.findWorkspace(ctx, oldID); err != nil {
+			return s.handleClosedWorkspaceError(ctx, oldID, err)
+		}
+	}
+
+	if s.lockManager == nil {
+		return s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
+	}
+
+	handle, err := s.lockManager.Acquire(ctx, oldID, false)
+	if err != nil {
+		return err
+	}
+
+	renameErr := s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
+	if renameErr == nil {
+		handle.UpdateLocation(newID, filepath.Join(s.config.GetWorkspacesRoot(), newID, lockFileName))
+	}
+
+	releaseErr := handle.Release()
+	if releaseErr != nil && s.logger != nil {
+		s.logger.Warn("workspace lock release failed", "workspace_id", oldID, "error", releaseErr)
+	}
+
+	if renameErr != nil {
+		return renameErr
+	}
+
+	return nil
+}
+
+func (s *Service) renameWorkspaceUnlocked(ctx context.Context, oldID, newID string, renameBranch, force bool) error {
 	workspace, _, err := s.findWorkspace(ctx, oldID)
 	if err != nil {
 		return s.handleClosedWorkspaceError(ctx, oldID, err)
@@ -650,46 +737,48 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 
 // AddRepoToWorkspace adds a repository to an existing workspace
 func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName string) error {
-	if err := validateAddRepoInputs(workspaceID, repoName); err != nil {
-		return err
-	}
+	return s.withWorkspaceLock(ctx, workspaceID, false, func() error {
+		if err := validateAddRepoInputs(workspaceID, repoName); err != nil {
+			return err
+		}
 
-	workspace, _, err := s.findWorkspace(ctx, workspaceID)
-	if err != nil {
-		return err
-	}
+		workspace, _, err := s.findWorkspace(ctx, workspaceID)
+		if err != nil {
+			return err
+		}
 
-	if repoExistsInWorkspace(workspace.Repos, repoName) {
-		return cerrors.NewRepoAlreadyExists(repoName, workspaceID)
-	}
+		if repoExistsInWorkspace(workspace.Repos, repoName) {
+			return cerrors.NewRepoAlreadyExists(repoName, workspaceID)
+		}
 
-	repo, err := s.resolveWorkspaceRepo(workspaceID, repoName)
-	if err != nil {
-		return err
-	}
+		repo, err := s.resolveWorkspaceRepo(workspaceID, repoName)
+		if err != nil {
+			return err
+		}
 
-	branchName, err := s.workspaceBranchName(workspaceID, workspace.BranchName)
-	if err != nil {
-		return err
-	}
+		branchName, err := s.workspaceBranchName(workspaceID, workspace.BranchName)
+		if err != nil {
+			return err
+		}
 
-	op := NewOperation(s.logger)
-	op.AddStep(func() error {
-		return s.ensureWorkspaceWorktree(ctx, repo, workspaceID, branchName)
-	}, func() error {
-		return s.removeWorkspaceRepoWorktrees(ctx, workspaceID, []domain.Repo{repo})
+		op := NewOperation(s.logger)
+		op.AddStep(func() error {
+			return s.ensureWorkspaceWorktree(ctx, repo, workspaceID, branchName)
+		}, func() error {
+			return s.removeWorkspaceRepoWorktrees(ctx, workspaceID, []domain.Repo{repo})
+		})
+		op.AddStep(func() error {
+			return s.saveWorkspaceRepo(ctx, workspaceID, workspace, repo)
+		}, nil)
+
+		if err := op.Execute(); err != nil {
+			return err
+		}
+
+		s.cache.Invalidate(workspaceID)
+
+		return nil
 	})
-	op.AddStep(func() error {
-		return s.saveWorkspaceRepo(ctx, workspaceID, workspace, repo)
-	}, nil)
-
-	if err := op.Execute(); err != nil {
-		return err
-	}
-
-	s.cache.Invalidate(workspaceID)
-
-	return nil
 }
 
 func validateAddRepoInputs(workspaceID, repoName string) error {
@@ -756,41 +845,43 @@ func (s *Service) saveWorkspaceRepo(ctx context.Context, workspaceID string, wor
 
 // RemoveRepoFromWorkspace removes a repository from an existing workspace
 func (s *Service) RemoveRepoFromWorkspace(ctx context.Context, workspaceID, repoName string) error {
-	workspace, _, err := s.findWorkspace(ctx, workspaceID)
-	if err != nil {
-		return err
-	}
-
-	// 2. Check if repo exists in workspace
-	repoIndex := -1
-
-	for i, r := range workspace.Repos {
-		if r.Name == repoName {
-			repoIndex = i
-			break
+	return s.withWorkspaceLock(ctx, workspaceID, false, func() error {
+		workspace, _, err := s.findWorkspace(ctx, workspaceID)
+		if err != nil {
+			return err
 		}
-	}
 
-	if repoIndex == -1 {
-		return cerrors.NewRepoNotFound(repoName).WithContext("workspace_id", workspaceID)
-	}
+		// 2. Check if repo exists in workspace
+		repoIndex := -1
 
-	// 3. Remove worktree directory
-	worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repoName)
-	if err := os.RemoveAll(worktreePath); err != nil {
-		return cerrors.NewIOFailed(fmt.Sprintf("remove worktree %s", worktreePath), err)
-	}
+		for i, r := range workspace.Repos {
+			if r.Name == repoName {
+				repoIndex = i
+				break
+			}
+		}
 
-	// 4. Update metadata
-	workspace.Repos = append(workspace.Repos[:repoIndex], workspace.Repos[repoIndex+1:]...)
-	if err := s.wsEngine.Save(ctx, *workspace); err != nil {
-		return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
-	}
+		if repoIndex == -1 {
+			return cerrors.NewRepoNotFound(repoName).WithContext("workspace_id", workspaceID)
+		}
 
-	// Invalidate cache after metadata update
-	s.cache.Invalidate(workspaceID)
+		// 3. Remove worktree directory
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repoName)
+		if err := os.RemoveAll(worktreePath); err != nil {
+			return cerrors.NewIOFailed(fmt.Sprintf("remove worktree %s", worktreePath), err)
+		}
 
-	return nil
+		// 4. Update metadata
+		workspace.Repos = append(workspace.Repos[:repoIndex], workspace.Repos[repoIndex+1:]...)
+		if err := s.wsEngine.Save(ctx, *workspace); err != nil {
+			return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
+		}
+
+		// Invalidate cache after metadata update
+		s.cache.Invalidate(workspaceID)
+
+		return nil
+	})
 }
 
 // CloseOptions configures workspace close behavior.
@@ -805,16 +896,23 @@ type SyncOptions struct {
 }
 
 // CloseWorkspace removes a workspace with safety checks
-func (s *Service) CloseWorkspace(_ context.Context, workspaceID string, force bool) error {
+func (s *Service) CloseWorkspace(ctx context.Context, workspaceID string, force bool) error {
 	//nolint:contextcheck // Wrapper delegates to WithOptions which handles hooks with own timeout
-	return s.CloseWorkspaceWithOptions(workspaceID, force, CloseOptions{})
+	return s.CloseWorkspaceWithOptions(ctx, workspaceID, force, CloseOptions{})
 }
 
 // CloseWorkspaceWithOptions removes a workspace with configurable options.
 //
 //nolint:contextcheck // This function manages hook contexts internally with their own timeouts
-func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts CloseOptions) error {
-	targetWorkspace, _, err := s.findWorkspace(context.Background(), workspaceID)
+func (s *Service) CloseWorkspaceWithOptions(ctx context.Context, workspaceID string, force bool, opts CloseOptions) error {
+	return s.withWorkspaceLock(ctx, workspaceID, false, func() error {
+		return s.closeWorkspaceWithOptionsUnlocked(ctx, workspaceID, force, opts)
+	})
+}
+
+//nolint:contextcheck // This function manages hook contexts internally with their own timeouts
+func (s *Service) closeWorkspaceWithOptionsUnlocked(ctx context.Context, workspaceID string, force bool, opts CloseOptions) error {
+	targetWorkspace, _, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
@@ -853,7 +951,7 @@ func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts
 	s.removeWorkspaceWorktrees(targetWorkspace, workspaceID)
 
 	// Delete workspace
-	if err := s.wsEngine.Delete(context.Background(), workspaceID); err != nil {
+	if err := s.wsEngine.Delete(ctx, workspaceID); err != nil {
 		return err
 	}
 
@@ -864,16 +962,31 @@ func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts
 }
 
 // CloseWorkspaceKeepMetadata moves workspace metadata to the closed store and removes the active worktree.
-func (s *Service) CloseWorkspaceKeepMetadata(_ context.Context, workspaceID string, force bool) (*domain.ClosedWorkspace, error) {
+func (s *Service) CloseWorkspaceKeepMetadata(ctx context.Context, workspaceID string, force bool) (*domain.ClosedWorkspace, error) {
 	//nolint:contextcheck // Wrapper delegates to WithOptions which handles hooks with own timeout
-	return s.CloseWorkspaceKeepMetadataWithOptions(workspaceID, force, CloseOptions{})
+	return s.CloseWorkspaceKeepMetadataWithOptions(ctx, workspaceID, force, CloseOptions{})
 }
 
 // CloseWorkspaceKeepMetadataWithOptions moves workspace metadata to the closed store with configurable options.
 //
 //nolint:contextcheck // This function manages hook contexts internally with their own timeouts
-func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, force bool, opts CloseOptions) (*domain.ClosedWorkspace, error) {
-	targetWorkspace, _, err := s.findWorkspace(context.Background(), workspaceID)
+func (s *Service) CloseWorkspaceKeepMetadataWithOptions(ctx context.Context, workspaceID string, force bool, opts CloseOptions) (*domain.ClosedWorkspace, error) {
+	var closed *domain.ClosedWorkspace
+
+	if err := s.withWorkspaceLock(ctx, workspaceID, false, func() error {
+		var err error
+		closed, err = s.closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx, workspaceID, force, opts)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return closed, nil
+}
+
+//nolint:contextcheck // This function manages hook contexts internally with their own timeouts
+func (s *Service) closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx context.Context, workspaceID string, force bool, opts CloseOptions) (*domain.ClosedWorkspace, error) {
+	targetWorkspace, _, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -910,7 +1023,7 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, forc
 
 	closedAt := time.Now().UTC()
 
-	archived, err := s.wsEngine.Close(context.Background(), workspaceID, closedAt)
+	archived, err := s.wsEngine.Close(ctx, workspaceID, closedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -918,8 +1031,8 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, forc
 	// Remove worktrees from canonical repos before deleting workspace directory
 	s.removeWorkspaceWorktrees(targetWorkspace, workspaceID)
 
-	if err := s.wsEngine.Delete(context.Background(), workspaceID); err != nil {
-		_ = s.wsEngine.DeleteClosed(context.Background(), workspaceID, closedAt)
+	if err := s.wsEngine.Delete(ctx, workspaceID); err != nil {
+		_ = s.wsEngine.DeleteClosed(ctx, workspaceID, closedAt)
 		return nil, cerrors.NewIOFailed("remove workspace directory", err)
 	}
 
@@ -1116,6 +1229,15 @@ func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
 	return workspaces, nil
 }
 
+// WorkspaceLocked reports whether a workspace currently has an active lock.
+func (s *Service) WorkspaceLocked(workspaceID string) (bool, error) {
+	if s.lockManager == nil {
+		return false, nil
+	}
+
+	return s.lockManager.IsLocked(workspaceID)
+}
+
 // ListClosedWorkspaces returns closed workspace metadata.
 func (s *Service) ListClosedWorkspaces() ([]domain.ClosedWorkspace, error) {
 	return s.wsEngine.ListClosed(context.Background())
@@ -1167,66 +1289,76 @@ func (s *Service) GetStatus(ctx context.Context, workspaceID string) (*domain.Wo
 
 // SyncWorkspace pulls updates for all repositories in the workspace.
 func (s *Service) SyncWorkspace(ctx context.Context, id string, opts SyncOptions) (*domain.SyncResult, error) {
-	ws, _, err := s.findWorkspace(ctx, id)
-	if err != nil {
+	var result *domain.SyncResult
+
+	if err := s.withWorkspaceLock(ctx, id, false, func() error {
+		ws, _, err := s.findWorkspace(ctx, id)
+		if err != nil {
+			return err
+		}
+
+		if opts.Timeout == 0 {
+			opts.Timeout = 60 * time.Second // Default timeout
+		}
+
+		results := make([]domain.RepoSyncStatus, len(ws.Repos))
+
+		var (
+			wg sync.WaitGroup
+			mu sync.Mutex
+		)
+
+		numWorkers := s.config.GetParallelWorkers()
+		if numWorkers <= 0 {
+			numWorkers = 1
+		}
+
+		reposChan := make(chan struct {
+			index int
+			repo  domain.Repo
+		}, len(ws.Repos))
+
+		for i, repo := range ws.Repos {
+			reposChan <- struct {
+				index int
+				repo  domain.Repo
+			}{i, repo}
+		}
+
+		close(reposChan)
+
+		if numWorkers > len(ws.Repos) {
+			numWorkers = len(ws.Repos)
+		}
+
+		for w := 0; w < numWorkers; w++ {
+			wg.Add(1)
+
+			go func() {
+				defer wg.Done()
+
+				for r := range reposChan {
+					repoResult := s.syncRepo(ctx, id, r.repo, opts.Timeout)
+
+					mu.Lock()
+
+					results[r.index] = repoResult
+
+					mu.Unlock()
+				}
+			}()
+		}
+
+		wg.Wait()
+
+		result = s.aggregateSyncResults(id, results)
+
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
-	if opts.Timeout == 0 {
-		opts.Timeout = 60 * time.Second // Default timeout
-	}
-
-	results := make([]domain.RepoSyncStatus, len(ws.Repos))
-
-	var (
-		wg sync.WaitGroup
-		mu sync.Mutex
-	)
-
-	numWorkers := s.config.GetParallelWorkers()
-	if numWorkers <= 0 {
-		numWorkers = 1
-	}
-
-	reposChan := make(chan struct {
-		index int
-		repo  domain.Repo
-	}, len(ws.Repos))
-
-	for i, repo := range ws.Repos {
-		reposChan <- struct {
-			index int
-			repo  domain.Repo
-		}{i, repo}
-	}
-
-	close(reposChan)
-
-	if numWorkers > len(ws.Repos) {
-		numWorkers = len(ws.Repos)
-	}
-
-	for w := 0; w < numWorkers; w++ {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
-			for r := range reposChan {
-				repoResult := s.syncRepo(ctx, id, r.repo, opts.Timeout)
-
-				mu.Lock()
-
-				results[r.index] = repoResult
-
-				mu.Unlock()
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	return s.aggregateSyncResults(id, results), nil
+	return result, nil
 }
 
 func (s *Service) aggregateSyncResults(workspaceID string, results []domain.RepoSyncStatus) *domain.SyncResult {
@@ -1370,53 +1502,51 @@ func (s *Service) SwitchBranch(ctx context.Context, workspaceID, branchName stri
 
 // RestoreWorkspace recreates a workspace from the newest closed entry.
 func (s *Service) RestoreWorkspace(ctx context.Context, workspaceID string, force bool) error {
-	archive, err := s.wsEngine.LatestClosed(ctx, workspaceID)
-	if err != nil {
-		return err
-	}
-
-	if _, _, err := s.findWorkspace(ctx, workspaceID); err == nil {
-		if !force {
-			return cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to replace or choose a different ID")
+	return s.withWorkspaceLock(ctx, workspaceID, true, func() error {
+		archive, err := s.wsEngine.LatestClosed(ctx, workspaceID)
+		if err != nil {
+			return err
 		}
 
-		if err := s.CloseWorkspace(ctx, workspaceID, true); err != nil {
-			return cerrors.NewIOFailed("remove existing workspace", err)
-		}
-	}
-
-	ws := archive.Metadata
-	ws.ClosedAt = nil
-
-	op := NewOperation(s.logger)
-	op.AddStep(func() error {
-		if _, err := s.CreateWorkspace(ctx, ws.ID, ws.BranchName, ws.Repos); err != nil {
-			// Preserve original error type if it's already typed
-			var canopyErr *cerrors.CanopyError
-			if errors.As(err, &canopyErr) {
-				return canopyErr.WithContext("operation", fmt.Sprintf("restore workspace %s", workspaceID))
+		if _, _, err := s.findWorkspace(ctx, workspaceID); err == nil {
+			if !force {
+				return cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to replace or choose a different ID")
 			}
 
-			return cerrors.Wrap(cerrors.ErrIOFailed, fmt.Sprintf("failed to restore workspace %s", workspaceID), err)
+			if err := s.closeWorkspaceWithOptionsUnlocked(ctx, workspaceID, true, CloseOptions{}); err != nil {
+				return cerrors.NewIOFailed("remove existing workspace", err)
+			}
 		}
 
-		return nil
-	}, nil)
-	op.AddStep(func() error {
-		// Delete the closed entry using ID and timestamp
-		closedAt := archive.ClosedAt()
-		if err := s.wsEngine.DeleteClosed(ctx, workspaceID, closedAt); err != nil {
-			return cerrors.NewIOFailed("remove closed entry", err)
-		}
+		ws := archive.Metadata
+		ws.ClosedAt = nil
 
-		return nil
-	}, nil)
+		op := NewOperation(s.logger)
+		op.AddStep(func() error {
+			if err := s.createWorkspaceWithOptionsUnlocked(ctx, ws.ID, ws.BranchName, ws.Repos, CreateOptions{}); err != nil {
+				// Preserve original error type if it's already typed
+				var canopyErr *cerrors.CanopyError
+				if errors.As(err, &canopyErr) {
+					return canopyErr.WithContext("operation", fmt.Sprintf("restore workspace %s", workspaceID))
+				}
 
-	if err := op.Execute(); err != nil {
-		return err
-	}
+				return cerrors.Wrap(cerrors.ErrIOFailed, fmt.Sprintf("failed to restore workspace %s", workspaceID), err)
+			}
 
-	return nil
+			return nil
+		}, nil)
+		op.AddStep(func() error {
+			// Delete the closed entry using ID and timestamp
+			closedAt := archive.ClosedAt()
+			if err := s.wsEngine.DeleteClosed(ctx, workspaceID, closedAt); err != nil {
+				return cerrors.NewIOFailed("remove closed entry", err)
+			}
+
+			return nil
+		}, nil)
+
+		return op.Execute()
+	})
 }
 
 // StaleThresholdDays returns the configured stale threshold in days.
