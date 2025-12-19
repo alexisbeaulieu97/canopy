@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	"github.com/alexisbeaulieu97/canopy/internal/mocks"
 )
@@ -23,7 +24,7 @@ func TestNewCanonicalRepoService_PanicsOnNilDependencies(t *testing.T) {
 		}()
 
 		mockStorage := mocks.NewMockWorkspaceStorage()
-		NewCanonicalRepoService(nil, mockStorage, "/projects", nil, nil)
+		NewCanonicalRepoService(nil, mockStorage, "/projects", nil, nil, nil)
 	})
 
 	t.Run("panics on nil wsStorage", func(t *testing.T) {
@@ -36,7 +37,7 @@ func TestNewCanonicalRepoService_PanicsOnNilDependencies(t *testing.T) {
 		}()
 
 		mockGit := mocks.NewMockGitOperations()
-		NewCanonicalRepoService(mockGit, nil, "/projects", nil, nil)
+		NewCanonicalRepoService(mockGit, nil, "/projects", nil, nil, nil)
 	})
 }
 
@@ -53,7 +54,7 @@ func TestCanonicalRepoService_List(t *testing.T) {
 
 		mockStorage := mocks.NewMockWorkspaceStorage()
 
-		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil, nil)
 
 		repos, err := svc.List(context.Background())
 		if err != nil {
@@ -84,7 +85,7 @@ func TestCanonicalRepoService_Add(t *testing.T) {
 
 		mockStorage := mocks.NewMockWorkspaceStorage()
 
-		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil, nil)
 
 		name, err := svc.Add(context.Background(), "https://github.com/org/my-repo.git")
 		if err != nil {
@@ -110,7 +111,7 @@ func TestCanonicalRepoService_Add(t *testing.T) {
 		mockGit := mocks.NewMockGitOperations()
 		mockStorage := mocks.NewMockWorkspaceStorage()
 
-		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil, nil)
 
 		_, err := svc.Add(context.Background(), "")
 		if err == nil {
@@ -128,7 +129,7 @@ func TestCanonicalRepoService_Add(t *testing.T) {
 
 		mockStorage := mocks.NewMockWorkspaceStorage()
 
-		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil, nil)
 
 		name, err := svc.Add(context.Background(), "https://github.com/org/my-repo.git")
 		if err == nil {
@@ -137,6 +138,42 @@ func TestCanonicalRepoService_Add(t *testing.T) {
 
 		if name != "" {
 			t.Errorf("expected empty name on error, got %q", name)
+		}
+	})
+
+	t.Run("rolls back on registry save failure", func(t *testing.T) {
+		t.Parallel()
+
+		projectsRoot := t.TempDir()
+
+		registryDir := filepath.Join(t.TempDir(), "registry")
+		if err := os.MkdirAll(registryDir, 0o500); err != nil {
+			t.Fatalf("failed to create registry dir: %v", err)
+		}
+
+		registryPath := filepath.Join(registryDir, "repos.yaml")
+
+		registry, err := config.LoadRepoRegistry(registryPath)
+		if err != nil {
+			t.Fatalf("failed to load registry: %v", err)
+		}
+
+		mockGit := mocks.NewMockGitOperations()
+		mockGit.CloneFunc = func(_ context.Context, _, name string) error {
+			return os.MkdirAll(filepath.Join(projectsRoot, name), 0o750)
+		}
+
+		mockStorage := mocks.NewMockWorkspaceStorage()
+		svc := NewCanonicalRepoService(mockGit, mockStorage, projectsRoot, nil, nil, registry)
+
+		_, err = svc.Add(context.Background(), "https://github.com/org/my-repo.git")
+		if err == nil {
+			t.Fatalf("expected error from registry save failure")
+		}
+
+		repoPath := filepath.Join(projectsRoot, "my-repo")
+		if _, statErr := os.Stat(repoPath); !os.IsNotExist(statErr) {
+			t.Fatalf("expected repo to be removed, got %v", statErr)
 		}
 	})
 }
@@ -157,7 +194,7 @@ func TestCanonicalRepoService_Remove(t *testing.T) {
 		mockGit := mocks.NewMockGitOperations()
 		mockStorage := mocks.NewMockWorkspaceStorage()
 
-		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil, nil)
 
 		err := svc.Remove(context.Background(), "test-repo", false)
 		if err != nil {
@@ -186,7 +223,7 @@ func TestCanonicalRepoService_Remove(t *testing.T) {
 			Repos: []domain.Repo{{Name: "test-repo", URL: "https://github.com/org/test-repo.git"}},
 		}
 
-		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil, nil)
 
 		err := svc.Remove(context.Background(), "test-repo", false)
 		if err == nil {
@@ -211,7 +248,7 @@ func TestCanonicalRepoService_Remove(t *testing.T) {
 			Repos: []domain.Repo{{Name: "test-repo", URL: "https://github.com/org/test-repo.git"}},
 		}
 
-		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil, nil)
 
 		err := svc.Remove(context.Background(), "test-repo", true)
 		if err != nil {
@@ -230,7 +267,7 @@ func TestCanonicalRepoService_Remove(t *testing.T) {
 		mockGit := mocks.NewMockGitOperations()
 		mockStorage := mocks.NewMockWorkspaceStorage()
 
-		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, nil, nil)
 
 		err := svc.Remove(context.Background(), "nonexistent", false)
 		if err == nil {
@@ -256,7 +293,7 @@ func TestCanonicalRepoService_Sync(t *testing.T) {
 
 		mockStorage := mocks.NewMockWorkspaceStorage()
 
-		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil, nil)
 
 		err := svc.Sync(context.Background(), "my-repo")
 		if err != nil {
@@ -290,7 +327,7 @@ func TestCanonicalRepoService_GetWorkspacesUsingRepo(t *testing.T) {
 			Repos: []domain.Repo{{Name: "shared-repo", URL: "https://github.com/org/shared-repo.git"}},
 		}
 
-		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil, nil)
 
 		usedBy, err := svc.GetWorkspacesUsingRepo(context.Background(), "shared-repo")
 		if err != nil {
@@ -308,7 +345,7 @@ func TestCanonicalRepoService_GetWorkspacesUsingRepo(t *testing.T) {
 		mockGit := mocks.NewMockGitOperations()
 		mockStorage := mocks.NewMockWorkspaceStorage()
 
-		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, "/projects", nil, nil, nil)
 
 		usedBy, err := svc.GetWorkspacesUsingRepo(context.Background(), "unused-repo")
 		if err != nil {
@@ -348,7 +385,7 @@ func TestCanonicalRepoService_PreviewRemove(t *testing.T) {
 		}
 
 		diskCalc := DefaultDiskUsageCalculator()
-		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, diskCalc)
+		svc := NewCanonicalRepoService(mockGit, mockStorage, dir, nil, diskCalc, nil)
 
 		preview, err := svc.PreviewRemove(context.Background(), "test-repo")
 		if err != nil {

@@ -107,10 +107,19 @@ func (e *Engine) Create(_ context.Context, ws domain.Workspace) error {
 
 	if err := os.Mkdir(path, 0o750); err != nil {
 		if os.IsExist(err) {
-			return cerrors.NewWorkspaceExists(ws.ID)
-		}
+			metaPath := filepath.Join(path, "workspace.yaml")
 
-		return cerrors.NewIOFailed("create workspace directory", err)
+			_, statErr := os.Stat(metaPath)
+			if statErr == nil {
+				return cerrors.NewWorkspaceExists(ws.ID)
+			}
+
+			if statErr != nil && !os.IsNotExist(statErr) {
+				return cerrors.NewIOFailed("check workspace metadata", statErr)
+			}
+		} else {
+			return cerrors.NewIOFailed("create workspace directory", err)
+		}
 	}
 
 	metaPath := filepath.Join(path, "workspace.yaml")

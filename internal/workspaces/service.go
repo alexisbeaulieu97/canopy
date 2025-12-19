@@ -157,7 +157,7 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 		hookExecutor: hookExecutor,
 		resolver:     NewRepoResolver(cfg.GetRegistry()),
 		diskUsage:    diskUsage,
-		canonical:    NewCanonicalRepoService(gitEngine, wsEngine, cfg.GetProjectsRoot(), logger, diskUsage),
+		canonical:    NewCanonicalRepoService(gitEngine, wsEngine, cfg.GetProjectsRoot(), logger, diskUsage, cfg.GetRegistry()),
 		cache:        cache,
 	}
 
@@ -221,6 +221,40 @@ func (s *Service) CreateWorkspace(ctx context.Context, id, branchName string, re
 
 // CreateWorkspaceWithOptions creates a new workspace with configurable options.
 func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName string, repos []domain.Repo, opts CreateOptions) (string, error) {
+	branchName, err := s.resolveCreateBranchName(id, branchName)
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.ensureWorkspaceAvailable(id); err != nil {
+		return "", err
+	}
+
+	ws := domain.Workspace{
+		ID:         id,
+		BranchName: branchName,
+		Repos:      repos,
+	}
+
+	if err := s.executeWorkspaceCreate(ctx, ws, repos); err != nil {
+		return "", err
+	}
+
+	// Invalidate cache for this workspace ID
+	s.cache.Invalidate(id)
+
+	// Run post_create hooks
+	//nolint:contextcheck // Hooks manage their own timeout context per-hook
+	if err := s.runPostCreateHooks(id, id, branchName, repos, opts); err != nil {
+		// Hook failures don't rollback the workspace (per design.md)
+		// But we return the error if not continuing on hook errors
+		return id, err
+	}
+
+	return id, nil
+}
+
+func (s *Service) resolveCreateBranchName(id, branchName string) (string, error) {
 	// Validate inputs
 	if err := validation.ValidateWorkspaceID(id); err != nil {
 		return "", err
@@ -239,42 +273,67 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 		}
 	}
 
-	ws := domain.Workspace{
-		ID:         id,
-		BranchName: branchName,
-		Repos:      repos,
+	return branchName, nil
+}
+
+func (s *Service) executeWorkspaceCreate(ctx context.Context, ws domain.Workspace, repos []domain.Repo) error {
+	workspacePath := filepath.Join(s.config.GetWorkspacesRoot(), ws.ID)
+	op := NewOperation(s.logger)
+	op.AddStep(func() error {
+		if err := os.Mkdir(workspacePath, 0o750); err != nil {
+			if os.IsExist(err) {
+				return cerrors.NewWorkspaceExists(ws.ID)
+			}
+
+			return cerrors.NewIOFailed("create workspace directory", err)
+		}
+
+		return nil
+	}, func() error {
+		if err := os.RemoveAll(workspacePath); err != nil {
+			return cerrors.NewIOFailed("remove workspace directory", err)
+		}
+
+		return nil
+	})
+	op.AddStep(func() error {
+		return s.cloneWorkspaceRepos(ctx, repos, ws.ID, ws.BranchName)
+	}, func() error {
+		return s.removeWorkspaceRepoWorktrees(ctx, ws.ID, repos)
+	})
+	op.AddStep(func() error {
+		return s.wsEngine.Create(ctx, ws)
+	}, nil)
+
+	return op.Execute()
+}
+
+func (s *Service) ensureWorkspaceAvailable(workspaceID string) error {
+	path := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID)
+	if _, err := os.Stat(path); err == nil {
+		return cerrors.NewWorkspaceExists(workspaceID)
+	} else if err != nil && !os.IsNotExist(err) {
+		return cerrors.NewIOFailed("check workspace directory", err)
 	}
 
-	if err := s.wsEngine.Create(ctx, ws); err != nil {
-		return "", err
+	return nil
+}
+
+func (s *Service) removeWorkspaceRepoWorktrees(ctx context.Context, workspaceID string, repos []domain.Repo) error {
+	if s.gitEngine == nil {
+		return nil
 	}
 
-	// Invalidate cache for this workspace ID
-	s.cache.Invalidate(id)
+	var errs []error
 
-	// Manual cleanup helper
-	cleanup := func() {
-		path := filepath.Join(s.config.GetWorkspacesRoot(), id)
-		if err := os.RemoveAll(path); err != nil {
-			s.logger.Warn("cleanup failed", "path", path, "error", err)
+	for _, repo := range repos {
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repo.Name)
+		if err := s.gitEngine.RemoveWorktree(ctx, repo.Name, worktreePath); err != nil {
+			errs = append(errs, err)
 		}
 	}
 
-	// Clone repositories (if any)
-	if err := s.cloneWorkspaceRepos(ctx, repos, id, branchName); err != nil {
-		cleanup()
-		return "", err
-	}
-
-	// Run post_create hooks
-	//nolint:contextcheck // Hooks manage their own timeout context per-hook
-	if err := s.runPostCreateHooks(id, id, branchName, repos, opts); err != nil {
-		// Hook failures don't rollback the workspace (per design.md)
-		// But we return the error if not continuing on hook errors
-		return id, err
-	}
-
-	return id, nil
+	return errors.Join(errs...)
 }
 
 // cloneWorkspaceRepos clones all repositories for a workspace.
@@ -614,11 +673,17 @@ func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName 
 		return err
 	}
 
-	if err := s.ensureWorkspaceWorktree(ctx, repo, workspaceID, branchName); err != nil {
-		return err
-	}
+	op := NewOperation(s.logger)
+	op.AddStep(func() error {
+		return s.ensureWorkspaceWorktree(ctx, repo, workspaceID, branchName)
+	}, func() error {
+		return s.removeWorkspaceRepoWorktrees(ctx, workspaceID, []domain.Repo{repo})
+	})
+	op.AddStep(func() error {
+		return s.saveWorkspaceRepo(ctx, workspaceID, workspace, repo)
+	}, nil)
 
-	if err := s.saveWorkspaceRepo(ctx, workspaceID, workspace, repo); err != nil {
+	if err := op.Execute(); err != nil {
 		return err
 	}
 
@@ -1323,20 +1388,32 @@ func (s *Service) RestoreWorkspace(ctx context.Context, workspaceID string, forc
 	ws := archive.Metadata
 	ws.ClosedAt = nil
 
-	if _, err := s.CreateWorkspace(ctx, ws.ID, ws.BranchName, ws.Repos); err != nil {
-		// Preserve original error type if it's already typed
-		var canopyErr *cerrors.CanopyError
-		if errors.As(err, &canopyErr) {
-			return canopyErr.WithContext("operation", fmt.Sprintf("restore workspace %s", workspaceID))
+	op := NewOperation(s.logger)
+	op.AddStep(func() error {
+		if _, err := s.CreateWorkspace(ctx, ws.ID, ws.BranchName, ws.Repos); err != nil {
+			// Preserve original error type if it's already typed
+			var canopyErr *cerrors.CanopyError
+			if errors.As(err, &canopyErr) {
+				return canopyErr.WithContext("operation", fmt.Sprintf("restore workspace %s", workspaceID))
+			}
+
+			return cerrors.Wrap(cerrors.ErrIOFailed, fmt.Sprintf("failed to restore workspace %s", workspaceID), err)
 		}
 
-		return cerrors.Wrap(cerrors.ErrIOFailed, fmt.Sprintf("failed to restore workspace %s", workspaceID), err)
-	}
+		return nil
+	}, nil)
+	op.AddStep(func() error {
+		// Delete the closed entry using ID and timestamp
+		closedAt := archive.ClosedAt()
+		if err := s.wsEngine.DeleteClosed(ctx, workspaceID, closedAt); err != nil {
+			return cerrors.NewIOFailed("remove closed entry", err)
+		}
 
-	// Delete the closed entry using ID and timestamp
-	closedAt := archive.ClosedAt()
-	if err := s.wsEngine.DeleteClosed(ctx, workspaceID, closedAt); err != nil {
-		return cerrors.NewIOFailed("remove closed entry", err)
+		return nil
+	}, nil)
+
+	if err := op.Execute(); err != nil {
+		return err
 	}
 
 	return nil
