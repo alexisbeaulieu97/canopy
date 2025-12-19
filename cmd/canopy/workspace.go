@@ -222,6 +222,7 @@ var (
 			jsonOutput, _ := cmd.Flags().GetBool("json")
 			closedOnly, _ := cmd.Flags().GetBool("closed")
 			showStatus, _ := cmd.Flags().GetBool("status")
+			showLocks, _ := cmd.Flags().GetBool("show-locks")
 			timeoutStr, _ := cmd.Flags().GetString("timeout")
 
 			// Parse timeout duration
@@ -300,6 +301,15 @@ var (
 					}
 				}
 
+				if showLocks {
+					locked, lockErr := service.WorkspaceLocked(w.ID)
+					if lockErr != nil {
+						return lockErr
+					}
+
+					ws.Locked = locked
+				}
+
 				workspacesWithStatus = append(workspacesWithStatus, ws)
 			}
 
@@ -316,7 +326,12 @@ var (
 			}
 
 			for _, ws := range workspacesWithStatus {
-				output.Infof("%s (Branch: %s)", ws.ID, ws.BranchName)
+				lockSuffix := ""
+				if showLocks && ws.Locked {
+					lockSuffix = " [locked]"
+				}
+
+				output.Infof("%s (Branch: %s)%s", ws.ID, ws.BranchName, lockSuffix)
 				for i, r := range ws.Repos {
 					if showStatus && i < len(ws.RepoStatuses) {
 						status := ws.RepoStatuses[i]
@@ -440,34 +455,34 @@ var (
 
 			if keepFlag {
 				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
 				}
 
-				return keepAndPrint(service, id, force, closeOpts)
+				return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
 			}
 
 			if deleteFlag {
 				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
 				}
 
-				return closeAndPrint(service, id, force, closeOpts)
+				return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
 			}
 
 			if !interactive {
 				if configDefaultArchive {
 					if dryRunHooks && jsonOutput {
-						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+						return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
 					}
 
-					return keepAndPrint(service, id, force, closeOpts)
+					return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
 				}
 
 				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
 				}
 
-				return closeAndPrint(service, id, force, closeOpts)
+				return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
 			}
 
 			reader := bufio.NewReader(os.Stdin)
@@ -482,17 +497,17 @@ var (
 			if err != nil {
 				if configDefaultArchive {
 					if dryRunHooks && jsonOutput {
-						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+						return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
 					}
 
-					return keepAndPrint(service, id, force, closeOpts)
+					return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
 				}
 
 				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
 				}
 
-				return closeAndPrint(service, id, force, closeOpts)
+				return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
 			}
 
 			answer = strings.ToLower(strings.TrimSpace(answer))
@@ -500,44 +515,44 @@ var (
 			switch answer {
 			case "y", "yes":
 				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
 				}
 
-				return keepAndPrint(service, id, force, closeOpts)
+				return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
 			case "n", "no":
 				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
 				}
 
-				return closeAndPrint(service, id, force, closeOpts)
+				return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
 			case "":
 				if configDefaultArchive {
 					if dryRunHooks && jsonOutput {
-						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+						return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
 					}
 
-					return keepAndPrint(service, id, force, closeOpts)
+					return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
 				}
 
 				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
 				}
 
-				return closeAndPrint(service, id, force, closeOpts)
+				return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
 			default:
 				if configDefaultArchive {
 					if dryRunHooks && jsonOutput {
-						return closeWithHookDryRunJSON(service, id, force, true, closeOpts, hookPreviews)
+						return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
 					}
 
-					return keepAndPrint(service, id, force, closeOpts)
+					return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
 				}
 
 				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(service, id, force, false, closeOpts, hookPreviews)
+					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
 				}
 
-				return closeAndPrint(service, id, force, closeOpts)
+				return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
 			}
 		},
 	}
@@ -1016,8 +1031,8 @@ func printWorkspaceClosePreview(preview *domain.WorkspaceClosePreview) {
 	}
 }
 
-func keepAndPrint(service *workspaces.Service, id string, force bool, opts workspaces.CloseOptions) error {
-	archived, err := service.CloseWorkspaceKeepMetadataWithOptions(id, force, opts)
+func keepAndPrint(ctx context.Context, service *workspaces.Service, id string, force bool, opts workspaces.CloseOptions) error {
+	archived, err := service.CloseWorkspaceKeepMetadataWithOptions(ctx, id, force, opts)
 	if err != nil {
 		return err
 	}
@@ -1032,8 +1047,8 @@ func keepAndPrint(service *workspaces.Service, id string, force bool, opts works
 	return nil
 }
 
-func closeAndPrint(service *workspaces.Service, id string, force bool, opts workspaces.CloseOptions) error {
-	if err := service.CloseWorkspaceWithOptions(id, force, opts); err != nil {
+func closeAndPrint(ctx context.Context, service *workspaces.Service, id string, force bool, opts workspaces.CloseOptions) error {
+	if err := service.CloseWorkspaceWithOptions(ctx, id, force, opts); err != nil {
 		return err
 	}
 
@@ -1123,6 +1138,7 @@ func init() {
 	workspaceListCmd.Flags().Bool("closed", false, "List closed workspaces")
 	workspaceListCmd.Flags().Bool("status", false, "Show git status for each repository")
 	workspaceListCmd.Flags().String("timeout", "5s", "Timeout for status check per workspace (e.g. 5s, 10s)")
+	workspaceListCmd.Flags().Bool("show-locks", false, "Show workspace lock status")
 
 	workspaceViewCmd.Flags().Bool("json", false, "Output in JSON format")
 	workspacePathCmd.Flags().Bool("json", false, "Output in JSON format")

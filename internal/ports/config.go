@@ -1,7 +1,11 @@
 // Package ports defines interfaces for external dependencies (hexagonal architecture).
 package ports
 
-import "github.com/alexisbeaulieu97/canopy/internal/config"
+import (
+	"time"
+
+	"github.com/alexisbeaulieu97/canopy/internal/config"
+)
 
 // ConfigProvider defines the interface for configuration access.
 type ConfigProvider interface {
@@ -31,6 +35,12 @@ type ConfigProvider interface {
 
 	// GetParallelWorkers returns the number of parallel workers for repository operations.
 	GetParallelWorkers() int
+
+	// GetLockTimeout returns the workspace lock timeout.
+	GetLockTimeout() time.Duration
+
+	// GetLockStaleThreshold returns the stale lock threshold.
+	GetLockStaleThreshold() time.Duration
 
 	// GetRegistry returns the repository registry.
 	GetRegistry() *config.RepoRegistry

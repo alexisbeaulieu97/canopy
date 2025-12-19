@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -167,6 +168,7 @@ func printHookPreview(phase string, previews []domain.HookCommandPreview) {
 }
 
 func closeWithHookDryRunJSON(
+	ctx context.Context,
 	service *workspaces.Service,
 	id string,
 	force bool,
@@ -175,7 +177,7 @@ func closeWithHookDryRunJSON(
 	previews []domain.HookCommandPreview,
 ) error {
 	if keepMetadata {
-		archived, err := service.CloseWorkspaceKeepMetadataWithOptions(id, force, opts)
+		archived, err := service.CloseWorkspaceKeepMetadataWithOptions(ctx, id, force, opts)
 		if err != nil {
 			return err
 		}
@@ -195,7 +197,7 @@ func closeWithHookDryRunJSON(
 		})
 	}
 
-	if err := service.CloseWorkspaceWithOptions(id, force, opts); err != nil {
+	if err := service.CloseWorkspaceWithOptions(ctx, id, force, opts); err != nil {
 		return err
 	}
 

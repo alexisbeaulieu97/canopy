@@ -16,6 +16,7 @@ type ErrorCode string
 const (
 	ErrWorkspaceNotFound      ErrorCode = "WORKSPACE_NOT_FOUND"
 	ErrWorkspaceExists        ErrorCode = "WORKSPACE_EXISTS"
+	ErrWorkspaceLocked        ErrorCode = "WORKSPACE_LOCKED"
 	ErrRepoNotFound           ErrorCode = "REPO_NOT_FOUND"
 	ErrRepoNotClean           ErrorCode = "REPO_NOT_CLEAN"
 	ErrRepoAlreadyExists      ErrorCode = "REPO_ALREADY_EXISTS"
@@ -106,6 +107,15 @@ func NewWorkspaceExists(id string) *CanopyError {
 	return &CanopyError{
 		Code:    ErrWorkspaceExists,
 		Message: fmt.Sprintf("workspace already exists: %s", id),
+		Context: map[string]string{"workspace_id": id},
+	}
+}
+
+// NewWorkspaceLocked creates an error for when a workspace is locked.
+func NewWorkspaceLocked(id string) *CanopyError {
+	return &CanopyError{
+		Code:    ErrWorkspaceLocked,
+		Message: fmt.Sprintf("workspace is locked: %s", id),
 		Context: map[string]string{"workspace_id": id},
 	}
 }
@@ -425,6 +435,7 @@ func NewPathNotDirectory(path string) *CanopyError {
 var (
 	WorkspaceNotFound      = &CanopyError{Code: ErrWorkspaceNotFound}
 	WorkspaceExists        = &CanopyError{Code: ErrWorkspaceExists}
+	WorkspaceLocked        = &CanopyError{Code: ErrWorkspaceLocked}
 	RepoNotFound           = &CanopyError{Code: ErrRepoNotFound}
 	RepoNotClean           = &CanopyError{Code: ErrRepoNotClean}
 	RepoHasUnpushedCommits = &CanopyError{Code: ErrRepoHasUnpushedCommits}
