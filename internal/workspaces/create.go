@@ -158,6 +158,10 @@ func (s *Service) cloneWorkspaceRepos(ctx context.Context, repos []domain.Repo, 
 		return nil
 	}
 
+	if s.gitEngine == nil {
+		return cerrors.NewInternalError("git engine not initialized", nil)
+	}
+
 	// Check for context cancellation before starting
 	if ctx.Err() != nil {
 		return cerrors.NewContextError(ctx, "create workspace", dirName)

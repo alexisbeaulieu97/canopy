@@ -13,7 +13,7 @@ import (
 
 // loadWorkspaces creates a command to load all workspaces.
 func (m Model) loadWorkspaces() tea.Msg {
-	workspaces, err := m.svc.ListWorkspaces()
+	workspaces, err := m.svc.ListWorkspaces(context.Background())
 	if err != nil {
 		return loadWorkspacesErrMsg{err: err}
 	}
@@ -112,7 +112,7 @@ func (m Model) closeWorkspace(id string) tea.Cmd {
 // openWorkspace creates a command to open a workspace in an editor.
 func (m Model) openWorkspace(id string) tea.Cmd {
 	return func() tea.Msg {
-		path, err := m.svc.WorkspacePath(id)
+		path, err := m.svc.WorkspacePath(context.Background(), id)
 		if err != nil {
 			return openEditorResultMsg{err: err}
 		}

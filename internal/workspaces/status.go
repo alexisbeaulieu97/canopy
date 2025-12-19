@@ -9,9 +9,9 @@ import (
 )
 
 // WorkspacePath returns the absolute path for a workspace ID.
-func (s *Service) WorkspacePath(workspaceID string) (string, error) {
+func (s *Service) WorkspacePath(ctx context.Context, workspaceID string) (string, error) {
 	// Use Load instead of List to avoid O(n) scan of all workspaces
-	_, err := s.wsEngine.Load(context.Background(), workspaceID)
+	_, err := s.wsEngine.Load(ctx, workspaceID)
 	if err != nil {
 		return "", err
 	}
@@ -20,8 +20,8 @@ func (s *Service) WorkspacePath(workspaceID string) (string, error) {
 }
 
 // ListWorkspaces returns all active workspaces
-func (s *Service) ListWorkspaces() ([]domain.Workspace, error) {
-	workspaceList, err := s.wsEngine.List(context.Background())
+func (s *Service) ListWorkspaces(ctx context.Context) ([]domain.Workspace, error) {
+	workspaceList, err := s.wsEngine.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -64,8 +64,8 @@ func (s *Service) WorkspaceLocked(workspaceID string) (bool, error) {
 }
 
 // ListClosedWorkspaces returns closed workspace metadata.
-func (s *Service) ListClosedWorkspaces() ([]domain.ClosedWorkspace, error) {
-	return s.wsEngine.ListClosed(context.Background())
+func (s *Service) ListClosedWorkspaces(ctx context.Context) ([]domain.ClosedWorkspace, error) {
+	return s.wsEngine.ListClosed(ctx)
 }
 
 // GetStatus returns the aggregate status of a workspace

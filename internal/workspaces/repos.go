@@ -42,6 +42,10 @@ func (s *Service) ResolveRepos(workspaceID string, requestedRepos []string) ([]d
 		}
 	}
 
+	if len(repos) == 0 {
+		return nil, cerrors.NewNoReposConfigured(workspaceID)
+	}
+
 	return repos, nil
 }
 
@@ -120,6 +124,11 @@ func (s *Service) resolveWorkspaceRepo(workspaceID, repoName string) (domain.Rep
 		return domain.Repo{}, cerrors.Wrap(cerrors.ErrUnknownRepository, fmt.Sprintf("failed to resolve repo %s", repoName), err)
 	}
 
+	// Defensive check - ResolveRepos should return error if empty, but guard against it
+	if len(repos) == 0 {
+		return domain.Repo{}, cerrors.Wrap(cerrors.ErrUnknownRepository, fmt.Sprintf("no repos resolved for %s", repoName), nil)
+	}
+
 	return repos[0], nil
 }
 
@@ -153,9 +162,32 @@ func (s *Service) saveWorkspaceRepo(ctx context.Context, workspaceID string, wor
 	return nil
 }
 
+func (s *Service) removeRepoWorktree(ctx context.Context, repoName, worktreePath string) error {
+	if s.gitEngine != nil {
+		return s.gitEngine.RemoveWorktree(ctx, repoName, worktreePath)
+	}
+
+	// Fallback to os.RemoveAll if no git engine (shouldn't happen in practice)
+	return os.RemoveAll(worktreePath)
+}
+
+func (s *Service) rollbackRepoRemoval(ctx context.Context, workspace *domain.Workspace, repoIndex int, removedRepo domain.Repo, worktreePath string, removeErr error) error {
+	workspace.Repos = append(workspace.Repos[:repoIndex], append([]domain.Repo{removedRepo}, workspace.Repos[repoIndex:]...)...)
+	if saveErr := s.wsEngine.Save(ctx, *workspace); saveErr != nil {
+		return cerrors.NewIOFailed(fmt.Sprintf("remove worktree and rollback failed: %v", removeErr), saveErr)
+	}
+
+	return cerrors.NewIOFailed(fmt.Sprintf("remove worktree %s", worktreePath), removeErr)
+}
+
 // RemoveRepoFromWorkspace removes a repository from an existing workspace
 func (s *Service) RemoveRepoFromWorkspace(ctx context.Context, workspaceID, repoName string) error {
 	return s.withWorkspaceLock(ctx, workspaceID, false, func() error {
+		// 1. Validate inputs
+		if err := validateAddRepoInputs(workspaceID, repoName); err != nil {
+			return err
+		}
+
 		workspace, _, err := s.findWorkspace(ctx, workspaceID)
 		if err != nil {
 			return err
@@ -164,9 +196,13 @@ func (s *Service) RemoveRepoFromWorkspace(ctx context.Context, workspaceID, repo
 		// 2. Check if repo exists in workspace
 		repoIndex := -1
 
+		var removedRepo domain.Repo
+
 		for i, r := range workspace.Repos {
 			if r.Name == repoName {
 				repoIndex = i
+				removedRepo = r
+
 				break
 			}
 		}
@@ -175,19 +211,19 @@ func (s *Service) RemoveRepoFromWorkspace(ctx context.Context, workspaceID, repo
 			return cerrors.NewRepoNotFound(repoName).WithContext("workspace_id", workspaceID)
 		}
 
-		// 3. Remove worktree directory
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repoName)
-		if err := os.RemoveAll(worktreePath); err != nil {
-			return cerrors.NewIOFailed(fmt.Sprintf("remove worktree %s", worktreePath), err)
-		}
-
-		// 4. Update metadata
+		// 3. Update metadata first (so we can rollback if worktree removal fails)
 		workspace.Repos = append(workspace.Repos[:repoIndex], workspace.Repos[repoIndex+1:]...)
 		if err := s.wsEngine.Save(ctx, *workspace); err != nil {
 			return cerrors.NewWorkspaceMetadataError(workspaceID, "update", err)
 		}
 
-		// Invalidate cache after metadata update
+		// 4. Remove worktree using git engine (properly unregisters from canonical)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repoName)
+		if err := s.removeRepoWorktree(ctx, repoName, worktreePath); err != nil {
+			return s.rollbackRepoRemoval(ctx, workspace, repoIndex, removedRepo, worktreePath, err)
+		}
+
+		// Invalidate cache after successful removal
 		s.cache.Invalidate(workspaceID)
 
 		return nil

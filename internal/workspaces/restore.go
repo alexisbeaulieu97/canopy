@@ -15,7 +15,9 @@ func (s *Service) RestoreWorkspace(ctx context.Context, workspaceID string, forc
 			return err
 		}
 
-		if _, _, err := s.findWorkspace(ctx, workspaceID); err == nil {
+		_, _, findErr := s.findWorkspace(ctx, workspaceID)
+		if findErr == nil {
+			// Workspace exists
 			if !force {
 				return cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to replace or choose a different ID")
 			}
@@ -23,7 +25,11 @@ func (s *Service) RestoreWorkspace(ctx context.Context, workspaceID string, forc
 			if err := s.closeWorkspaceWithOptionsUnlocked(ctx, workspaceID, true, CloseOptions{}); err != nil {
 				return cerrors.NewIOFailed("remove existing workspace", err)
 			}
+		} else if !isWorkspaceNotFound(findErr) {
+			// Unexpected error (IO, permission, etc.) - propagate it
+			return cerrors.NewIOFailed("check existing workspace", findErr)
 		}
+		// else: workspace not found, which is expected - proceed with restore
 
 		ws := archive.Metadata
 		ws.ClosedAt = nil
