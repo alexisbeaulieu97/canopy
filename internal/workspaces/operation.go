@@ -29,6 +29,7 @@ func (o *Operation) AddStep(action, rollback func() error) {
 }
 
 // Execute runs steps in order and performs rollbacks on failure.
+// Rollback errors are logged and the original failure is returned.
 func (o *Operation) Execute() error {
 	for idx, step := range o.steps {
 		if step.action == nil {

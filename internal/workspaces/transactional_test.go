@@ -65,6 +65,7 @@ func TestAddRepoRollbackOnSaveFailure(t *testing.T) {
 
 	mockConfig := mocks.NewMockConfigProvider()
 	mockConfig.WorkspacesRoot = workspacesRoot
+	mockConfig.ClosedRoot = t.TempDir()
 
 	mockStorage := mocks.NewMockWorkspaceStorage()
 	mockStorage.Workspaces["WS-1"] = domain.Workspace{ID: "WS-1", BranchName: "main"}
@@ -114,7 +115,7 @@ func TestRestoreWorkspaceRollbackOnRecreateFailure(t *testing.T) {
 	mockStorage.LatestClosedFunc = func(_ context.Context, _ string) (*domain.ClosedWorkspace, error) {
 		return &domain.ClosedWorkspace{
 			DirName: "WS-RESTORE",
-			Path:    filepath.Join("/closed", "WS-RESTORE"),
+			Path:    filepath.Join(mockConfig.ClosedRoot, "WS-RESTORE"),
 			Metadata: domain.Workspace{
 				ID:         "WS-RESTORE",
 				BranchName: "main",
