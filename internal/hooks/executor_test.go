@@ -12,6 +12,7 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
 func TestExecuteHooks_Success(t *testing.T) {
@@ -32,7 +33,7 @@ func TestExecuteHooks_Success(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	err := executor.ExecuteHooks(hooks, ctx, false)
+	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks failed: %v", err)
 	}
@@ -56,7 +57,7 @@ func TestExecuteHooks_CommandFailed(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	err := executor.ExecuteHooks(hooks, ctx, false)
+	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
 	if err == nil {
 		t.Fatal("Expected error for failed hook")
 	}
@@ -94,7 +95,7 @@ func TestExecuteHooks_ContinueOnError(t *testing.T) {
 	}
 
 	// With continueOnError=true, should continue despite first hook failing
-	err := executor.ExecuteHooks(hooks, ctx, true)
+	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{ContinueOnError: true})
 	if err != nil {
 		t.Fatalf("ExecuteHooks should succeed with continueOnError=true: %v", err)
 	}
@@ -127,7 +128,7 @@ func TestExecuteHooks_HookContinueOnError(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	err := executor.ExecuteHooks(hooks, ctx, false)
+	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks should succeed when hook has ContinueOnError=true: %v", err)
 	}
@@ -157,7 +158,7 @@ func TestExecuteHooks_Timeout(t *testing.T) {
 	}
 
 	start := time.Now()
-	err := executor.ExecuteHooks(hooks, ctx, false)
+	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
 	duration := time.Since(start)
 
 	if err == nil {
@@ -199,7 +200,7 @@ func TestExecuteHooks_EnvironmentVariables(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	err := executor.ExecuteHooks(hooks, ctx, false)
+	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks failed: %v", err)
 	}
@@ -254,7 +255,7 @@ func TestExecuteHooks_RepoFilter(t *testing.T) {
 		},
 	}
 
-	err := executor.ExecuteHooks(hooks, ctx, false)
+	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks failed: %v", err)
 	}
@@ -301,7 +302,7 @@ func TestExecuteHooks_RepoEnvironmentVariables(t *testing.T) {
 		},
 	}
 
-	err := executor.ExecuteHooks(hooks, ctx, false)
+	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks failed: %v", err)
 	}
@@ -337,7 +338,7 @@ func TestExecuteHooks_WorkingDirectory(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	err := executor.ExecuteHooks(hooks, ctx, false)
+	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks failed: %v", err)
 	}
@@ -395,6 +396,115 @@ func TestFilterRepos(t *testing.T) {
 	}
 }
 
+func TestExecuteHooks_DryRunPreview(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	logger := logging.New(false)
+	executor := NewExecutor(logger)
+
+	markerFile := filepath.Join(tmpDir, "marker")
+	hooks := []config.Hook{
+		{Command: "touch " + markerFile},
+	}
+
+	ctx := domain.HookContext{
+		WorkspaceID:   "test-ws",
+		WorkspacePath: tmpDir,
+		BranchName:    "main",
+		Repos:         []domain.Repo{},
+	}
+
+	previews, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("ExecuteHooks dry-run failed: %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	if previews[0].Command != "touch "+markerFile {
+		t.Errorf("unexpected preview command: %q", previews[0].Command)
+	}
+
+	if _, err := os.Stat(markerFile); !os.IsNotExist(err) {
+		t.Error("dry-run should not execute hook command")
+	}
+}
+
+func TestExecuteHooks_DryRunResolvesTemplate(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	logger := logging.New(false)
+	executor := NewExecutor(logger)
+
+	hooks := []config.Hook{
+		{Command: "echo {{.WorkspaceID}} {{.BranchName}} {{.WorkspacePath}}"},
+	}
+
+	ctx := domain.HookContext{
+		WorkspaceID:   "test-ws-123",
+		WorkspacePath: tmpDir,
+		BranchName:    "feature/test",
+		Repos:         []domain.Repo{},
+	}
+
+	previews, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("ExecuteHooks dry-run failed: %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	expected := "echo test-ws-123 feature/test " + tmpDir
+	if previews[0].Command != expected {
+		t.Errorf("expected preview command %q, got %q", expected, previews[0].Command)
+	}
+}
+
+func TestExecuteHooks_DryRunIncludesRepoInfo(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	logger := logging.New(false)
+	executor := NewExecutor(logger)
+
+	hooks := []config.Hook{
+		{Command: "echo repo", Repos: []string{"frontend"}},
+	}
+
+	ctx := domain.HookContext{
+		WorkspaceID:   "test-ws",
+		WorkspacePath: tmpDir,
+		BranchName:    "main",
+		Repos: []domain.Repo{
+			{Name: "frontend", URL: "git@example.com/frontend.git"},
+			{Name: "backend", URL: "git@example.com/backend.git"},
+		},
+	}
+
+	previews, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("ExecuteHooks dry-run failed: %v", err)
+	}
+
+	if len(previews) != 1 {
+		t.Fatalf("expected 1 preview, got %d", len(previews))
+	}
+
+	if previews[0].RepoName != "frontend" {
+		t.Errorf("expected repo name frontend, got %q", previews[0].RepoName)
+	}
+
+	if previews[0].RepoPath == "" {
+		t.Error("expected repo path to be set")
+	}
+}
+
 func TestExecuteHooks_EmptyHooks(t *testing.T) {
 	t.Parallel()
 
@@ -410,13 +520,13 @@ func TestExecuteHooks_EmptyHooks(t *testing.T) {
 	}
 
 	// Empty hooks should succeed
-	err := executor.ExecuteHooks([]config.Hook{}, ctx, false)
+	_, err := executor.ExecuteHooks([]config.Hook{}, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("Empty hooks should succeed: %v", err)
 	}
 
 	// Nil hooks should also succeed
-	err = executor.ExecuteHooks(nil, ctx, false)
+	_, err = executor.ExecuteHooks(nil, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("Nil hooks should succeed: %v", err)
 	}

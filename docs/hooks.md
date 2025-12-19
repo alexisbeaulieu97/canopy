@@ -81,6 +81,27 @@ canopy workspace new PROJ-123 --hooks-only
 canopy workspace close PROJ-123 --hooks-only
 ```
 
+## Dry-Run Hooks
+
+Preview hooks without executing them:
+
+```bash
+# Preview post_create hooks during workspace creation
+canopy workspace new PROJ-123 --dry-run-hooks
+
+# Preview pre_close hooks before closing
+canopy workspace close PROJ-123 --dry-run-hooks
+
+# Dry-run a specific hook event for an existing workspace
+canopy hooks test post_create --workspace PROJ-123
+```
+
+List configured hooks and their triggers:
+
+```bash
+canopy hooks list
+```
+
 ## Security
 
 Canopy validates hook commands to prevent injection attacks:
@@ -92,6 +113,15 @@ Canopy validates hook commands to prevent injection attacks:
 These validations prevent shell injection attacks where untrusted input could execute arbitrary commands.
 
 > **Note:** Multi-line YAML syntax (`|`) is not supported for hook commands. All commands must be on a single line.
+
+## Troubleshooting
+
+Use these steps to debug hook behavior:
+
+- Run `canopy hooks list` to confirm hooks are configured for the expected events.
+- Use `canopy workspace new --dry-run-hooks` or `canopy workspace close --dry-run-hooks` to preview resolved commands.
+- Run `canopy hooks test <event> --workspace <id>` to validate hook templates against a specific workspace.
+- Re-run with `--hooks-only` if you want to execute hooks without modifying the workspace.
 
 ## Examples
 

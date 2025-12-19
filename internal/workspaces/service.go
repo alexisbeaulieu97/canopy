@@ -335,7 +335,9 @@ func (s *Service) runPostCreateHooks(id, dirName, branchName string, repos []dom
 	}
 
 	//nolint:contextcheck // Hooks manage their own timeout context per-hook
-	if err := s.hookExecutor.ExecuteHooks(hooksConfig.PostCreate, hookCtx, opts.ContinueOnHookErr); err != nil {
+	if _, err := s.hookExecutor.ExecuteHooks(hooksConfig.PostCreate, hookCtx, ports.HookExecuteOptions{
+		ContinueOnError: opts.ContinueOnHookErr,
+	}); err != nil {
 		s.logger.Error("post_create hooks failed", "error", err)
 
 		if !opts.ContinueOnHookErr {
@@ -770,7 +772,9 @@ func (s *Service) CloseWorkspaceWithOptions(workspaceID string, force bool, opts
 			}
 
 			//nolint:contextcheck // Hooks manage their own timeout context per-hook
-			if err := s.hookExecutor.ExecuteHooks(hooksConfig.PreClose, hookCtx, opts.ContinueOnHookErr); err != nil {
+			if _, err := s.hookExecutor.ExecuteHooks(hooksConfig.PreClose, hookCtx, ports.HookExecuteOptions{
+				ContinueOnError: opts.ContinueOnHookErr,
+			}); err != nil {
 				s.logger.Error("pre_close hooks failed", "error", err)
 				// Per design.md: pre_close failure aborts close operation
 				if !opts.ContinueOnHookErr {
@@ -827,7 +831,9 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(workspaceID string, forc
 			}
 
 			//nolint:contextcheck // Hooks manage their own timeout context per-hook
-			if err := s.hookExecutor.ExecuteHooks(hooksConfig.PreClose, hookCtx, opts.ContinueOnHookErr); err != nil {
+			if _, err := s.hookExecutor.ExecuteHooks(hooksConfig.PreClose, hookCtx, ports.HookExecuteOptions{
+				ContinueOnError: opts.ContinueOnHookErr,
+			}); err != nil {
 				s.logger.Error("pre_close hooks failed", "error", err)
 				// Per design.md: pre_close failure aborts close operation
 				if !opts.ContinueOnHookErr {
@@ -891,7 +897,9 @@ func (s *Service) RunHooks(workspaceID string, phase HookPhase, continueOnError 
 		Repos:         workspace.Repos,
 	}
 
-	if err := s.hookExecutor.ExecuteHooks(selected, hookCtx, continueOnError); err != nil {
+	if _, err := s.hookExecutor.ExecuteHooks(selected, hookCtx, ports.HookExecuteOptions{
+		ContinueOnError: continueOnError,
+	}); err != nil {
 		if s.logger != nil {
 			s.logger.Error(fmt.Sprintf("%s hooks failed", phase), "error", err)
 		}
@@ -902,6 +910,53 @@ func (s *Service) RunHooks(workspaceID string, phase HookPhase, continueOnError 
 	}
 
 	return nil
+}
+
+// PreviewHooks returns a dry-run preview of lifecycle hooks for an existing workspace.
+//
+//nolint:contextcheck // Hooks manage their own timeout context per-hook
+func (s *Service) PreviewHooks(workspaceID string, phase HookPhase) ([]domain.HookCommandPreview, error) {
+	workspace, _, err := s.findWorkspace(context.Background(), workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	hooksConfig := s.config.GetHooks()
+
+	var selected []config.Hook
+
+	switch phase {
+	case HookPhasePostCreate:
+		selected = hooksConfig.PostCreate
+	case HookPhasePreClose:
+		selected = hooksConfig.PreClose
+	default:
+		return nil, cerrors.NewInvalidArgument("hook_phase", fmt.Sprintf("unsupported hook phase %q", phase))
+	}
+
+	if len(selected) == 0 {
+		return nil, nil
+	}
+
+	hookCtx := domain.HookContext{
+		WorkspaceID:   workspaceID,
+		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), workspaceID),
+		BranchName:    workspace.BranchName,
+		Repos:         workspace.Repos,
+	}
+
+	previews, err := s.hookExecutor.ExecuteHooks(selected, hookCtx, ports.HookExecuteOptions{
+		DryRun: true,
+	})
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error(fmt.Sprintf("%s hook dry-run failed", phase), "error", err)
+		}
+
+		return nil, err
+	}
+
+	return previews, nil
 }
 
 // PreviewCloseWorkspace returns a preview of what would happen when closing a workspace.

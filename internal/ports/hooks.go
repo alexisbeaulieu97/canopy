@@ -9,6 +9,13 @@ import (
 // HookExecutor defines the interface for executing lifecycle hooks.
 type HookExecutor interface {
 	// ExecuteHooks runs a list of hooks with the given context.
-	// If continueOnError is true, it continues even if a hook fails.
-	ExecuteHooks(hooks []config.Hook, ctx domain.HookContext, continueOnError bool) error
+	// If ContinueOnError is true, it continues even if a hook fails.
+	// If DryRun is true, it returns command previews without executing.
+	ExecuteHooks(hooks []config.Hook, ctx domain.HookContext, opts HookExecuteOptions) ([]domain.HookCommandPreview, error)
+}
+
+// HookExecuteOptions controls hook execution behavior.
+type HookExecuteOptions struct {
+	ContinueOnError bool
+	DryRun          bool
 }
