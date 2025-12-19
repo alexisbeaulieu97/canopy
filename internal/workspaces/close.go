@@ -114,7 +114,14 @@ func (s *Service) closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx context.Cont
 
 	// Delete workspace first, then clean up worktrees
 	if err := s.wsEngine.Delete(ctx, workspaceID); err != nil {
-		_ = s.wsEngine.DeleteClosed(ctx, workspaceID, closedAt)
+		rollbackErr := s.wsEngine.DeleteClosed(ctx, workspaceID, closedAt)
+		if rollbackErr != nil {
+			return nil, joinErrors(
+				cerrors.NewIOFailed("remove workspace directory", err),
+				cerrors.NewIOFailed("rollback closed entry", rollbackErr),
+			)
+		}
+
 		return nil, cerrors.NewIOFailed("remove workspace directory", err)
 	}
 
@@ -220,7 +227,7 @@ func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (
 
 func (s *Service) ensureWorkspaceClean(ctx context.Context, workspace *domain.Workspace, workspaceID, action string) error {
 	if s.gitEngine == nil {
-		return nil
+		return cerrors.NewInternalError("git engine not initialized", nil)
 	}
 
 	for _, repo := range workspace.Repos {

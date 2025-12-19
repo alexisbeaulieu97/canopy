@@ -15,21 +15,9 @@ func (s *Service) RestoreWorkspace(ctx context.Context, workspaceID string, forc
 			return err
 		}
 
-		_, _, findErr := s.findWorkspace(ctx, workspaceID)
-		if findErr == nil {
-			// Workspace exists
-			if !force {
-				return cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to replace or choose a different ID")
-			}
-
-			if err := s.closeWorkspaceWithOptionsUnlocked(ctx, workspaceID, true, CloseOptions{}); err != nil {
-				return cerrors.NewIOFailed("remove existing workspace", err)
-			}
-		} else if !isWorkspaceNotFound(findErr) {
-			// Unexpected error (IO, permission, etc.) - propagate it
-			return cerrors.NewIOFailed("check existing workspace", findErr)
+		if err := s.ensureRestoreTargetAvailable(ctx, workspaceID, force); err != nil {
+			return err
 		}
-		// else: workspace not found, which is expected - proceed with restore
 
 		ws := archive.Metadata
 		ws.ClosedAt = nil
@@ -47,7 +35,14 @@ func (s *Service) RestoreWorkspace(ctx context.Context, workspaceID string, forc
 			}
 
 			return nil
-		}, nil)
+		}, func() error {
+			cleanupErr := s.closeWorkspaceWithOptionsUnlocked(ctx, ws.ID, true, CloseOptions{SkipHooks: true})
+			if cleanupErr != nil && !isWorkspaceNotFound(cleanupErr) {
+				return cerrors.NewIOFailed("rollback restored workspace", cleanupErr)
+			}
+
+			return nil
+		})
 		op.AddStep(func() error {
 			// Delete the closed entry using ID and timestamp
 			closedAt := archive.ClosedAt()
@@ -60,4 +55,27 @@ func (s *Service) RestoreWorkspace(ctx context.Context, workspaceID string, forc
 
 		return op.Execute()
 	})
+}
+
+func (s *Service) ensureRestoreTargetAvailable(ctx context.Context, workspaceID string, force bool) error {
+	_, _, findErr := s.findWorkspace(ctx, workspaceID)
+	if findErr == nil {
+		// Workspace exists
+		if !force {
+			return cerrors.NewWorkspaceExists(workspaceID).WithContext("hint", "Use --force to replace or choose a different ID")
+		}
+
+		if err := s.closeWorkspaceWithOptionsUnlocked(ctx, workspaceID, true, CloseOptions{}); err != nil {
+			return cerrors.NewIOFailed("remove existing workspace", err)
+		}
+
+		return nil
+	}
+
+	if isWorkspaceNotFound(findErr) {
+		return nil
+	}
+
+	// Unexpected error (IO, permission, etc.) - propagate it
+	return cerrors.NewIOFailed("check existing workspace", findErr)
 }

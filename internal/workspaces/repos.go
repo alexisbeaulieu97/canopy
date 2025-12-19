@@ -3,7 +3,6 @@ package workspaces
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -167,8 +166,7 @@ func (s *Service) removeRepoWorktree(ctx context.Context, repoName, worktreePath
 		return s.gitEngine.RemoveWorktree(ctx, repoName, worktreePath)
 	}
 
-	// Fallback to os.RemoveAll if no git engine (shouldn't happen in practice)
-	return os.RemoveAll(worktreePath)
+	return cerrors.NewInternalError("git engine not initialized", nil)
 }
 
 func (s *Service) rollbackRepoRemoval(ctx context.Context, workspace *domain.Workspace, repoIndex int, removedRepo domain.Repo, worktreePath string, removeErr error) error {

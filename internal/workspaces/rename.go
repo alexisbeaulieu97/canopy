@@ -14,19 +14,13 @@ import (
 // If renameBranch is true and the branch name matches the old ID, it will also rename branches.
 // If force is true, an existing workspace with the new ID will be deleted first.
 func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, renameBranch, force bool) error {
-	if s.lockManager != nil {
-		if _, _, err := s.findWorkspace(ctx, oldID); err != nil {
-			return s.handleClosedWorkspaceError(ctx, oldID, err)
-		}
-	}
-
 	if s.lockManager == nil {
 		return s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
 	}
 
 	handle, err := s.lockManager.Acquire(ctx, oldID, false)
 	if err != nil {
-		return err
+		return s.handleClosedWorkspaceError(ctx, oldID, err)
 	}
 
 	renameErr := s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
@@ -126,8 +120,28 @@ func (s *Service) ensureTargetAvailableOrDelete(ctx context.Context, newID strin
 		return existingErr
 	}
 
-	// Force mode: delete the existing workspace
-	if deleteErr := s.wsEngine.Delete(ctx, newID); deleteErr != nil {
+	return s.forceDeleteWorkspace(ctx, newID)
+}
+
+func (s *Service) forceDeleteWorkspace(ctx context.Context, workspaceID string) error {
+	if s.lockManager != nil {
+		handle, err := s.lockManager.Acquire(ctx, workspaceID, false)
+		if err != nil {
+			if isWorkspaceNotFound(err) {
+				return nil
+			}
+
+			return err
+		}
+
+		defer func() {
+			if releaseErr := handle.Release(); releaseErr != nil && s.logger != nil {
+				s.logger.Warn("workspace lock release failed", "workspace_id", workspaceID, "error", releaseErr)
+			}
+		}()
+	}
+
+	if deleteErr := s.wsEngine.Delete(ctx, workspaceID); deleteErr != nil {
 		return cerrors.NewInternalError("failed to delete existing workspace for force rename", deleteErr)
 	}
 

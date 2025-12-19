@@ -96,7 +96,20 @@ func (s *Service) executeWorkspaceCreate(ctx context.Context, ws domain.Workspac
 	op.AddStep(func() error {
 		if err := os.Mkdir(workspacePath, 0o750); err != nil {
 			if os.IsExist(err) {
-				return nil
+				entries, readErr := os.ReadDir(workspacePath)
+				if readErr != nil {
+					return cerrors.NewIOFailed("read workspace directory", readErr)
+				}
+
+				if len(entries) == 0 {
+					return nil
+				}
+
+				if len(entries) == 1 && entries[0].Name() == lockFileName {
+					return nil
+				}
+
+				return cerrors.NewWorkspaceExists(ws.ID)
 			}
 
 			return cerrors.NewIOFailed("create workspace directory", err)
@@ -135,7 +148,7 @@ func (s *Service) ensureWorkspaceAvailable(workspaceID string) error {
 
 func (s *Service) removeWorkspaceRepoWorktrees(ctx context.Context, workspaceID string, repos []domain.Repo) error {
 	if s.gitEngine == nil {
-		return nil
+		return cerrors.NewInternalError("git engine not initialized", nil)
 	}
 
 	var errs []error
