@@ -13,27 +13,28 @@ The `canopy doctor` command SHALL validate the environment and configuration, re
 - **GIVEN** git is not installed or not in PATH
 - **WHEN** I run `canopy doctor`
 - **THEN** the output SHALL show an error for git availability
-- **AND** suggest installing git
+- **AND** the output SHALL suggest installing git
 - **AND** the exit code SHALL be 2
 
 #### Scenario: Invalid config file
 - **GIVEN** `~/.canopy/config.yaml` contains invalid YAML
 - **WHEN** I run `canopy doctor`
 - **THEN** the output SHALL show an error for config validation
-- **AND** include the parse error details
+- **AND** the output SHALL include the parse error details
 - **AND** the exit code SHALL be 2
 
 #### Scenario: Missing directories with fix flag
 - **GIVEN** `projects_root` directory does not exist
 - **WHEN** I run `canopy doctor --fix`
 - **THEN** the system SHALL create the missing directory
-- **AND** report that it was auto-fixed
+- **AND** the output SHALL report that it was auto-fixed
 - **AND** the exit code SHALL be 0
 
 #### Scenario: JSON output for scripting
+- **GIVEN** canopy is configured and ready to run checks
 - **WHEN** I run `canopy doctor --json`
 - **THEN** the output SHALL be valid JSON
-- **AND** include an array of check results with name, status, and message
+- **AND** the output SHALL include an array of check results with name, status, and message
 
 #### Scenario: Warning for stale canonical repos
 - **GIVEN** a canonical repo has not been fetched in over 30 days

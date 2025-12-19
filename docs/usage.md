@@ -8,6 +8,7 @@ This guide covers common workflows and detailed command usage for Canopy.
 - [Workspace Management](#workspace-management)
 - [Repository Management](#repository-management)
 - [Working with the TUI](#working-with-the-tui)
+- [Troubleshooting](#troubleshooting)
 - [Tips and Best Practices](#tips-and-best-practices)
 
 ## Typical Workflow
@@ -395,6 +396,72 @@ canopy tui
 ### Customizing Keybindings
 
 See [Configuration - TUI Keybindings](configuration.md#tui-keybindings).
+
+## Troubleshooting
+
+### Running Diagnostics
+
+The `doctor` command validates your Canopy environment and reports issues with actionable guidance:
+
+```bash
+# Run all checks
+canopy doctor
+
+# Output results as JSON for scripting
+canopy doctor --json
+
+# Auto-fix simple issues (create missing directories)
+canopy doctor --fix
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All checks passed |
+| 1 | Warnings present (non-critical issues) |
+| 2 | Errors present (critical issues) |
+
+### Common Issues
+
+**Git not installed or not in PATH**
+```
+✗ Git Installation: git is not installed or not in PATH
+```
+Install git from https://git-scm.com/downloads
+
+**Missing directories**
+```
+✗ Directory: projects_root: directory does not exist: /path/to/projects
+```
+Run `canopy doctor --fix` to create missing directories, or create them manually.
+
+**Stale repositories**
+```
+✗ Repo: backend: stale (last fetch: 2024-01-15)
+```
+Run `canopy repo sync backend` to fetch updates.
+
+**Invalid configuration**
+```
+✗ Configuration: configuration error
+```
+Check your `~/.canopy/config.yaml` for syntax errors. The error details will indicate the specific issue.
+
+### Checking Workspace Status
+
+To diagnose issues with a specific workspace:
+
+```bash
+# View workspace details
+canopy workspace view PROJ-123
+
+# Check git status for all repos
+canopy workspace list --status
+
+# Run git status directly in each repo
+canopy workspace git PROJ-123 status
+```
 
 ## Tips and Best Practices
 
