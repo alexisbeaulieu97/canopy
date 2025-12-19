@@ -23,10 +23,10 @@ The system SHALL prevent concurrent mutating operations on the same workspace us
 - **GIVEN** a lock file exists that is older than `lock_stale_threshold`
 - **WHEN** another operation attempts to acquire the lock
 - **THEN** the system SHALL remove the stale lock
-- **AND** acquire a fresh lock
+- **AND** SHALL acquire a fresh lock
 
 #### Scenario: Lock released on failure
 - **GIVEN** an operation holds a lock on workspace `PROJ-1`
 - **WHEN** the operation fails with an error
 - **THEN** the lock SHALL be released
-- **AND** subsequent operations can proceed
+- **AND** subsequent operations SHALL proceed without waiting

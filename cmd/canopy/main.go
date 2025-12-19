@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -59,6 +60,18 @@ func init() {
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
+		// Check for ExitCodeError to use specific exit code
+		var exitErr *ExitCodeError
+		if errors.As(err, &exitErr) {
+			// ExitCodeError may have an empty message (e.g., doctor command)
+			// Only print if there's a message
+			if exitErr.Message != "" {
+				fmt.Fprintln(os.Stderr, exitErr.Message)
+			}
+
+			os.Exit(exitErr.Code)
+		}
+
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

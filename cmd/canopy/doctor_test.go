@@ -296,6 +296,44 @@ func TestCheckCanonicalRepos_StaleRepo(t *testing.T) {
 	}
 }
 
+func TestCheckCanonicalRepos_NonBareRepo(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a non-bare repo directory with .git/HEAD
+	repoDir := filepath.Join(tempDir, "non-bare-repo")
+
+	gitDir := filepath.Join(repoDir, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatalf("failed to create .git dir: %v", err)
+	}
+
+	// Create .git/HEAD file
+	headFile := filepath.Join(gitDir, "HEAD")
+	if err := os.WriteFile(headFile, []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+		t.Fatalf("failed to create HEAD: %v", err)
+	}
+
+	// Create .git/FETCH_HEAD with recent timestamp
+	fetchHead := filepath.Join(gitDir, "FETCH_HEAD")
+	if err := os.WriteFile(fetchHead, []byte("abc123\n"), 0o644); err != nil {
+		t.Fatalf("failed to create FETCH_HEAD: %v", err)
+	}
+
+	results := checkCanonicalRepos(context.Background(), &mockDoctorConfig{projectsRoot: tempDir, staleThreshold: 30})
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for non-bare repo, got %d", len(results))
+	}
+
+	if results[0].Status != "pass" {
+		t.Errorf("expected status 'pass' for healthy non-bare repo, got %s: %s", results[0].Status, results[0].Message)
+	}
+
+	if results[0].Name != "Repo: non-bare-repo" {
+		t.Errorf("expected name 'Repo: non-bare-repo', got %s", results[0].Name)
+	}
+}
+
 // mockDoctorConfig implements doctorConfig interface for testing.
 type mockDoctorConfig struct {
 	projectsRoot   string

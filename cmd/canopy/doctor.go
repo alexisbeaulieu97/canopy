@@ -112,9 +112,10 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// Set exit code via os.Exit if there are issues
+	// Return ExitCodeError for non-zero exit codes
+	// This allows Cobra to run cleanup while still signaling the exit code
 	if report.ExitCode != 0 {
-		os.Exit(report.ExitCode)
+		return NewExitCodeError(report.ExitCode, "")
 	}
 
 	return nil
@@ -381,10 +382,19 @@ func checkCanonicalRepos(_ context.Context, cfg doctorConfig) []CheckResult {
 
 		repoPath := filepath.Join(projectsRoot, entry.Name())
 
-		// Check if it's a git repo
-		gitDir := filepath.Join(repoPath, "HEAD")
-		if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-			continue // Not a git repo, skip
+		// Check if it's a git repo (bare or non-bare)
+		// Bare repos have HEAD at root, non-bare repos have .git/HEAD
+		gitDir := repoPath
+		bareHead := filepath.Join(repoPath, "HEAD")
+		nonBareHead := filepath.Join(repoPath, ".git", "HEAD")
+
+		if _, err := os.Stat(bareHead); os.IsNotExist(err) {
+			// Not a bare repo, check for non-bare
+			if _, err := os.Stat(nonBareHead); os.IsNotExist(err) {
+				continue // Not a git repo, skip
+			}
+
+			gitDir = filepath.Join(repoPath, ".git")
 		}
 
 		result := CheckResult{
@@ -393,7 +403,7 @@ func checkCanonicalRepos(_ context.Context, cfg doctorConfig) []CheckResult {
 		}
 
 		// Check last fetch time
-		fetchHead := filepath.Join(repoPath, "FETCH_HEAD")
+		fetchHead := filepath.Join(gitDir, "FETCH_HEAD")
 
 		info, err := os.Stat(fetchHead)
 		if err != nil {

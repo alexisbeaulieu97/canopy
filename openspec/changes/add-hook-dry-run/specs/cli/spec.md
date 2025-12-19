@@ -13,7 +13,7 @@ Commands that execute hooks SHALL support a `--dry-run-hooks` flag to preview ho
 - **GIVEN** a hook configured with `repos: [api, worker]`
 - **WHEN** I run `canopy workspace new PROJ-1 --repos api,worker,frontend --dry-run-hooks`
 - **THEN** the output SHALL show the hook would run for `api` and `worker`
-- **AND** indicate `frontend` is excluded from this hook
+- **AND** the output SHALL indicate `frontend` is excluded from this hook
 
 #### Scenario: Dry-run JSON output
 - **WHEN** I run `canopy workspace new PROJ-1 --dry-run-hooks --json`
@@ -32,7 +32,7 @@ The `canopy hooks list` command SHALL display all configured hooks and their tri
 - **GIVEN** no hooks are configured
 - **WHEN** I run `canopy hooks list`
 - **THEN** the output SHALL indicate no hooks are configured
-- **AND** suggest how to add hooks in config.yaml
+- **AND** the output SHALL suggest how to add hooks in config.yaml
 
 ### Requirement: Hooks Test Command
 The `canopy hooks test <event> --workspace <id>` command SHALL dry-run hooks for a specific event against an existing workspace.
