@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
+	"github.com/alexisbeaulieu97/canopy/internal/validation"
 )
 
 const lockFileName = ".canopy.lock"
@@ -31,6 +33,8 @@ type LockHandle struct {
 	path        string
 	file        *os.File
 	logger      *logging.Logger
+	stopOnce    sync.Once
+	stopCh      chan struct{}
 }
 
 // NewLockManager creates a new LockManager.
@@ -68,6 +72,8 @@ func (m *LockManager) Acquire(ctx context.Context, workspaceID string, createDir
 				file:        file,
 				logger:      m.logger,
 			}
+
+			handle.startHeartbeat(m.staleThreshold, m.now)
 
 			if m.logger != nil {
 				m.logger.Debug("workspace lock acquired", "workspace_id", workspaceID, "path", lockPath)
@@ -121,6 +127,10 @@ func (m *LockManager) IsLocked(workspaceID string) (bool, error) {
 }
 
 func (m *LockManager) lockPath(workspaceID string, createDir bool) (string, error) {
+	if err := validation.ValidateWorkspaceID(workspaceID); err != nil {
+		return "", err
+	}
+
 	workspacePath := filepath.Join(m.root, workspaceID)
 	if createDir {
 		if err := os.MkdirAll(workspacePath, 0o750); err != nil {
@@ -168,8 +178,54 @@ func (m *LockManager) removeIfStale(lockPath string) (bool, error) {
 	return true, nil
 }
 
+func (h *LockHandle) startHeartbeat(staleThreshold time.Duration, now func() time.Time) {
+	if staleThreshold <= 0 {
+		return
+	}
+
+	interval := staleThreshold / 2
+	if interval <= 0 {
+		interval = staleThreshold
+	}
+
+	if interval <= 0 {
+		return
+	}
+
+	h.stopCh = make(chan struct{})
+	ticker := time.NewTicker(interval)
+
+	go func() {
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				ts := now()
+				if err := os.Chtimes(h.path, ts, ts); err != nil && h.logger != nil {
+					h.logger.Debug("workspace lock heartbeat failed", "workspace_id", h.workspaceID, "error", err)
+				}
+			case <-h.stopCh:
+				return
+			}
+		}
+	}()
+}
+
+// UpdateLocation updates the lock handle after a workspace rename.
+func (h *LockHandle) UpdateLocation(workspaceID, path string) {
+	h.workspaceID = workspaceID
+	h.path = path
+}
+
 // Release releases the lock and removes the lock file.
 func (h *LockHandle) Release() error {
+	h.stopOnce.Do(func() {
+		if h.stopCh != nil {
+			close(h.stopCh)
+		}
+	})
+
 	if h.file != nil {
 		_ = h.file.Close()
 	}

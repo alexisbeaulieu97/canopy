@@ -304,10 +304,10 @@ var (
 				if showLocks {
 					locked, lockErr := service.WorkspaceLocked(w.ID)
 					if lockErr != nil {
-						return lockErr
+						output.Warnf("Failed to check lock status for %s: %v", w.ID, lockErr)
+					} else {
+						ws.Locked = locked
 					}
-
-					ws.Locked = locked
 				}
 
 				workspacesWithStatus = append(workspacesWithStatus, ws)

@@ -2,7 +2,6 @@
 package mocks
 
 import (
-	"os"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
@@ -45,25 +44,10 @@ type MockConfigProvider struct {
 
 // NewMockConfigProvider creates a new MockConfigProvider with sensible defaults.
 func NewMockConfigProvider() *MockConfigProvider {
-	projectsRoot, err := os.MkdirTemp("", "canopy-projects-")
-	if err != nil {
-		projectsRoot = "/projects"
-	}
-
-	workspacesRoot, err := os.MkdirTemp("", "canopy-workspaces-")
-	if err != nil {
-		workspacesRoot = "/workspaces"
-	}
-
-	closedRoot, err := os.MkdirTemp("", "canopy-closed-")
-	if err != nil {
-		closedRoot = "/closed"
-	}
-
 	return &MockConfigProvider{
-		ProjectsRoot:       projectsRoot,
-		WorkspacesRoot:     workspacesRoot,
-		ClosedRoot:         closedRoot,
+		ProjectsRoot:       "/projects",
+		WorkspacesRoot:     "/workspaces",
+		ClosedRoot:         "/closed",
 		CloseDefault:       "archive",
 		WorkspaceNaming:    "{{.ID}}",
 		StaleThresholdDays: 14,

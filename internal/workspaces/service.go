@@ -358,7 +358,8 @@ func (s *Service) withWorkspaceLock(ctx context.Context, workspaceID string, cre
 		return runErr
 	}
 
-	return releaseErr
+	// Only log release failures; successful operations shouldn't be marked as failed.
+	return nil
 }
 
 func (s *Service) ensureWorkspaceAvailable(workspaceID string) error {
@@ -690,8 +691,7 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 
 	renameErr := s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
 	if renameErr == nil {
-		handle.path = filepath.Join(s.config.GetWorkspacesRoot(), newID, lockFileName)
-		handle.workspaceID = newID
+		handle.UpdateLocation(newID, filepath.Join(s.config.GetWorkspacesRoot(), newID, lockFileName))
 	}
 
 	releaseErr := handle.Release()
