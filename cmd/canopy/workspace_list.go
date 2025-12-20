@@ -49,7 +49,7 @@ var workspaceListCmd = &cobra.Command{
 			}
 
 			if jsonOutput {
-				var payload []domain.Workspace
+				payload := make([]domain.Workspace, 0, len(archives))
 
 				for _, a := range archives {
 					payload = append(payload, a.Metadata)

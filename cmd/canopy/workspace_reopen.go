@@ -26,7 +26,7 @@ var workspaceReopenCmd = &cobra.Command{
 			return err
 		}
 
-		output.Success("Reopened workspace", id)
+		output.Success("Restored workspace", id)
 		return nil
 	},
 }
@@ -34,5 +34,5 @@ var workspaceReopenCmd = &cobra.Command{
 func init() {
 	workspaceCmd.AddCommand(workspaceReopenCmd)
 
-	workspaceReopenCmd.Flags().Bool("force", false, "Overwrite existing workspace if one already exists")
+	workspaceReopenCmd.Flags().Bool("force", false, "Close and restore the workspace, replacing an active workspace with the same ID if it exists")
 }
