@@ -106,6 +106,8 @@ var workspaceListCmd = &cobra.Command{
 							Branch: "timeout",
 						})
 					}
+				} else if statusErr != nil {
+					output.Warnf("Failed to get status for %s: %v", w.ID, statusErr)
 				}
 			}
 
