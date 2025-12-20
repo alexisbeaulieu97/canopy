@@ -100,8 +100,9 @@ var workspaceListCmd = &cobra.Command{
 					ws.RepoStatuses = status.Repos
 				} else if errors.Is(statusErr, context.DeadlineExceeded) {
 					// Timeout - add placeholder status.
-					for range w.Repos {
+					for _, repo := range w.Repos {
 						ws.RepoStatuses = append(ws.RepoStatuses, domain.RepoStatus{
+							Name:   repo.Name,
 							Branch: "timeout",
 						})
 					}

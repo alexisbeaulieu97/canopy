@@ -73,7 +73,10 @@ Per-repository timeouts can be configured to prevent slow remotes from blocking 
 			errDetail = strings.ReplaceAll(errDetail, "\r", " ")
 			errDetail = strings.ReplaceAll(errDetail, "\t", " ")
 			if len(errDetail) > 100 {
-				errDetail = errDetail[:97] + "..."
+				runes := []rune(errDetail)
+				if len(runes) > 100 {
+					errDetail = string(runes[:97]) + "..."
+				}
 			}
 
 			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Name, status, updatedStr, errDetail)

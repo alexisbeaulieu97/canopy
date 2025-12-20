@@ -100,6 +100,8 @@ var workspaceNewCmd = &cobra.Command{
 			return err
 		}
 
+		workspacePath := filepath.Join(cfg.GetWorkspacesRoot(), dirName)
+
 		if dryRunHooks {
 			previews, err := service.PreviewHooks(id, workspaces.HookPhasePostCreate)
 			if err != nil {
@@ -111,7 +113,7 @@ var workspaceNewCmd = &cobra.Command{
 					DryRunHooks:   true,
 					Phase:         string(workspaces.HookPhasePostCreate),
 					WorkspaceID:   id,
-					WorkspacePath: filepath.Join(cfg.GetWorkspacesRoot(), dirName),
+					WorkspacePath: workspacePath,
 					Commands:      previews,
 					Action:        "create",
 				})
@@ -121,9 +123,9 @@ var workspaceNewCmd = &cobra.Command{
 		}
 
 		if printPath {
-			output.Printf("%s/%s", cfg.GetWorkspacesRoot(), dirName)
+			output.Printf("%s", workspacePath)
 		} else {
-			output.SuccessWithPath("Created workspace", id, cfg.GetWorkspacesRoot()+"/"+dirName)
+			output.SuccessWithPath("Created workspace", id, workspacePath)
 		}
 		return nil
 	},
