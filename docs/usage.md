@@ -41,13 +41,13 @@ All repositories are automatically on the `PROJ-123` branch.
 
 ### 3. Check Status
 
-View the status of all workspaces:
+View the status of your current workspace (when inside a workspace directory):
 
 ```bash
 canopy status
 ```
 
-Or check a specific workspace:
+Or view details of a specific workspace:
 
 ```bash
 canopy workspace view PROJ-123

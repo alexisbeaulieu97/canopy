@@ -49,7 +49,7 @@ export CANOPY_CONFIG=/path/to/config.yaml
 canopy workspace list
 
 # Per-project config (useful in CI/CD)
-CANOPY_CONFIG=./ci-config.yaml canopy workspace create PROJ-123
+CANOPY_CONFIG=./ci-config.yaml canopy workspace new PROJ-123
 ```
 
 ## Configuration Validation

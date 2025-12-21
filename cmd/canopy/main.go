@@ -72,8 +72,10 @@ func main() {
 			os.Exit(exitErr.Code)
 		}
 
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		// Map CanopyError types to their documented exit codes
+		exitCode := exitCodeForError(err)
+		fmt.Fprintln(os.Stderr, userFriendlyMessage(err))
+		os.Exit(int(exitCode))
 	}
 }
 
