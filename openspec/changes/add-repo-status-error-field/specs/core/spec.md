@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Repository Status Representation
 The system SHALL represent repository status with dedicated fields for status data and errors.
@@ -8,7 +8,7 @@ The `RepoStatus` type SHALL include:
 - `Branch` - Current branch name (empty string if error occurred)
 - `IsDirty` - Whether repository has uncommitted changes
 - `UnpushedCommits` - Count of commits not pushed to remote
-- `BehindBy` - Count of commits behind remote
+- `BehindRemote` - Count of commits behind remote
 - `Error` - Error message if status retrieval failed (empty if successful)
 
 #### Scenario: Successful status retrieval

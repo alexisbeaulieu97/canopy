@@ -28,5 +28,6 @@ The system SHALL show computed workspace directory in config validation.
 
 #### Scenario: Config validate shows naming preview
 - **WHEN** user runs `canopy config validate`
-- **THEN** the output SHALL include example directory path
-- **AND** show sample computation with "EXAMPLE-123" workspace ID
+- **THEN** the output SHALL include the fully resolved example directory path
+- **AND** the path SHALL be computed by applying the configured `workspace_naming` template to "EXAMPLE-123"
+- **AND** the output SHALL show the complete path under `workspaces_root` (for example: `workspaces_root/EXAMPLE-123/`)
