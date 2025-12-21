@@ -4,7 +4,7 @@ Get up and running with Canopy in a few minutes.
 
 ## Prerequisites
 
-- **Go 1.21+** — [Install Go](https://go.dev/doc/install)
+- **Go 1.24+** — [Install Go](https://go.dev/doc/install)
 - **Git** — Must be available in your PATH
 
 ## Installation

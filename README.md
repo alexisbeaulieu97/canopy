@@ -1,6 +1,6 @@
 # Canopy
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/github/actions/workflow/status/alexisbeaulieu97/canopy/test.yml?label=tests)](https://github.com/alexisbeaulieu97/canopy/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/alexisbeaulieu97/canopy)](https://goreportcard.com/report/github.com/alexisbeaulieu97/canopy)
@@ -170,7 +170,7 @@ See [Configuration](docs/configuration.md#tui-keybindings) to customize keybindi
 | Command | Description |
 |---------|-------------|
 | `canopy init` | Initialize configuration |
-| `canopy status` | Show overall status |
+| `canopy status` | Show status of current workspace |
 | `canopy check` | Validate configuration |
 | `canopy version` | Print version information |
 
