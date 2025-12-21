@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
@@ -69,8 +70,12 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, br
 		setupFailed := s.runTemplateSetupCommands(ctx, id, opts.Template.SetupCommands)
 		if setupFailed {
 			ws.SetupIncomplete = true
-			if err := s.wsEngine.Save(ctx, ws); err != nil && s.logger != nil {
-				s.logger.Warn("Failed to mark workspace as partially initialized", "workspace_id", id, "error", err)
+			if err := s.wsEngine.Save(ctx, ws); err != nil {
+				if s.logger != nil {
+					s.logger.Warn("Failed to mark workspace as partially initialized", "workspace_id", id, "error", err)
+				}
+
+				return cerrors.NewIOFailed("save workspace metadata after setup failure", err).WithContext("workspace_id", id)
 			}
 		}
 	}
@@ -97,8 +102,6 @@ func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID stri
 	for i, command := range commands {
 		trimmed := strings.TrimSpace(command)
 		if trimmed == "" {
-			failed = true
-
 			if s.logger != nil {
 				s.logger.Warn("Skipping empty template setup command", "index", i, "workspace_id", workspaceID)
 			}
@@ -110,8 +113,7 @@ func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID stri
 			s.logger.Info("Running template setup command", "index", i, "workspace_id", workspaceID, "command", trimmed)
 		}
 
-		// #nosec G204 -- template setup commands are user-configured and expected.
-		cmd := exec.CommandContext(ctx, "sh", "-c", trimmed)
+		cmd := shellCommand(ctx, trimmed)
 		cmd.Dir = workspacePath
 
 		outputBytes, err := cmd.CombinedOutput()
@@ -131,6 +133,16 @@ func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID stri
 	}
 
 	return failed
+}
+
+func shellCommand(ctx context.Context, command string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		// #nosec G204 -- template setup commands are user-configured and expected.
+		return exec.CommandContext(ctx, "cmd.exe", "/c", command)
+	}
+
+	// #nosec G204 -- template setup commands are user-configured and expected.
+	return exec.CommandContext(ctx, "sh", "-c", command)
 }
 
 func (s *Service) resolveCreateBranchName(id, branchName string) (string, error) {

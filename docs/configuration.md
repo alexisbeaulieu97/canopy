@@ -164,6 +164,9 @@ templates:
     setup_commands:
       - "npm install"
       - "npm run build"
+  fullstack:
+    description: "Fullstack workspace defaults"
+    repos: ["backend", "frontend", "common", "ui-kit"]
 ```
 
 Create a workspace using a template:
@@ -229,6 +232,10 @@ templates:
     repos: ["frontend", "ui-kit", "design-system"]
     setup_commands:
       - "npm install"
+      - "npm run build"
+  fullstack:
+    description: "Fullstack workspace defaults"
+    repos: ["backend", "frontend", "shared"]
 
 hooks:
   post_create:

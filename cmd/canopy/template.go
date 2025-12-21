@@ -131,8 +131,9 @@ var templateValidateCmd = &cobra.Command{
 			return err
 		}
 
-		for name, tmpl := range app.Config.GetTemplates() {
-			if _, err := app.Service.ResolveRepos(name, tmpl.Repos); err != nil {
+		for _, tmpl := range app.Config.GetTemplates() {
+			templateID := fmt.Sprintf("template:%s", tmpl.Name)
+			if _, err := app.Service.ResolveRepos(templateID, tmpl.Repos); err != nil {
 				return err
 			}
 		}
