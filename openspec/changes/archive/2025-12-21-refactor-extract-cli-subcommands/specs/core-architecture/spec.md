@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 ### Requirement: CLI Layer Responsibilities
 The CLI layer (cmd/canopy/) SHALL focus exclusively on user interface concerns:
 - Parsing command-line flags and arguments
