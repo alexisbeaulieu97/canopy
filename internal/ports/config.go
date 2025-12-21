@@ -57,12 +57,15 @@ type ConfigProvider interface {
 	// GetGitRetryConfig returns the parsed git retry configuration.
 	GetGitRetryConfig() config.ParsedRetryConfig
 
-	// GetTemplates returns configured workspace templates.
+	// GetTemplates returns configured workspace templates as a defensive copy.
+	// Callers should not mutate the returned map or template values.
 	GetTemplates() map[string]config.Template
 
 	// ResolveTemplate returns a template by name.
+	// Returns an invalid-argument error when the name is empty or unknown.
 	ResolveTemplate(name string) (config.Template, error)
 
 	// ValidateTemplates validates template definitions.
+	// Returns a config validation error when template fields are invalid.
 	ValidateTemplates() error
 }
