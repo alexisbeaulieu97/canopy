@@ -107,8 +107,14 @@ canopy workspace list
 # List closed workspaces
 canopy workspace list --closed
 
-# Show git status for each repository
+# Show git status for each repository (parallel by default)
 canopy workspace list --status
+
+# Force sequential status fetching
+canopy workspace list --status --sequential-status
+
+# Force parallel status fetching
+canopy workspace list --status --parallel-status
 
 # With custom timeout for status check
 canopy workspace list --status --timeout 10s
@@ -489,8 +495,11 @@ To diagnose issues with a specific workspace:
 # View workspace details
 canopy workspace view PROJ-123
 
-# Check git status for all repos
+# Check git status for all repos (parallel by default)
 canopy workspace list --status
+
+# Force sequential status fetching
+canopy workspace list --status --sequential-status
 
 # Run git status directly in each repo
 canopy workspace git PROJ-123 status

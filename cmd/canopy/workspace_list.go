@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -30,6 +31,8 @@ var workspaceListCmd = &cobra.Command{
 		closedOnly, _ := cmd.Flags().GetBool("closed")
 		showStatus, _ := cmd.Flags().GetBool("status")
 		showLocks, _ := cmd.Flags().GetBool("show-locks")
+		parallelStatus, _ := cmd.Flags().GetBool("parallel-status")
+		sequentialStatus, _ := cmd.Flags().GetBool("sequential-status")
 		timeoutStr, _ := cmd.Flags().GetString("timeout")
 
 		// Parse timeout duration.
@@ -80,47 +83,97 @@ var workspaceListCmd = &cobra.Command{
 			return err
 		}
 
+		sort.Slice(list, func(i, j int) bool {
+			return list[i].ID < list[j].ID
+		})
+
 		// Collect status for each workspace if --status flag is set.
 		type workspaceWithStatus struct {
 			domain.Workspace
 			RepoStatuses []domain.RepoStatus `json:"repo_statuses,omitempty"`
 		}
 
-		var workspacesWithStatus []workspaceWithStatus
+		workspacesWithStatus := make([]workspaceWithStatus, 0, len(list))
 
 		for _, w := range list {
-			ws := workspaceWithStatus{Workspace: w}
+			workspacesWithStatus = append(workspacesWithStatus, workspaceWithStatus{Workspace: w})
+		}
 
-			if showStatus {
-				ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
-				status, statusErr := service.GetStatus(ctx, w.ID)
-				cancel()
-
-				if statusErr == nil && status != nil {
-					ws.RepoStatuses = status.Repos
-				} else if errors.Is(statusErr, context.DeadlineExceeded) {
-					// Timeout - add placeholder status.
-					for _, repo := range w.Repos {
-						ws.RepoStatuses = append(ws.RepoStatuses, domain.RepoStatus{
-							Name:   repo.Name,
-							Branch: "timeout",
-						})
-					}
-				} else if statusErr != nil {
-					output.Warnf("Failed to get status for %s: %v", w.ID, statusErr)
-				}
+		if showStatus {
+			if sequentialStatus && parallelStatus && cmd.Flags().Changed("parallel-status") {
+				return cerrors.NewInvalidArgument("flags", "cannot use --parallel-status with --sequential-status")
 			}
 
-			if showLocks {
-				locked, lockErr := service.WorkspaceLocked(w.ID)
+			if sequentialStatus {
+				parallelStatus = false
+			}
+
+			if parallelStatus {
+				workspaceIDs := make([]string, 0, len(list))
+				for _, w := range list {
+					workspaceIDs = append(workspaceIDs, w.ID)
+				}
+
+				results, err := service.GetWorkspaceStatusBatch(cmd.Context(), workspaceIDs, timeout)
+				if err != nil {
+					return err
+				}
+
+				for i, result := range results {
+					ws := &workspacesWithStatus[i]
+					if result.Err == nil && result.Status != nil {
+						ws.RepoStatuses = result.Status.Repos
+						continue
+					}
+
+					if errors.Is(result.Err, context.DeadlineExceeded) {
+						for _, repo := range ws.Repos {
+							ws.RepoStatuses = append(ws.RepoStatuses, domain.RepoStatus{
+								Name:   repo.Name,
+								Branch: "timeout",
+							})
+						}
+						continue
+					}
+
+					if result.Err != nil {
+						output.Warnf("Failed to get status for %s: %v", ws.ID, result.Err)
+					}
+				}
+			} else {
+				for i, w := range list {
+					ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
+					status, statusErr := service.GetStatus(ctx, w.ID)
+					cancel()
+
+					ws := &workspacesWithStatus[i]
+					if statusErr == nil && status != nil {
+						ws.RepoStatuses = status.Repos
+					} else if errors.Is(statusErr, context.DeadlineExceeded) {
+						// Timeout - add placeholder status.
+						for _, repo := range w.Repos {
+							ws.RepoStatuses = append(ws.RepoStatuses, domain.RepoStatus{
+								Name:   repo.Name,
+								Branch: "timeout",
+							})
+						}
+					} else if statusErr != nil {
+						output.Warnf("Failed to get status for %s: %v", w.ID, statusErr)
+					}
+				}
+			}
+		}
+
+		if showLocks {
+			for i := range workspacesWithStatus {
+				ws := &workspacesWithStatus[i]
+				locked, lockErr := service.WorkspaceLocked(ws.ID)
 				if lockErr != nil {
-					output.Warnf("Failed to check lock status for %s: %v", w.ID, lockErr)
+					output.Warnf("Failed to check lock status for %s: %v", ws.ID, lockErr)
 				} else {
 					ws.Locked = locked
 				}
 			}
-
-			workspacesWithStatus = append(workspacesWithStatus, ws)
 		}
 
 		if jsonOutput {
@@ -150,7 +203,7 @@ var workspaceListCmd = &cobra.Command{
 			}
 
 			output.Infof("%s (Branch: %s)%s", ws.ID, ws.BranchName, lockSuffix)
-			for i, r := range ws.Repos {
+			for _, r := range ws.Repos {
 				if showStatus {
 					status, ok := statusByRepo[r.Name]
 					if ok {
@@ -160,13 +213,7 @@ var workspaceListCmd = &cobra.Command{
 					}
 				}
 
-				if showStatus && i < len(ws.RepoStatuses) {
-					status := ws.RepoStatuses[i]
-					statusStr := formatRepoStatusIndicator(status)
-					output.Infof("  - %s (%s) %s", r.Name, r.URL, statusStr)
-				} else {
-					output.Infof("  - %s (%s)", r.Name, r.URL)
-				}
+				output.Infof("  - %s (%s)", r.Name, r.URL)
 			}
 		}
 		return nil
@@ -179,6 +226,8 @@ func init() {
 	workspaceListCmd.Flags().Bool("json", false, "Output in JSON format")
 	workspaceListCmd.Flags().Bool("closed", false, "List closed workspaces")
 	workspaceListCmd.Flags().Bool("status", false, "Show git status for each repository")
+	workspaceListCmd.Flags().Bool("parallel-status", true, "Fetch workspace status in parallel (default)")
+	workspaceListCmd.Flags().Bool("sequential-status", false, "Fetch workspace status sequentially")
 	workspaceListCmd.Flags().String("timeout", "5s", "Timeout for status check per workspace (e.g. 5s, 10s)")
 	workspaceListCmd.Flags().Bool("show-locks", false, "Show workspace lock status")
 }
