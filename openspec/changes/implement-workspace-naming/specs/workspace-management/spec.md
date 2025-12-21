@@ -21,8 +21,6 @@ The system SHALL use the `workspace_naming` template to compute workspace direct
 - **WHEN** template produces a name with path separators or invalid characters
 - **THEN** the system SHALL return CONFIG_VALIDATION error
 
-## ADDED Requirements
-
 ### Requirement: Template Preview
 The system SHALL show computed workspace directory in config validation.
 
