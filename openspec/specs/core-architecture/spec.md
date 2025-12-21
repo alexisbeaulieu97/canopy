@@ -145,18 +145,30 @@ The codebase SHALL follow hexagonal architecture patterns.
 - **WHEN** adapters implement these interfaces
 - **THEN** the domain layer SHALL remain decoupled from infrastructure
 
+#### Scenario: Adapter package naming
+- **GIVEN** the hexagonal architecture separates ports from adapters
+- **WHEN** a developer looks for the WorkspaceStorage implementation
+- **THEN** they find it in `internal/storage/` package
+- **AND** the package name reflects its role as a storage adapter
+
 ### Requirement: Pure go-git Implementation
-The system SHALL use go-git library as the primary implementation for all git operations. An explicit, documented escape hatch (`internal/gitx/git.go:RunCommand`) MAY invoke the git CLI for operations go-git cannot support.
+The system SHALL use go-git library as the primary implementation for all git operations. An explicit, documented escape hatch (`internal/gitx/git.go:RunCommand`) MAY invoke the git CLI for operations go-git cannot support, including worktree management.
 
 #### Scenario: Clone repository with go-git
 - **WHEN** a repository needs to be cloned
 - **THEN** the operation is performed using go-git's Clone function
 - **AND** no external git process is spawned
 
-#### Scenario: Create worktree with go-git
-- **WHEN** a worktree needs to be created
-- **THEN** the operation is performed using go-git's Worktree API
-- **AND** no external git process is spawned
+#### Scenario: Create worktree with git CLI
+- **WHEN** a worktree needs to be created for a workspace
+- **THEN** the operation is performed using `git worktree add` via RunCommand
+- **AND** the worktree shares objects with the canonical repository
+- **AND** the worktree's origin remote points to the upstream URL (not the canonical path)
+
+#### Scenario: Remove worktree with git CLI
+- **WHEN** a worktree needs to be removed during workspace close
+- **THEN** the operation is performed using `git worktree remove` via RunCommand
+- **AND** the worktree reference is cleaned from the canonical repository
 
 #### Scenario: Fetch updates with go-git
 - **WHEN** repository updates need to be fetched
@@ -169,7 +181,7 @@ The system SHALL use go-git library as the primary implementation for all git op
 - **AND** no external git process is spawned
 
 #### Scenario: Escape hatch for unsupported operations
-- **WHEN** a git operation cannot be performed with go-git (e.g., worktree creation with detached HEAD)
+- **WHEN** a git operation cannot be performed with go-git (e.g., worktree management)
 - **THEN** the `RunCommand` escape hatch MAY be used to invoke the git CLI
 - **AND** usage is documented in the code
 - **AND** the CLI invocation still returns domain errors wrapped with contextual information
@@ -198,17 +210,29 @@ All git operations SHALL return domain errors wrapped with context, without expo
 - **AND** stderr output is included in the error context
 
 ### Requirement: Typed Error System
-The application SHALL use typed errors with error codes for all domain errors.
+All errors returned by internal packages SHALL use the typed error system defined in `internal/errors`. Raw `fmt.Errorf` calls MUST NOT be used in production code paths.
 
-#### Scenario: Create workspace not found error
-- **WHEN** `NewWorkspaceNotFound("my-ws")` is called
-- **THEN** returned CanopyError SHALL have Code `WORKSPACE_NOT_FOUND`
-- **AND** Message SHALL contain the workspace ID "my-ws"
+The error system provides:
+- `CanopyError` struct with `Code`, `Message`, `Cause`, and `Context` fields
+- Constructor functions for each error type (e.g., `NewWorkspaceNotFound`, `NewIOFailed`)
+- Sentinel errors for use with `errors.Is()` matching
+- `Wrap()` for adding context while preserving the underlying error
 
-#### Scenario: Create repo not clean error
-- **WHEN** `NewRepoNotClean("/path/to/repo")` is called
-- **THEN** returned CanopyError SHALL have Code `REPO_NOT_CLEAN`
-- **AND** Context SHALL contain the repo path
+#### Scenario: All internal packages use typed errors
+- **WHEN** any error is returned from internal code, **THEN** it SHALL be a `*CanopyError` or wrap one
+- **WHEN** checking error type, **THEN** it SHALL be matchable with `errors.Is(err, cerrors.SomeError)`
+
+#### Scenario: Config validation returns typed errors
+- **WHEN** `ValidateValues()` is called on a config with an invalid value, **THEN** the error SHALL be a `ConfigValidation` error
+- **WHEN** a config validation error occurs, **THEN** the error context SHALL include the field name and reason
+
+#### Scenario: Path validation returns typed errors
+- **WHEN** `ValidateEnvironment()` is called on a path that doesn't exist or isn't a directory, **THEN** the error SHALL be a `PathInvalid` or `PathNotDirectory` error
+- **WHEN** a path validation error occurs, **THEN** the error context SHALL include the path
+
+#### Scenario: Workspace storage returns typed errors
+- **WHEN** an I/O error occurs during workspace storage operations (read, write, delete), **THEN** the error SHALL be wrapped with `NewIOFailed` or `NewWorkspaceMetadataError`
+- **WHEN** wrapping storage errors, **THEN** the underlying cause SHALL be preserved via `Unwrap()`
 
 ### Requirement: Error Wrapping
 The application SHALL support wrapping errors to preserve root cause using a general-purpose `Wrap` function.
@@ -241,22 +265,35 @@ Errors SHALL support contextual key-value pairs for debugging.
 - **AND** Context SHALL be accessible for logging and debugging
 
 ### Requirement: Single Responsibility Service Components
-The workspaces service layer SHALL be composed of focused sub-services, each with a single responsibility.
+Service components SHALL follow the Single Responsibility Principle, with each service focused on a cohesive set of operations.
 
-#### Scenario: RepoResolver handles identifier resolution
-- **WHEN** a repo identifier is provided (name, alias, or URL)
-- **THEN** the RepoResolver component resolves it to a canonical repo path
-- **AND** the resolution logic is isolated from workspace operations
+The workspace service layer SHALL be organized as follows:
+- `Service` - Coordinator for workspace lifecycle (create, close, restore, list, status)
+- `WorkspaceGitService` - Git command execution across workspace repos
+- `WorkspaceOrphanService` - Orphan worktree detection and remediation
+- `WorkspaceExportService` - Workspace export/import functionality
+- `CanonicalRepoService` - Canonical repository management (existing)
+- `RepoResolver` - Repository identifier resolution (existing)
+- `DiskUsageCalculator` - Disk usage calculation (existing)
+- `WorkspaceCache` - Workspace lookup caching (existing)
 
-#### Scenario: DiskUsageCalculator handles size computation
-- **WHEN** workspace disk usage is requested
-- **THEN** the DiskUsageCalculator component computes and caches the result
-- **AND** caching logic is isolated from workspace operations
+#### Scenario: Main service coordinates sub-services
+- **GIVEN** a workspace operation that spans multiple concerns
+- **WHEN** the operation is invoked on the main Service
+- **THEN** the Service SHALL delegate to appropriate sub-services
+- **AND** the public API SHALL remain unchanged
 
-#### Scenario: CanonicalRepoService handles repo management
-- **WHEN** canonical repo operations are performed (list, add, remove, sync)
-- **THEN** the CanonicalRepoService component handles the operation
-- **AND** repo management is isolated from workspace lifecycle
+#### Scenario: Sub-services are independently testable
+- **GIVEN** a sub-service like WorkspaceGitService
+- **WHEN** unit tests are written
+- **THEN** the sub-service SHALL be testable without instantiating the full Service
+- **AND** dependencies SHALL be injectable via interfaces
+
+#### Scenario: Service file size is manageable
+- **GIVEN** the service layer structure
+- **WHEN** any single service file is examined
+- **THEN** it SHALL contain fewer than 500 lines of code
+- **AND** it SHALL have a clear, single purpose
 
 ### Requirement: Context Propagation in Service Layer
 All public Service methods SHALL accept `context.Context` as their first parameter to enable cancellation, timeout, and observability.
@@ -277,7 +314,7 @@ All public Service methods SHALL accept `context.Context` as their first paramet
 - **AND** partial operations SHALL be cleaned up where possible
 
 ### Requirement: Git Operations Context Support
-Git network operations (Clone, Fetch, Push, Pull) SHALL respect context cancellation and deadlines.
+All git operations SHALL respect context cancellation and deadlines.
 
 #### Scenario: Clone respects context timeout
 - **WHEN** `GitOperations.Clone(ctx, url, name)` is called with a deadline
@@ -289,6 +326,30 @@ Git network operations (Clone, Fetch, Push, Pull) SHALL respect context cancella
 - **WHEN** `GitOperations.Fetch(ctx, name)` is called
 - **AND** the context is cancelled during fetch
 - **THEN** the fetch SHALL stop
+- **AND** a context cancelled error SHALL be returned
+
+#### Scenario: CreateWorktree respects context cancellation
+- **WHEN** `GitOperations.CreateWorktree(ctx, repoName, worktreePath, branchName)` is called
+- **AND** the context is cancelled during worktree creation
+- **THEN** the operation SHALL be aborted
+- **AND** a context cancelled error SHALL be returned
+
+#### Scenario: Status respects context cancellation
+- **WHEN** `GitOperations.Status(ctx, path)` is called
+- **AND** the context is cancelled during status check
+- **THEN** the operation SHALL be aborted
+- **AND** a context cancelled error SHALL be returned
+
+#### Scenario: Checkout respects context cancellation
+- **WHEN** `GitOperations.Checkout(ctx, path, branchName, create)` is called
+- **AND** the context is cancelled during checkout
+- **THEN** the operation SHALL be aborted
+- **AND** a context cancelled error SHALL be returned
+
+#### Scenario: List respects context cancellation
+- **WHEN** `GitOperations.List(ctx)` is called
+- **AND** the context is cancelled during listing
+- **THEN** the operation SHALL be aborted
 - **AND** a context cancelled error SHALL be returned
 
 #### Scenario: Parallel operations cancel on context done
@@ -470,4 +531,409 @@ The system SHALL provide a shared package for Git URL parsing with the following
 #### Scenario: Alias derivation from invalid URL
 - **WHEN** deriving an alias from an invalid or empty URL
 - **THEN** the utility SHALL return an empty string
+
+### Requirement: Default Local Operation Timeout
+Local git operations (CreateWorktree, Status, Checkout, List) SHALL use a default timeout when no deadline is set on the context.
+
+#### Scenario: Default local timeout applied
+- **GIVEN** a context with no deadline
+- **WHEN** a local git operation is initiated
+- **THEN** a default timeout of 30 seconds SHALL be applied
+- **AND** operations exceeding this timeout SHALL fail with a timeout error
+
+#### Scenario: Explicit deadline overrides default for local ops
+- **GIVEN** a context with an explicit deadline
+- **WHEN** a local git operation is initiated
+- **THEN** the explicit deadline SHALL be used
+- **AND** the default timeout SHALL NOT apply
+
+### Requirement: Integration Test Coverage
+
+The project SHALL maintain integration tests covering all major user workflows.
+
+Integration tests SHALL exercise the complete stack from CLI through service layer to filesystem operations, using real git repositories in isolated temporary directories.
+
+#### Scenario: Workspace lifecycle coverage
+
+- **WHEN** running the integration test suite
+- **THEN** tests SHALL cover workspace create, list, view, close, restore, and rename operations
+
+#### Scenario: Repository management coverage
+
+- **WHEN** running the integration test suite
+- **THEN** tests SHALL cover adding repos to workspaces, removing repos, and status reporting
+
+#### Scenario: Branch operation coverage
+
+- **WHEN** running the integration test suite
+- **THEN** tests SHALL cover branch switching and creation across workspace repositories
+
+#### Scenario: Error handling coverage
+
+- **WHEN** running the integration test suite
+- **THEN** tests SHALL verify appropriate error messages for common failure scenarios including dirty repos, missing workspaces, and invalid configuration
+
+### Requirement: Parallel Repository Operations
+Repository operations during workspace creation SHALL execute in parallel with bounded concurrency.
+
+#### Scenario: Parallel EnsureCanonical execution
+- **WHEN** creating a workspace with multiple repositories, **THEN** EnsureCanonical operations SHALL execute in parallel, the number of concurrent operations SHALL be limited by `parallel_workers` config, and worktree creation SHALL wait for the corresponding EnsureCanonical to complete
+
+#### Scenario: Configurable worker count
+- **WHEN** creating a workspace with 10 repositories and config has `parallel_workers: 6`, **THEN** at most 6 EnsureCanonical operations SHALL run concurrently
+
+#### Scenario: Default worker count
+- **WHEN** creating a workspace with multiple repositories and `parallel_workers` is not configured, **THEN** the default of 4 concurrent operations SHALL be used
+
+#### Scenario: Worker count validation
+- **WHEN** `parallel_workers` is configured with an invalid value (0, negative, or exceeding maximum), **THEN** the configuration SHALL fail validation with a clear error message
+
+#### Scenario: Error handling with fail-fast (default)
+- **WHEN** one EnsureCanonical operation fails during workspace creation and `continue_on_error` is false (default), **THEN** remaining operations SHALL be cancelled, successfully cloned repositories SHALL be cleaned up, and the error message SHALL indicate which repository failed
+
+#### Scenario: Error handling with continue-on-error
+- **WHEN** one EnsureCanonical operation fails during workspace creation and `continue_on_error: true`, **THEN** remaining operations SHALL continue, partial results SHALL be available, and errors SHALL be aggregated and reported
+
+#### Scenario: Context cancellation propagates to workers
+- **WHEN** workspace creation context is cancelled, **THEN** all parallel operations SHALL receive cancellation and the operation SHALL return promptly with a cancellation error
+
+### Requirement: Named Timeout Constants
+
+Timeout values SHALL be defined as named constants with documentation explaining their purpose and rationale.
+
+Named constants for timeouts (e.g., `gitx.DefaultLocalTimeout`) SHALL include a documentation comment explaining their purpose.
+
+#### Scenario: Cleanup operation timeout
+
+- **WHEN** a cleanup operation requires a timeout context, **THEN** the code SHALL use a named constant (e.g., `gitx.DefaultLocalTimeout`) with a documentation comment
+
+#### Scenario: No magic timeout numbers
+
+- **WHEN** reviewing CLI command handlers, **THEN** no inline magic numbers for timeouts SHALL be present and all timeouts SHALL reference named constants
+
+### Requirement: Transactional Operation Integrity
+Mutating operations SHALL maintain system consistency by cleaning up partial changes on failure.
+
+#### Scenario: Create workspace fails during clone
+- **WHEN** `CreateWorkspace` successfully creates the workspace directory
+- **AND** clone operation fails for one repo
+- **THEN** the system SHALL remove the workspace directory
+- **AND** no metadata file SHALL remain
+- **AND** the operation SHALL return an error
+
+#### Scenario: Add repo fails during metadata update
+- **WHEN** `AddRepoToWorkspace` successfully creates the worktree
+- **AND** metadata update fails
+- **THEN** the system SHALL remove the created worktree
+- **AND** the workspace metadata SHALL remain unchanged
+- **AND** the operation SHALL return an error
+
+#### Scenario: Restore workspace fails during recreation
+- **WHEN** `RestoreWorkspace` begins restoration
+- **AND** worktree creation fails
+- **THEN** the closed workspace entry SHALL remain intact
+- **AND** no partial workspace directory SHALL remain
+- **AND** the user can retry the restore operation
+
+#### Scenario: Rollback actions logged
+- **WHEN** an operation fails and rollback is triggered
+- **THEN** the system SHALL log each rollback action at debug level
+- **AND** include the original error and cleanup status
+
+### Requirement: Workspace Locking
+The system SHALL prevent concurrent mutating operations on the same workspace using file-based locks.
+
+#### Scenario: Lock acquired for create operation
+- **WHEN** a workspace creation is initiated
+- **THEN** the system SHALL acquire an exclusive lock for the workspace ID
+- **AND** release the lock when the operation completes (success or failure)
+
+#### Scenario: Concurrent operations blocked
+- **GIVEN** workspace `PROJ-1` has an active lock held by another process
+- **WHEN** a second process attempts to close `PROJ-1`
+- **THEN** the second process SHALL wait up to `lock_timeout` for the lock
+- **AND** fail with `ErrWorkspaceLocked` if timeout expires
+
+#### Scenario: Read operations not locked
+- **GIVEN** workspace `PROJ-1` has an active lock
+- **WHEN** I run `canopy workspace list` or `canopy workspace status PROJ-1`
+- **THEN** the operation SHALL complete without waiting for the lock
+
+#### Scenario: Stale lock cleanup
+- **GIVEN** a lock file exists that is older than `lock_stale_threshold`
+- **WHEN** another operation attempts to acquire the lock
+- **THEN** the system SHALL remove the stale lock
+- **AND** SHALL acquire a fresh lock
+
+#### Scenario: Lock released on failure
+- **GIVEN** an operation holds a lock on workspace `PROJ-1`
+- **WHEN** the operation fails with an error
+- **THEN** the lock SHALL be released
+- **AND** subsequent operations SHALL proceed without waiting
+
+### Requirement: Parallel Git Operations Early Termination
+When running git commands in parallel with `continueOnError=false`, the system SHALL cancel remaining operations after the first failure.
+
+#### Scenario: First error cancels pending operations
+- **GIVEN** a workspace with 5 repositories
+- **AND** parallel git execution is enabled
+- **AND** `continueOnError` is false
+- **WHEN** the first repository operation fails
+- **THEN** pending operations SHALL be cancelled
+- **AND** running operations SHALL be signalled to stop
+- **AND** the function SHALL return the first error
+
+#### Scenario: All operations complete when continueOnError is true
+- **GIVEN** a workspace with 5 repositories
+- **AND** parallel git execution is enabled
+- **AND** `continueOnError` is true
+- **WHEN** some repository operations fail
+- **THEN** all operations SHALL complete
+- **AND** all results (success and failure) SHALL be returned
+
+#### Scenario: No race conditions in result collection
+- **GIVEN** parallel git execution
+- **WHEN** multiple goroutines write results concurrently
+- **THEN** all results SHALL be collected without data races
+- **AND** `go test -race` SHALL pass
+
+### Requirement: Complete Port Interface Coverage
+Every injectable service dependency SHALL have a corresponding interface in `internal/ports/`.
+
+#### Scenario: New dependency requires interface
+- **GIVEN** a new dependency is added to the Service
+- **WHEN** the dependency is injectable
+- **THEN** an interface SHALL be created in `internal/ports/`
+- **AND** a mock implementation SHALL be created in `internal/mocks/`
+
+### Requirement: Registry Transaction Safety
+
+Registry modifications SHALL use atomic save-with-rollback semantics to prevent partial state on failure.
+
+The save-with-rollback pattern SHALL:
+- Attempt to persist registry changes
+- On failure, execute the provided rollback function
+- Log rollback failures without masking the original error
+- Return the original save error to the caller
+
+#### Scenario: Successful save
+
+- **WHEN** a registry modification is saved successfully
+- **THEN** no rollback SHALL be attempted
+- **AND** the function SHALL return nil
+
+#### Scenario: Save failure with successful rollback
+
+- **WHEN** a registry save fails
+- **THEN** the rollback function SHALL be executed
+- **AND** the original save error SHALL be returned
+
+#### Scenario: Save failure with rollback failure
+
+- **WHEN** a registry save fails and rollback also fails
+- **THEN** the rollback failure SHALL be logged
+- **AND** the original save error SHALL be returned (not masked)
+
+### Requirement: Shared Test Utilities Package
+The codebase SHALL provide a shared test utilities package to avoid duplication of test helper functions.
+
+#### Scenario: Git test helpers available
+- **GIVEN** a test needs to create a git repository
+- **WHEN** the test imports `internal/testutil`
+- **THEN** `testutil.CreateRepoWithCommit(t, path)` SHALL be available
+- **AND** the helper SHALL create a valid git repo with initial commit
+
+#### Scenario: Filesystem test helpers available
+- **GIVEN** a test needs to create temporary files
+- **WHEN** the test imports `internal/testutil`
+- **THEN** `testutil.MustMkdir(t, path)` SHALL be available
+- **AND** `testutil.MustWriteFile(t, path, content)` SHALL be available
+
+#### Scenario: Service test setup available
+- **GIVEN** a test needs a fully configured test service
+- **WHEN** the test calls `testutil.NewTestService(t)`
+- **THEN** a struct with initialized dependencies SHALL be returned
+- **AND** temporary directories SHALL be created
+- **AND** cleanup SHALL be registered with t.Cleanup()
+
+### Requirement: Test Helper Consistency
+All test helper functions SHALL follow consistent patterns for error handling and cleanup.
+
+#### Scenario: Helper fails test on error
+- **GIVEN** a test helper function with `t *testing.T` parameter
+- **WHEN** an error occurs during helper execution
+- **THEN** the helper SHALL call `t.Fatalf()` with descriptive message
+- **AND** the test SHALL stop execution
+
+#### Scenario: Helper registers cleanup
+- **GIVEN** a test helper that creates resources
+- **WHEN** the helper completes successfully
+- **THEN** cleanup functions SHALL be registered via `t.Cleanup()`
+- **AND** resources SHALL be cleaned up after test completion
+
+### Requirement: Cross-Platform Path Construction
+All file path construction SHALL use `filepath.Join` or equivalent standard library functions for cross-platform compatibility.
+
+#### Scenario: Path construction uses filepath.Join
+- **WHEN** constructing a file path from multiple components
+- **THEN** the code SHALL use `filepath.Join` or `filepath.Clean`
+- **AND** SHALL NOT use `fmt.Sprintf` with hardcoded path separators
+
+#### Scenario: Worktree path construction
+- **WHEN** constructing a worktree path from workspace root, directory name, and repo name
+- **THEN** the path SHALL be constructed as `filepath.Join(workspacesRoot, dirName, repoName)`
+- **AND** the result SHALL be valid on all supported platforms (Linux, macOS, Windows)
+
+#### Scenario: Environment variable path construction
+- **WHEN** constructing paths for hook environment variables (e.g., CANOPY_REPO_PATH)
+- **THEN** the path SHALL use platform-appropriate separators
+- **AND** SHALL be usable by shell scripts on that platform
+
+### Requirement: Service Delegation Pattern
+The main `Service` struct SHALL maintain backward compatibility by delegating to sub-services for extracted functionality.
+
+#### Scenario: Existing method calls work unchanged
+- **GIVEN** code that calls `service.PushWorkspace()`
+- **WHEN** the method is invoked after refactoring
+- **THEN** it SHALL delegate to `WorkspaceGitService.Push()`
+- **AND** the behavior SHALL be identical to before refactoring
+
+### Requirement: Implementation-Agnostic Storage Interface
+The `WorkspaceStorage` interface SHALL be implementation-agnostic, using domain identifiers (workspace IDs) rather than implementation details (directory names, file paths).
+
+#### Scenario: Create workspace by domain object
+- **WHEN** `Create(ctx, workspace)` is called with a domain.Workspace
+- **THEN** the storage SHALL persist the workspace
+- **AND** the caller SHALL NOT need to specify directory names or paths
+
+#### Scenario: Load workspace by ID
+- **WHEN** `Load(ctx, id)` is called with a workspace ID
+- **THEN** the storage SHALL return the workspace metadata
+- **AND** the caller SHALL NOT need to know the underlying storage path
+
+#### Scenario: Save workspace by domain object
+- **WHEN** `Save(ctx, workspace)` is called with a domain.Workspace
+- **THEN** the storage SHALL update the persisted workspace using the ID from the domain object
+- **AND** the caller SHALL NOT need to provide directory names
+
+#### Scenario: Close workspace by ID
+- **WHEN** `Close(ctx, id, closedAt)` is called with a workspace ID
+- **THEN** the storage SHALL archive the workspace
+- **AND** the caller SHALL NOT need to provide directory names
+
+#### Scenario: Rename workspace by IDs
+- **WHEN** `Rename(ctx, oldID, newID)` is called
+- **THEN** the storage SHALL update the workspace ID
+- **AND** the implementation MAY rename underlying directories as needed
+
+### Requirement: Context Support in Storage Interface
+All `WorkspaceStorage` methods SHALL accept `context.Context` as their first parameter to enable cancellation and timeout for I/O operations.
+
+#### Scenario: Storage method accepts context
+- **WHEN** a service method calls a storage method
+- **THEN** the service SHALL pass its context to the storage method
+- **AND** the storage SHALL respect context cancellation
+
+#### Scenario: Context cancellation stops I/O
+- **WHEN** context is cancelled during a storage operation
+- **THEN** the operation SHALL return promptly
+- **AND** an appropriate error SHALL be returned
+
+### Requirement: Configuration Validation Error Type
+Config validation errors SHALL use the `ErrConfigValidation` error code for semantic validation failures.
+
+#### Scenario: Invalid field value
+- **WHEN** a config field has an invalid value, **THEN** `NewConfigValidation(field, detail)` SHALL be returned
+- **WHEN** returning config validation errors, **THEN** the error message SHALL be user-friendly
+
+### Requirement: Path Error Types
+Path-related errors SHALL use specific error codes for different failure modes.
+
+#### Scenario: Path does not exist
+- **WHEN** a required path does not exist, **THEN** `NewPathInvalid(path, "does not exist")` SHALL be returned
+
+#### Scenario: Path is not a directory
+- **WHEN** a path exists but is not a directory, **THEN** `NewPathNotDirectory(path)` SHALL be returned
+
+### Requirement: Standard Library Concurrency Patterns
+Concurrent operations SHALL use standard Go concurrency patterns from `golang.org/x/sync` where applicable, rather than custom implementations.
+
+#### Scenario: Parallel repo operations use errgroup
+- **WHEN** multiple repositories need concurrent operations (e.g., EnsureCanonical)
+- **THEN** the implementation SHALL use `errgroup.Group` for coordination
+- **AND** bounded concurrency SHALL be configured via `SetLimit()`
+
+#### Scenario: Fail-fast on first error
+- **WHEN** a concurrent operation fails
+- **THEN** remaining operations SHALL be cancelled via errgroup's context
+- **AND** the first error SHALL be returned to the caller
+
+### Requirement: Worktree Object Sharing
+Workspace repositories SHALL be created as git worktrees that share objects with the canonical repository.
+
+#### Scenario: Worktree shares objects
+- **WHEN** a worktree is created for a workspace
+- **THEN** the worktree's `.git` file points to the canonical repository's worktrees directory
+- **AND** no duplicate git objects are stored
+- **AND** disk usage scales with working tree size, not repository history
+
+#### Scenario: Worktree remote configuration
+- **WHEN** a worktree is created
+- **THEN** the worktree's `origin` remote SHALL point to the upstream URL
+- **AND** push operations SHALL send commits to the upstream repository
+- **AND** pull operations SHALL fetch from the upstream repository
+
+### Requirement: Upstream URL Preservation
+The canonical repository SHALL store the original upstream URL for worktree configuration.
+
+#### Scenario: Store upstream URL during clone
+- **WHEN** a canonical repository is cloned via EnsureCanonical
+- **THEN** the upstream URL SHALL be stored in the repository's git config
+- **AND** the URL SHALL be retrievable for worktree remote configuration
+
+#### Scenario: Retrieve upstream URL for worktree
+- **WHEN** creating a worktree
+- **THEN** the system SHALL retrieve the upstream URL from the canonical repository config
+- **AND** configure the worktree's origin remote with this URL
+
+### Requirement: No Deprecated Code Aliases
+The codebase SHALL NOT contain the following deprecated type aliases or wrapper functions. All code SHALL use canonical implementations directly.
+
+Deprecated items (to be removed):
+- `workspace.ClosedWorkspace` (use `domain.ClosedWorkspace`)
+- `hooks.HookContext` (use `domain.HookContext`)
+- `resolver.isLikelyURL` (use `giturl.IsURL`)
+- `resolver.repoNameFromURL` (use `giturl.ExtractRepoName`)
+- `service.CalculateDiskUsage` (use `DiskUsageCalculator.Calculate`)
+
+#### Scenario: Domain types used directly
+- **WHEN** code needs to reference domain types like Workspace, ClosedWorkspace, or HookContext, **THEN** the code SHALL import and use `domain.TypeName` directly
+
+#### Scenario: Utility functions used directly
+- **WHEN** code needs URL parsing utilities, **THEN** the code SHALL import and use `giturl.FunctionName` directly
+
+### Requirement: CLI Layer Responsibilities
+The CLI layer (cmd/canopy/) SHALL focus exclusively on user interface concerns:
+- Parsing command-line flags and arguments
+- Validating user input format (not business rules)
+- Calling service layer methods
+- Formatting output for display (text, JSON, table)
+- Handling user prompts and confirmations
+
+Business logic, orchestration, and domain operations SHALL remain in the service layer (internal/workspaces/).
+
+#### Scenario: Clear separation of concerns
+- **GIVEN** a workspace command is executed
+- **WHEN** the command processes
+- **THEN** flag parsing SHALL occur in CLI layer
+- **AND** business validation SHALL occur in service layer
+- **AND** domain operations SHALL occur in service layer
+- **AND** output formatting SHALL occur in CLI layer
+
+#### Scenario: Subcommand file organization
+- **GIVEN** the CLI codebase
+- **WHEN** reviewing file structure
+- **THEN** each subcommand SHALL have its own file
+- **AND** shared output helpers SHALL be in `presenters.go`
+- **AND** parent command SHALL be in `workspace.go`
 
