@@ -45,14 +45,15 @@ type Repo struct {
 
 // Workspace represents a work item
 type Workspace struct {
-	Version        int        `yaml:"version"`
-	ID             string     `yaml:"id"`
-	BranchName     string     `yaml:"branch_name,omitempty"`
-	Repos          []Repo     `yaml:"repos"`
-	ClosedAt       *time.Time `yaml:"closed_at,omitempty"`
-	Locked         bool       `yaml:"-" json:"locked,omitempty"`
-	LastModified   time.Time  `yaml:"-"`
-	DiskUsageBytes int64      `yaml:"-"`
+	Version         int        `yaml:"version"`
+	ID              string     `yaml:"id"`
+	BranchName      string     `yaml:"branch_name,omitempty"`
+	Repos           []Repo     `yaml:"repos"`
+	ClosedAt        *time.Time `yaml:"closed_at,omitempty"`
+	SetupIncomplete bool       `yaml:"setup_incomplete,omitempty"`
+	Locked          bool       `yaml:"-" json:"locked,omitempty"`
+	LastModified    time.Time  `yaml:"-"`
+	DiskUsageBytes  int64      `yaml:"-"`
 }
 
 // ClosedWorkspace describes a stored closed workspace entry.

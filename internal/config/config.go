@@ -63,6 +63,7 @@ import (
 	"github.com/spf13/viper"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/validation"
 )
 
 // Default keybindings for TUI actions.
@@ -169,21 +170,22 @@ type GitConfig struct {
 
 // Config holds the global configuration
 type Config struct {
-	ProjectsRoot       string        `mapstructure:"projects_root"`
-	WorkspacesRoot     string        `mapstructure:"workspaces_root"`
-	ClosedRoot         string        `mapstructure:"closed_root"`
-	CloseDefault       string        `mapstructure:"workspace_close_default"`
-	WorkspaceNaming    string        `mapstructure:"workspace_naming"`
-	StaleThresholdDays int           `mapstructure:"stale_threshold_days"`
-	ParallelWorkers    int           `mapstructure:"parallel_workers"`
-	LockTimeout        string        `mapstructure:"lock_timeout"`
-	LockStaleThreshold string        `mapstructure:"lock_stale_threshold"`
-	Defaults           Defaults      `mapstructure:"defaults"`
-	Hooks              Hooks         `mapstructure:"hooks"`
-	TUI                TUIConfig     `mapstructure:"tui"`
-	Git                GitConfig     `mapstructure:"git"`
-	Registry           *RepoRegistry `mapstructure:"-"`
-	Warnings           []string      `mapstructure:"-"` // Warnings collected during loading (e.g., deprecated keys)
+	ProjectsRoot       string              `mapstructure:"projects_root"`
+	WorkspacesRoot     string              `mapstructure:"workspaces_root"`
+	ClosedRoot         string              `mapstructure:"closed_root"`
+	CloseDefault       string              `mapstructure:"workspace_close_default"`
+	WorkspaceNaming    string              `mapstructure:"workspace_naming"`
+	StaleThresholdDays int                 `mapstructure:"stale_threshold_days"`
+	ParallelWorkers    int                 `mapstructure:"parallel_workers"`
+	LockTimeout        string              `mapstructure:"lock_timeout"`
+	LockStaleThreshold string              `mapstructure:"lock_stale_threshold"`
+	Defaults           Defaults            `mapstructure:"defaults"`
+	Templates          map[string]Template `mapstructure:"templates"`
+	Hooks              Hooks               `mapstructure:"hooks"`
+	TUI                TUIConfig           `mapstructure:"tui"`
+	Git                GitConfig           `mapstructure:"git"`
+	Registry           *RepoRegistry       `mapstructure:"-"`
+	Warnings           []string            `mapstructure:"-"` // Warnings collected during loading (e.g., deprecated keys)
 }
 
 // WorkspacePattern defines a regex pattern and default repos
@@ -195,6 +197,15 @@ type WorkspacePattern struct {
 // Defaults holds default configurations
 type Defaults struct {
 	WorkspacePatterns []WorkspacePattern `mapstructure:"workspace_patterns"`
+}
+
+// Template defines reusable workspace defaults.
+type Template struct {
+	Name          string   `mapstructure:"-"`
+	Repos         []string `mapstructure:"repos"`
+	DefaultBranch string   `mapstructure:"default_branch"`
+	Description   string   `mapstructure:"description"`
+	SetupCommands []string `mapstructure:"setup_commands"`
 }
 
 // knownConfigFields contains all valid top-level and nested config field names
@@ -211,6 +222,11 @@ var knownConfigFields = []string{
 	"lock_stale_threshold",
 	"defaults",
 	"defaults.workspace_patterns",
+	"templates",
+	"templates.repos",
+	"templates.default_branch",
+	"templates.description",
+	"templates.setup_commands",
 	"hooks",
 	"hooks.post_create",
 	"hooks.pre_close",
@@ -539,6 +555,47 @@ func (c *Config) GetReposForWorkspace(workspaceID string) []string {
 	return nil
 }
 
+// GetTemplates returns a copy of the configured templates keyed by name.
+func (c *Config) GetTemplates() map[string]Template {
+	if len(c.Templates) == 0 {
+		return map[string]Template{}
+	}
+
+	templates := make(map[string]Template, len(c.Templates))
+	for name, tmpl := range c.Templates {
+		tmpl.Name = name
+		templates[name] = tmpl
+	}
+
+	return templates
+}
+
+// ResolveTemplate returns a template by name with helpful errors if missing.
+func (c *Config) ResolveTemplate(name string) (Template, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Template{}, cerrors.NewInvalidArgument("template", "template name is required")
+	}
+
+	templates := c.GetTemplates()
+	if tmpl, ok := templates[name]; ok {
+		return tmpl, nil
+	}
+
+	if len(templates) == 0 {
+		return Template{}, cerrors.NewInvalidArgument("template", "no templates are defined")
+	}
+
+	names := make([]string, 0, len(templates))
+	for tmplName := range templates {
+		names = append(names, tmplName)
+	}
+
+	sort.Strings(names)
+
+	return Template{}, cerrors.NewInvalidArgument("template", fmt.Sprintf("unknown template %q (available: %s)", name, strings.Join(names, ", ")))
+}
+
 // Validate performs complete configuration validation by first checking values
 // (pure validation) and then verifying the environment (filesystem checks).
 // This is the main validation entry point that maintains backward compatibility.
@@ -567,6 +624,10 @@ func (c *Config) ValidateValues() error {
 		return err
 	}
 
+	if err := c.validateTemplates(); err != nil {
+		return err
+	}
+
 	if err := c.validateStaleThreshold(); err != nil {
 		return err
 	}
@@ -588,6 +649,11 @@ func (c *Config) ValidateValues() error {
 	}
 
 	return c.validateKeybindings()
+}
+
+// ValidateTemplates validates template definitions without performing filesystem checks.
+func (c *Config) ValidateTemplates() error {
+	return c.validateTemplates()
 }
 
 // validateKeybindings validates the TUI keybindings configuration.
@@ -628,6 +694,51 @@ func (c *Config) validatePatterns() error {
 	for _, p := range c.Defaults.WorkspacePatterns {
 		if _, err := regexp.Compile(p.Pattern); err != nil {
 			return cerrors.NewConfigValidation("workspace_patterns", fmt.Sprintf("invalid regex pattern '%s': %v", p.Pattern, err))
+		}
+	}
+
+	return nil
+}
+
+func (c *Config) validateTemplates() error {
+	for name, tmpl := range c.Templates {
+		if err := validateTemplate(name, tmpl); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateTemplate(name string, tmpl Template) error {
+	trimmedName := strings.TrimSpace(name)
+	if trimmedName == "" {
+		return cerrors.NewConfigValidation("templates", "template name cannot be empty")
+	}
+
+	if trimmedName != name {
+		return cerrors.NewConfigValidation("templates", fmt.Sprintf("template name %q must not contain leading or trailing whitespace", name))
+	}
+
+	if len(tmpl.Repos) == 0 {
+		return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.repos", name), "must define at least one repo")
+	}
+
+	for i, repo := range tmpl.Repos {
+		if strings.TrimSpace(repo) == "" {
+			return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.repos", name), fmt.Sprintf("repo at index %d is empty", i))
+		}
+	}
+
+	if tmpl.DefaultBranch != "" {
+		if err := validation.ValidateBranchName(tmpl.DefaultBranch); err != nil {
+			return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.default_branch", name), err.Error())
+		}
+	}
+
+	for i, cmd := range tmpl.SetupCommands {
+		if strings.TrimSpace(cmd) == "" {
+			return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.setup_commands", name), fmt.Sprintf("command at index %d is empty", i))
 		}
 	}
 

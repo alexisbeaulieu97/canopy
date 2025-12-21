@@ -14,6 +14,8 @@ Canopy uses a YAML configuration file for all settings.
   - [Core Settings](#core-settings)
     - [Workspace Naming Template](#workspace-naming-template)
   - [Workspace Patterns](#workspace-patterns)
+  - [Workspace Templates](#workspace-templates)
+    - [Common Templates](#common-templates)
   - [Environment Variables](#environment-variables)
   - [Hooks](#hooks)
   - [Full Example](#full-example)
@@ -146,6 +148,40 @@ defaults:
 
 When creating a workspace with an ID matching a pattern, the configured repos are used automatically if `--repos` is not specified.
 
+## Workspace Templates
+
+Templates provide reusable repo sets and defaults for workspace creation:
+
+```yaml
+templates:
+  backend:
+    description: "Backend workspace defaults"
+    repos: ["backend", "common"]
+    default_branch: "main"
+  frontend:
+    description: "Frontend workspace defaults"
+    repos: ["frontend", "ui-kit", "design-system"]
+    setup_commands:
+      - "npm install"
+      - "npm run build"
+  fullstack:
+    description: "Fullstack workspace defaults"
+    repos: ["backend", "frontend", "common", "ui-kit"]
+```
+
+Create a workspace using a template:
+
+```bash
+canopy workspace new PROJ-123 --template backend
+canopy workspace new PROJ-456 --template frontend --repos extra-lib
+```
+
+### Common Templates
+
+- `backend`: Backend services + shared libraries
+- `frontend`: UI apps + design system
+- `fullstack`: Backend + frontend + shared dependencies
+
 ## Environment Variables
 
 All settings can be overridden via environment variables with the `CANOPY_` prefix:
@@ -185,6 +221,21 @@ defaults:
       repos: ["backend", "frontend", "shared"]
     - pattern: "^DOCS-"
       repos: ["documentation"]
+
+templates:
+  backend:
+    description: "Backend workspace defaults"
+    repos: ["backend", "common"]
+    default_branch: "main"
+  frontend:
+    description: "Frontend workspace defaults"
+    repos: ["frontend", "ui-kit", "design-system"]
+    setup_commands:
+      - "npm install"
+      - "npm run build"
+  fullstack:
+    description: "Fullstack workspace defaults"
+    repos: ["backend", "frontend", "common", "ui-kit"]
 
 hooks:
   post_create:
@@ -281,4 +332,3 @@ tui:
 ### Conflict Detection
 
 Canopy validates keybindings at startup. If the same key is assigned to multiple actions, an error is returned listing all conflicts.
-
