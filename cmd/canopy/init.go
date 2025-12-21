@@ -38,6 +38,11 @@ var initCmd = &cobra.Command{
 		_, err = f.WriteString(`projects_root: ~/.canopy/projects
 workspaces_root: ~/.canopy/workspaces
 workspace_naming: "{{.ID}}"
+
+templates:
+  backend:
+    description: "Backend workspace defaults"
+    repos: ["backend", "common"]
 `)
 		if err != nil {
 			return err

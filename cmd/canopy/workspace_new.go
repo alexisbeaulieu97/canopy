@@ -3,9 +3,11 @@ package main
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
@@ -27,6 +29,7 @@ var workspaceNewCmd = &cobra.Command{
 		hooksOnly, _ := cmd.Flags().GetBool("hooks-only")
 		dryRunHooks, _ := cmd.Flags().GetBool("dry-run-hooks")
 		jsonOutput, _ := cmd.Flags().GetBool("json")
+		templateName, _ := cmd.Flags().GetString("template")
 
 		if hooksOnly && noHooks {
 			return cerrors.NewInvalidArgument("flags", "cannot use --hooks-only with --no-hooks")
@@ -73,10 +76,26 @@ var workspaceNewCmd = &cobra.Command{
 			return nil
 		}
 
+		var templateRepos []string
+		var templatePtr *config.Template
+
+		if templateName != "" {
+			template, err := cfg.ResolveTemplate(templateName)
+			if err != nil {
+				return err
+			}
+			templateRepos = template.Repos
+			templatePtr = &template
+			if branch == "" && template.DefaultBranch != "" {
+				branch = template.DefaultBranch
+			}
+		}
+
 		// Resolve repos.
 		var resolvedRepos []domain.Repo
-		if len(repos) > 0 {
-			resolvedRepos, err = service.ResolveRepos(id, repos)
+		mergedRepos := mergeTemplateRepos(templateRepos, repos)
+		if len(mergedRepos) > 0 {
+			resolvedRepos, err = service.ResolveRepos(id, mergedRepos)
 			if err != nil {
 				return err
 			}
@@ -93,6 +112,7 @@ var workspaceNewCmd = &cobra.Command{
 
 		opts := workspaces.CreateOptions{
 			SkipHooks: noHooks || dryRunHooks,
+			Template:  templatePtr,
 		}
 
 		dirName, err := service.CreateWorkspaceWithOptions(cmd.Context(), id, branch, resolvedRepos, opts)
@@ -141,4 +161,33 @@ func init() {
 	workspaceNewCmd.Flags().Bool("hooks-only", false, "Run post_create hooks without creating the workspace")
 	workspaceNewCmd.Flags().Bool("dry-run-hooks", false, "Preview post_create hooks without executing them")
 	workspaceNewCmd.Flags().Bool("json", false, "Output in JSON format (use with --dry-run-hooks)")
+	workspaceNewCmd.Flags().String("template", "", "Workspace template to apply")
+}
+
+func mergeTemplateRepos(templateRepos, explicitRepos []string) []string {
+	seen := make(map[string]bool)
+
+	var merged []string
+
+	for _, repo := range templateRepos {
+		repo = strings.TrimSpace(repo)
+		if repo == "" || seen[repo] {
+			continue
+		}
+
+		seen[repo] = true
+		merged = append(merged, repo)
+	}
+
+	for _, repo := range explicitRepos {
+		repo = strings.TrimSpace(repo)
+		if repo == "" || seen[repo] {
+			continue
+		}
+
+		seen[repo] = true
+		merged = append(merged, repo)
+	}
+
+	return merged
 }

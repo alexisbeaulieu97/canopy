@@ -2,6 +2,7 @@
 package mocks
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
@@ -26,6 +27,9 @@ type MockConfigProvider struct {
 	GetLockStaleThresholdFunc func() time.Duration
 	GetRegistryFunc           func() *config.RepoRegistry
 	GetHooksFunc              func() config.Hooks
+	GetTemplatesFunc          func() map[string]config.Template
+	ResolveTemplateFunc       func(name string) (config.Template, error)
+	ValidateTemplatesFunc     func() error
 
 	// Default values for simple getters.
 	ProjectsRoot       string
@@ -39,6 +43,7 @@ type MockConfigProvider struct {
 	LockStaleThreshold time.Duration
 	Registry           *config.RepoRegistry
 	Hooks              config.Hooks
+	Templates          map[string]config.Template
 	RepoNames          []string
 }
 
@@ -55,6 +60,7 @@ func NewMockConfigProvider() *MockConfigProvider {
 		LockTimeout:        0,
 		LockStaleThreshold: 0,
 		Registry:           &config.RepoRegistry{},
+		Templates:          map[string]config.Template{},
 		RepoNames:          []string{},
 	}
 }
@@ -174,6 +180,38 @@ func (m *MockConfigProvider) GetHooks() config.Hooks {
 	}
 
 	return m.Hooks
+}
+
+// GetTemplates calls the mock function if set, otherwise returns Templates.
+func (m *MockConfigProvider) GetTemplates() map[string]config.Template {
+	if m.GetTemplatesFunc != nil {
+		return m.GetTemplatesFunc()
+	}
+
+	return m.Templates
+}
+
+// ResolveTemplate calls the mock function if set, otherwise resolves from Templates.
+func (m *MockConfigProvider) ResolveTemplate(name string) (config.Template, error) {
+	if m.ResolveTemplateFunc != nil {
+		return m.ResolveTemplateFunc(name)
+	}
+
+	if tmpl, ok := m.Templates[name]; ok {
+		tmpl.Name = name
+		return tmpl, nil
+	}
+
+	return config.Template{}, fmt.Errorf("template %q not found", name)
+}
+
+// ValidateTemplates calls the mock function if set, otherwise returns nil.
+func (m *MockConfigProvider) ValidateTemplates() error {
+	if m.ValidateTemplatesFunc != nil {
+		return m.ValidateTemplatesFunc()
+	}
+
+	return nil
 }
 
 // GetKeybindings returns the TUI keybindings with defaults applied.

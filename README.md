@@ -199,9 +199,29 @@ defaults:
   workspace_patterns:
     - pattern: "^PROJ-"
       repos: ["backend", "frontend"]
+
+templates:
+  backend:
+    description: "Backend workspace defaults"
+    repos: ["backend", "common"]
+    default_branch: "main"
+  frontend:
+    description: "Frontend workspace defaults"
+    repos: ["frontend", "ui-kit", "design-system"]
+    setup_commands:
+      - "npm install"
 ```
 
 See [Configuration Reference](docs/configuration.md) for all options.
+
+### Workspace Templates
+
+Use templates to create common workspace layouts quickly:
+
+```bash
+canopy workspace new PROJ-123 --template backend
+canopy workspace new PROJ-456 --template frontend --repos extra-lib
+```
 
 ## Troubleshooting
 

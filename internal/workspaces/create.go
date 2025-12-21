@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
+	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
@@ -16,6 +19,7 @@ import (
 type CreateOptions struct {
 	SkipHooks         bool // Skip post_create hooks
 	ContinueOnHookErr bool // Continue if hooks fail
+	Template          *config.Template
 }
 
 // CreateWorkspace creates a new workspace directory and returns the directory name
@@ -25,6 +29,10 @@ func (s *Service) CreateWorkspace(ctx context.Context, id, branchName string, re
 
 // CreateWorkspaceWithOptions creates a new workspace with configurable options.
 func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName string, repos []domain.Repo, opts CreateOptions) (string, error) {
+	if opts.Template != nil && branchName == "" && opts.Template.DefaultBranch != "" {
+		branchName = opts.Template.DefaultBranch
+	}
+
 	branchName, err := s.resolveCreateBranchName(id, branchName)
 	if err != nil {
 		return "", err
@@ -57,6 +65,16 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, br
 	// Invalidate cache for this workspace ID
 	s.cache.Invalidate(id)
 
+	if opts.Template != nil && len(opts.Template.SetupCommands) > 0 {
+		setupFailed := s.runTemplateSetupCommands(ctx, id, opts.Template.SetupCommands)
+		if setupFailed {
+			ws.SetupIncomplete = true
+			if err := s.wsEngine.Save(ctx, ws); err != nil && s.logger != nil {
+				s.logger.Warn("Failed to mark workspace as partially initialized", "workspace_id", id, "error", err)
+			}
+		}
+	}
+
 	// Run post_create hooks
 	//nolint:contextcheck // Hooks manage their own timeout context per-hook
 	if err := s.runPostCreateHooks(id, id, branchName, repos, opts); err != nil {
@@ -66,6 +84,53 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, br
 	}
 
 	return nil
+}
+
+func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID string, commands []string) bool {
+	if len(commands) == 0 {
+		return false
+	}
+
+	workspacePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID)
+	failed := false
+
+	for i, command := range commands {
+		trimmed := strings.TrimSpace(command)
+		if trimmed == "" {
+			failed = true
+
+			if s.logger != nil {
+				s.logger.Warn("Skipping empty template setup command", "index", i, "workspace_id", workspaceID)
+			}
+
+			continue
+		}
+
+		if s.logger != nil {
+			s.logger.Info("Running template setup command", "index", i, "workspace_id", workspaceID, "command", trimmed)
+		}
+
+		// #nosec G204 -- template setup commands are user-configured and expected.
+		cmd := exec.CommandContext(ctx, "sh", "-c", trimmed)
+		cmd.Dir = workspacePath
+
+		outputBytes, err := cmd.CombinedOutput()
+
+		outputText := strings.TrimSpace(string(outputBytes))
+		if outputText != "" && s.logger != nil {
+			s.logger.Info("Template setup output", "index", i, "workspace_id", workspaceID, "output", outputText)
+		}
+
+		if err != nil {
+			failed = true
+
+			if s.logger != nil {
+				s.logger.Warn("Template setup command failed", "index", i, "workspace_id", workspaceID, "command", trimmed, "error", err)
+			}
+		}
+	}
+
+	return failed
 }
 
 func (s *Service) resolveCreateBranchName(id, branchName string) (string, error) {
