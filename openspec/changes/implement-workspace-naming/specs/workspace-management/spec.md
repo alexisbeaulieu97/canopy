@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Workspace Directory Naming
 The system SHALL use the `workspace_naming` template to compute workspace directory names.
