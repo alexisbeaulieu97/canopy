@@ -235,7 +235,7 @@ templates:
       - "npm run build"
   fullstack:
     description: "Fullstack workspace defaults"
-    repos: ["backend", "frontend", "shared"]
+    repos: ["backend", "frontend", "common", "ui-kit"]
 
 hooks:
   post_create:

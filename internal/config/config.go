@@ -702,31 +702,43 @@ func (c *Config) validatePatterns() error {
 
 func (c *Config) validateTemplates() error {
 	for name, tmpl := range c.Templates {
-		trimmedName := strings.TrimSpace(name)
-		if trimmedName == "" {
-			return cerrors.NewConfigValidation("templates", "template name cannot be empty")
+		if err := validateTemplate(name, tmpl); err != nil {
+			return err
 		}
+	}
 
-		if len(tmpl.Repos) == 0 {
-			return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.repos", name), "must define at least one repo")
+	return nil
+}
+
+func validateTemplate(name string, tmpl Template) error {
+	trimmedName := strings.TrimSpace(name)
+	if trimmedName == "" {
+		return cerrors.NewConfigValidation("templates", "template name cannot be empty")
+	}
+
+	if trimmedName != name {
+		return cerrors.NewConfigValidation("templates", fmt.Sprintf("template name %q must not contain leading or trailing whitespace", name))
+	}
+
+	if len(tmpl.Repos) == 0 {
+		return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.repos", name), "must define at least one repo")
+	}
+
+	for i, repo := range tmpl.Repos {
+		if strings.TrimSpace(repo) == "" {
+			return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.repos", name), fmt.Sprintf("repo at index %d is empty", i))
 		}
+	}
 
-		for i, repo := range tmpl.Repos {
-			if strings.TrimSpace(repo) == "" {
-				return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.repos", name), fmt.Sprintf("repo at index %d is empty", i))
-			}
+	if tmpl.DefaultBranch != "" {
+		if err := validation.ValidateBranchName(tmpl.DefaultBranch); err != nil {
+			return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.default_branch", name), err.Error())
 		}
+	}
 
-		if tmpl.DefaultBranch != "" {
-			if err := validation.ValidateBranchName(tmpl.DefaultBranch); err != nil {
-				return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.default_branch", name), err.Error())
-			}
-		}
-
-		for i, cmd := range tmpl.SetupCommands {
-			if strings.TrimSpace(cmd) == "" {
-				return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.setup_commands", name), fmt.Sprintf("command at index %d is empty", i))
-			}
+	for i, cmd := range tmpl.SetupCommands {
+		if strings.TrimSpace(cmd) == "" {
+			return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.setup_commands", name), fmt.Sprintf("command at index %d is empty", i))
 		}
 	}
 

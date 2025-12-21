@@ -74,8 +74,6 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, br
 				if s.logger != nil {
 					s.logger.Warn("Failed to mark workspace as partially initialized", "workspace_id", id, "error", err)
 				}
-
-				return cerrors.NewIOFailed("save workspace metadata after setup failure", err).WithContext("workspace_id", id)
 			}
 		}
 	}

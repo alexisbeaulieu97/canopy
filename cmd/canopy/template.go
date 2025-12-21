@@ -45,6 +45,9 @@ var templateListCmd = &cobra.Command{
 		for _, name := range names {
 			tmpl := templates[name]
 			repos := strings.Join(tmpl.Repos, ", ")
+			if repos == "" {
+				repos = "-"
+			}
 			description := tmpl.Description
 			if description == "" {
 				description = "-"
