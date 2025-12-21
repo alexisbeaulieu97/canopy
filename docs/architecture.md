@@ -328,6 +328,7 @@ func TestIntegration_WorkspaceLifecycle(t *testing.T) {
 1. Create command file in `cmd/canopy/`
 2. Register in main command tree
 3. Use `app.App` for service access
+4. Workspace subcommands live in `cmd/canopy/workspace_*.go`, with shared formatting helpers in `cmd/canopy/presenters.go`
 
 ### Adding New Ports
 
