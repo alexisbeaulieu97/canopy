@@ -124,7 +124,7 @@ var workspaceListCmd = &cobra.Command{
 		}
 
 		if jsonOutput {
-			if showStatus {
+			if showStatus || showLocks {
 				return output.PrintJSON(map[string]interface{}{
 					"workspaces": workspacesWithStatus,
 				})
@@ -136,6 +136,14 @@ var workspaceListCmd = &cobra.Command{
 		}
 
 		for _, ws := range workspacesWithStatus {
+			statusByRepo := make(map[string]domain.RepoStatus, len(ws.RepoStatuses))
+			for _, status := range ws.RepoStatuses {
+				if status.Name == "" {
+					continue
+				}
+				statusByRepo[status.Name] = status
+			}
+
 			lockSuffix := ""
 			if showLocks && ws.Locked {
 				lockSuffix = " [locked]"
@@ -143,6 +151,15 @@ var workspaceListCmd = &cobra.Command{
 
 			output.Infof("%s (Branch: %s)%s", ws.ID, ws.BranchName, lockSuffix)
 			for i, r := range ws.Repos {
+				if showStatus {
+					status, ok := statusByRepo[r.Name]
+					if ok {
+						statusStr := formatRepoStatusIndicator(status)
+						output.Infof("  - %s (%s) %s", r.Name, r.URL, statusStr)
+						continue
+					}
+				}
+
 				if showStatus && i < len(ws.RepoStatuses) {
 					status := ws.RepoStatuses[i]
 					statusStr := formatRepoStatusIndicator(status)
