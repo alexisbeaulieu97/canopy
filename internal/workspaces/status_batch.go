@@ -87,12 +87,9 @@ func (s *Service) getWorkspaceStatusParallel(ctx context.Context, workspaceIDs [
 			status, err := s.getStatusWithTimeout(groupCtx, workspaceID, timeout)
 			res := WorkspaceStatusResult{WorkspaceID: workspaceID, Status: status, Err: err}
 
-			select {
-			case resultsCh <- statusResult{index: i, result: res}:
-				return nil
-			case <-groupCtx.Done():
-				return groupCtx.Err()
-			}
+			resultsCh <- statusResult{index: i, result: res}
+
+			return nil
 		})
 	}
 
@@ -101,8 +98,21 @@ func (s *Service) getWorkspaceStatusParallel(ctx context.Context, workspaceIDs [
 	close(resultsCh)
 
 	results := make([]WorkspaceStatusResult, len(workspaceIDs))
+	filled := make([]bool, len(workspaceIDs))
+
 	for result := range resultsCh {
 		results[result.index] = result.result
+		filled[result.index] = true
+	}
+
+	if err != nil {
+		for i := range results {
+			if filled[i] {
+				continue
+			}
+
+			results[i] = WorkspaceStatusResult{WorkspaceID: workspaceIDs[i], Err: err}
+		}
 	}
 
 	return results, err
