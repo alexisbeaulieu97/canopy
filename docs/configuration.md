@@ -119,6 +119,7 @@ Configuration is valid.
 | `closed_root` | `~/.canopy/closed` | Directory for archived workspace metadata (used only when `workspace_close_default` is `archive` or `--keep` flag is passed to `workspace close`) |
 | `workspace_close_default` | `delete` | Default behavior for `workspace close`. Set to `archive` to archive by default |
 | `workspace_naming` | `{{.ID}}` | Template for workspace directory names |
+| `parallel_workers` | `4` | Maximum number of parallel operations for workspace and repo tasks |
 
 All paths support `~` expansion and must be absolute (after expansion).
 
@@ -217,6 +218,7 @@ workspaces_root: ~/workspaces
 closed_root: ~/.canopy/closed
 workspace_close_default: delete  # default; set to "archive" to keep metadata
 workspace_naming: "{{.ID}}"
+parallel_workers: 4
 
 defaults:
   workspace_patterns:

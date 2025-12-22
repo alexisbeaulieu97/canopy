@@ -718,7 +718,7 @@ func TestCloseWorkspaceWithUnpushedCommits(t *testing.T) {
 
 		svc := NewService(mockConfig, mockGit, mockStorage, nil, WithDiskUsage(mockDiskUsage))
 
-		preview, err := svc.PreviewCloseWorkspace("ws-preview", true)
+		preview, err := svc.PreviewCloseWorkspace(context.Background(), "ws-preview", true)
 		if err != nil {
 			t.Fatalf("PreviewCloseWorkspace failed: %v", err)
 		}

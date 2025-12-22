@@ -38,6 +38,7 @@ var initCmd = &cobra.Command{
 		_, err = f.WriteString(`projects_root: ~/.canopy/projects
 workspaces_root: ~/.canopy/workspaces
 workspace_naming: "{{.ID}}"
+parallel_workers: 4
 
 templates:
   backend:

@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 )
 
@@ -66,57 +64,21 @@ func (s *Service) getWorkspaceStatusSequential(ctx context.Context, workspaceIDs
 }
 
 func (s *Service) getWorkspaceStatusParallel(ctx context.Context, workspaceIDs []string, timeout time.Duration, workers int) ([]WorkspaceStatusResult, error) {
-	type statusResult struct {
-		index  int
-		result WorkspaceStatusResult
-	}
+	executor := NewParallelExecutor(workers)
 
-	resultsCh := make(chan statusResult, len(workspaceIDs))
-	g, groupCtx := errgroup.WithContext(ctx)
-	g.SetLimit(workers)
-
-	for i, workspaceID := range workspaceIDs {
-		i := i
-		workspaceID := workspaceID
-
-		g.Go(func() error {
-			if groupCtx.Err() != nil {
-				return groupCtx.Err()
-			}
-
-			status, err := s.getStatusWithTimeout(groupCtx, workspaceID, timeout)
-			res := WorkspaceStatusResult{WorkspaceID: workspaceID, Status: status, Err: err}
-
-			resultsCh <- statusResult{index: i, result: res}
-
-			return nil
-		})
-	}
-
-	err := g.Wait()
-	if err == nil && ctx.Err() != nil {
-		err = ctx.Err()
-	}
-
-	close(resultsCh)
-
-	results := make([]WorkspaceStatusResult, len(workspaceIDs))
-	filled := make([]bool, len(workspaceIDs))
-
-	for result := range resultsCh {
-		results[result.index] = result.result
-		filled[result.index] = true
-	}
-
-	if err != nil {
-		for i := range results {
-			if filled[i] {
-				continue
-			}
-
-			results[i] = WorkspaceStatusResult{WorkspaceID: workspaceIDs[i], Err: err}
+	results, err := ParallelMap(ctx, executor, len(workspaceIDs), func(runCtx context.Context, index int) (WorkspaceStatusResult, error) {
+		workspaceID := workspaceIDs[index]
+		if runCtx.Err() != nil {
+			return WorkspaceStatusResult{WorkspaceID: workspaceID, Err: runCtx.Err()}, runCtx.Err()
 		}
+
+		status, statusErr := s.getStatusWithTimeout(runCtx, workspaceID, timeout)
+
+		return WorkspaceStatusResult{WorkspaceID: workspaceID, Status: status, Err: statusErr}, nil
+	}, ParallelOptions{Workers: workers, ContinueOnError: true})
+	if err != nil {
+		return ExtractValues(results), err
 	}
 
-	return results, err
+	return ExtractValues(results), nil
 }

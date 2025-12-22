@@ -379,19 +379,33 @@ func (s *Service) GetAllCanonicalRepoStatuses(ctx context.Context) ([]domain.Can
 		return nil, err
 	}
 
+	executor := NewParallelExecutor(s.config.GetParallelWorkers())
+
+	results, err := ParallelMap(ctx, executor, len(repoNames), func(runCtx context.Context, index int) (*domain.CanonicalRepoStatus, error) {
+		if runCtx.Err() != nil {
+			return nil, runCtx.Err()
+		}
+
+		return s.getCanonicalRepoStatus(runCtx, repoNames[index], usageMap)
+	}, ParallelOptions{ContinueOnError: true})
+	if err != nil {
+		return nil, err
+	}
+
 	statuses := make([]domain.CanonicalRepoStatus, 0, len(repoNames))
-	for _, name := range repoNames {
-		status, err := s.getCanonicalRepoStatus(ctx, name, usageMap)
-		if err != nil {
-			// Log error and skip this repo
+
+	for i, result := range results {
+		if result.Err != nil {
 			if s.logger != nil {
-				s.logger.Warn("failed to get canonical repo status", "repo", name, "error", err)
+				s.logger.Warn("failed to get canonical repo status", "repo", repoNames[i], "error", result.Err)
 			}
 
 			continue
 		}
 
-		statuses = append(statuses, *status)
+		if result.Value != nil {
+			statuses = append(statuses, *result.Value)
+		}
 	}
 
 	return statuses, nil

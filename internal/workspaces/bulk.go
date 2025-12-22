@@ -4,7 +4,6 @@ import (
 	"context"
 	"regexp"
 	"strings"
-	"sync"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
@@ -90,59 +89,20 @@ func (s *Service) SyncWorkspacesMatching(ctx context.Context, pattern string, op
 		return &BulkSyncResult{Results: []WorkspaceSyncResult{}}, nil
 	}
 
-	results := make([]WorkspaceSyncResult, len(workspaces))
+	executor := NewParallelExecutor(s.config.GetParallelWorkers())
 
-	type job struct {
-		index int
-		id    string
-	}
+	results, err := ParallelMap(ctx, executor, len(workspaces), func(runCtx context.Context, index int) (WorkspaceSyncResult, error) {
+		workspaceID := workspaces[index].ID
+		syncResult, syncErr := s.SyncWorkspace(runCtx, workspaceID, opts)
 
-	jobs := make(chan job, len(workspaces))
-	for i, ws := range workspaces {
-		jobs <- job{index: i, id: ws.ID}
-	}
+		return WorkspaceSyncResult{
+			WorkspaceID: workspaceID,
+			Result:      syncResult,
+			Err:         syncErr,
+		}, syncErr
+	}, ParallelOptions{ContinueOnError: true, AggregateErrors: true})
 
-	close(jobs)
-
-	numWorkers := s.config.GetParallelWorkers()
-	if numWorkers <= 0 {
-		numWorkers = 1
-	}
-
-	if numWorkers > len(workspaces) {
-		numWorkers = len(workspaces)
-	}
-
-	var (
-		wg sync.WaitGroup
-		mu sync.Mutex
-	)
-
-	for w := 0; w < numWorkers; w++ {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
-			for j := range jobs {
-				syncResult, syncErr := s.SyncWorkspace(ctx, j.id, opts)
-
-				mu.Lock()
-
-				results[j.index] = WorkspaceSyncResult{
-					WorkspaceID: j.id,
-					Result:      syncResult,
-					Err:         syncErr,
-				}
-
-				mu.Unlock()
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	return &BulkSyncResult{Results: results}, nil
+	return &BulkSyncResult{Results: ExtractValues(results)}, err
 }
 
 func compileWorkspacePattern(pattern string) (*regexp.Regexp, error) {
