@@ -52,6 +52,7 @@ type Workspace struct {
 	ClosedAt        *time.Time `yaml:"closed_at,omitempty"`
 	SetupIncomplete bool       `yaml:"setup_incomplete,omitempty"`
 	Locked          bool       `yaml:"-" json:"locked,omitempty"`
+	DirName         string     `yaml:"-" json:"-"`
 	LastModified    time.Time  `yaml:"-"`
 	DiskUsageBytes  int64      `yaml:"-"`
 }

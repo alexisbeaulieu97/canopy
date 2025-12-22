@@ -15,7 +15,7 @@ func TestLockManagerAcquireRelease(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	lm := NewLockManager(root, 500*time.Millisecond, time.Minute, nil)
+	lm := NewLockManager(root, 500*time.Millisecond, time.Minute, nil, nil)
 
 	handle, err := lm.Acquire(context.Background(), "WS-1", true)
 	if err != nil {
@@ -40,7 +40,7 @@ func TestLockManagerTimeout(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	lm := NewLockManager(root, 200*time.Millisecond, time.Minute, nil)
+	lm := NewLockManager(root, 200*time.Millisecond, time.Minute, nil, nil)
 
 	handle, err := lm.Acquire(context.Background(), "WS-1", true)
 	if err != nil {
@@ -65,7 +65,7 @@ func TestLockManagerStaleCleanup(t *testing.T) {
 
 	root := t.TempDir()
 	staleThreshold := 50 * time.Millisecond
-	lm := NewLockManager(root, 200*time.Millisecond, staleThreshold, nil)
+	lm := NewLockManager(root, 200*time.Millisecond, staleThreshold, nil, nil)
 
 	lockPath := filepath.Join(root, "WS-1", lockFileName)
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o750); err != nil {

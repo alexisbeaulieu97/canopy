@@ -65,6 +65,55 @@ func TestValidateWorkspaceID(t *testing.T) {
 	}
 }
 
+func TestNormalizeWorkspaceDirName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		dir     string
+		want    string
+		wantErr bool
+		errCode cerrors.ErrorCode
+	}{
+		{name: "simple", dir: "PROJ-123", want: "PROJ-123"},
+		{name: "trimmed", dir: "  proj  ", want: "proj"},
+		{name: "max length", dir: strings.Repeat("a", 255), want: strings.Repeat("a", 255)},
+		{name: "empty", dir: "", wantErr: true, errCode: cerrors.ErrInvalidArgument},
+		{name: "absolute path", dir: "/tmp/ws", wantErr: true, errCode: cerrors.ErrInvalidArgument},
+		{name: "forward slash", dir: "ws/one", wantErr: true, errCode: cerrors.ErrInvalidArgument},
+		{name: "backslash", dir: "ws\\one", wantErr: true, errCode: cerrors.ErrInvalidArgument},
+		{name: "parent dir", dir: "../ws", wantErr: true, errCode: cerrors.ErrInvalidArgument},
+		{name: "control char", dir: "ws\x00name", wantErr: true, errCode: cerrors.ErrInvalidArgument},
+		{name: "too long", dir: strings.Repeat("a", 256), wantErr: true, errCode: cerrors.ErrInvalidArgument},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := validation.NormalizeWorkspaceDirName(tt.dir)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("NormalizeWorkspaceDirName(%q) error = %v, wantErr %v", tt.dir, err, tt.wantErr)
+			}
+
+			if !tt.wantErr && got != tt.want {
+				t.Fatalf("NormalizeWorkspaceDirName(%q) = %q, want %q", tt.dir, got, tt.want)
+			}
+
+			if tt.wantErr && tt.errCode != "" {
+				var canopyErr *cerrors.CanopyError
+				if errors.As(err, &canopyErr) {
+					if canopyErr.Code != tt.errCode {
+						t.Fatalf("NormalizeWorkspaceDirName(%q) error code = %v, want %v", tt.dir, canopyErr.Code, tt.errCode)
+					}
+				} else {
+					t.Fatalf("NormalizeWorkspaceDirName(%q) expected CanopyError, got %T", tt.dir, err)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateBranchName(t *testing.T) {
 	t.Parallel()
 

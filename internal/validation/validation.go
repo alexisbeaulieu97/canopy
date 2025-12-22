@@ -3,6 +3,7 @@
 package validation
 
 import (
+	"path/filepath"
 	"regexp"
 	"strings"
 	"unicode"
@@ -21,6 +22,39 @@ const (
 	// MaxRepoNameLength is the maximum allowed length for repository names.
 	MaxRepoNameLength = 255
 )
+
+// NormalizeWorkspaceDirName validates and normalizes a workspace directory name.
+// Returns the cleaned directory name or an error if invalid.
+func NormalizeWorkspaceDirName(name string) (string, error) {
+	cleaned := filepath.Clean(strings.TrimSpace(name))
+	if cleaned == "" || cleaned == "." {
+		return "", cerrors.NewInvalidArgument("workspace_dir", "workspace directory name cannot be empty")
+	}
+
+	if filepath.IsAbs(cleaned) {
+		return "", cerrors.NewInvalidArgument("workspace_dir", "workspace directory name must be relative")
+	}
+
+	if strings.ContainsRune(cleaned, '/') || strings.ContainsRune(cleaned, '\\') {
+		return "", cerrors.NewInvalidArgument("workspace_dir", "workspace directory name cannot contain path separators")
+	}
+
+	if strings.Contains(cleaned, "..") {
+		return "", cerrors.NewInvalidArgument("workspace_dir", "workspace directory name cannot contain path traversal sequences (..)")
+	}
+
+	if len(cleaned) > MaxWorkspaceIDLength {
+		return "", cerrors.NewInvalidArgument("workspace_dir", "workspace directory name exceeds maximum length of 255 characters")
+	}
+
+	for _, r := range cleaned {
+		if unicode.IsControl(r) {
+			return "", cerrors.NewInvalidArgument("workspace_dir", "workspace directory name cannot contain control characters")
+		}
+	}
+
+	return cleaned, nil
+}
 
 // Git ref reserved names that cannot be used as branch names.
 var gitReservedNames = map[string]bool{

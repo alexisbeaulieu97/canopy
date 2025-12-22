@@ -150,7 +150,7 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 	if lockManager == nil {
 		lockTimeout := cfg.GetLockTimeout()
 		if lockTimeout > 0 {
-			lockManager = NewLockManager(cfg.GetWorkspacesRoot(), lockTimeout, cfg.GetLockStaleThreshold(), logger)
+			lockManager = NewLockManager(cfg.GetWorkspacesRoot(), lockTimeout, cfg.GetLockStaleThreshold(), logger, cfg.ComputeWorkspaceDir)
 		}
 	}
 
@@ -217,10 +217,18 @@ func (s *Service) findWorkspace(ctx context.Context, workspaceID string) (*domai
 		return nil, "", err
 	}
 
-	// Populate cache with the result (dirName is now the same as ID)
-	s.cache.Set(workspaceID, ws, workspaceID)
+	dirName := ws.DirName
+	if dirName == "" {
+		dirName, err = s.config.ComputeWorkspaceDir(workspaceID)
+		if err != nil {
+			return nil, "", err
+		}
+	}
 
-	return ws, workspaceID, nil
+	// Populate cache with the result
+	s.cache.Set(workspaceID, ws, dirName)
+
+	return ws, dirName, nil
 }
 
 // Canonical repository operations - delegated to CanonicalRepoService

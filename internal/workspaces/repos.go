@@ -55,7 +55,7 @@ func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName 
 			return err
 		}
 
-		workspace, _, err := s.findWorkspace(ctx, workspaceID)
+		workspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 		if err != nil {
 			return err
 		}
@@ -76,9 +76,9 @@ func (s *Service) AddRepoToWorkspace(ctx context.Context, workspaceID, repoName 
 
 		op := NewOperation(s.logger)
 		op.AddStep(func() error {
-			return s.ensureWorkspaceWorktree(ctx, repo, workspaceID, branchName)
+			return s.ensureWorkspaceWorktree(ctx, repo, dirName, branchName)
 		}, func() error {
-			return s.removeWorkspaceRepoWorktrees(ctx, workspaceID, []domain.Repo{repo})
+			return s.removeWorkspaceRepoWorktrees(ctx, dirName, []domain.Repo{repo})
 		})
 		op.AddStep(func() error {
 			return s.saveWorkspaceRepo(ctx, workspaceID, workspace, repo)
@@ -186,7 +186,7 @@ func (s *Service) RemoveRepoFromWorkspace(ctx context.Context, workspaceID, repo
 			return err
 		}
 
-		workspace, _, err := s.findWorkspace(ctx, workspaceID)
+		workspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 		if err != nil {
 			return err
 		}
@@ -216,7 +216,7 @@ func (s *Service) RemoveRepoFromWorkspace(ctx context.Context, workspaceID, repo
 		}
 
 		// 4. Remove worktree using git engine (properly unregisters from canonical)
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repoName)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repoName)
 		if err := s.removeRepoWorktree(ctx, repoName, worktreePath); err != nil {
 			return s.rollbackRepoRemoval(ctx, workspace, repoIndex, removedRepo, worktreePath, err)
 		}

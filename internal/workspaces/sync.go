@@ -20,7 +20,7 @@ func (s *Service) SyncWorkspace(ctx context.Context, id string, opts SyncOptions
 	var result *domain.SyncResult
 
 	if err := s.withWorkspaceLock(ctx, id, false, func() error {
-		ws, _, err := s.findWorkspace(ctx, id)
+		ws, dirName, err := s.findWorkspace(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -66,7 +66,7 @@ func (s *Service) SyncWorkspace(ctx context.Context, id string, opts SyncOptions
 				defer wg.Done()
 
 				for r := range reposChan {
-					repoResult := s.syncRepo(ctx, id, r.repo, opts.Timeout)
+					repoResult := s.syncRepo(ctx, dirName, r.repo, opts.Timeout)
 
 					mu.Lock()
 
@@ -108,7 +108,7 @@ func (s *Service) aggregateSyncResults(workspaceID string, results []domain.Repo
 	return syncResult
 }
 
-func (s *Service) syncRepo(ctx context.Context, wsID string, repo domain.Repo, timeout time.Duration) domain.RepoSyncStatus {
+func (s *Service) syncRepo(ctx context.Context, dirName string, repo domain.Repo, timeout time.Duration) domain.RepoSyncStatus {
 	result := domain.RepoSyncStatus{
 		Name:   repo.Name,
 		Status: domain.SyncStatusUpToDate,
@@ -133,7 +133,7 @@ func (s *Service) syncRepo(ctx context.Context, wsID string, repo domain.Repo, t
 		return result
 	}
 
-	worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), wsID, repo.Name)
+	worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 	// 2. Get status before pull to see behind count
 	_, _, behind, _, err := s.gitEngine.Status(repoCtx, worktreePath)

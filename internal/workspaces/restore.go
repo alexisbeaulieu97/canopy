@@ -22,9 +22,14 @@ func (s *Service) RestoreWorkspace(ctx context.Context, workspaceID string, forc
 		ws := archive.Metadata
 		ws.ClosedAt = nil
 
+		dirName, err := s.config.ComputeWorkspaceDir(ws.ID)
+		if err != nil {
+			return err
+		}
+
 		op := NewOperation(s.logger)
 		op.AddStep(func() error {
-			if err := s.createWorkspaceWithOptionsUnlocked(ctx, ws.ID, ws.BranchName, ws.Repos, CreateOptions{}); err != nil {
+			if err := s.createWorkspaceWithOptionsUnlocked(ctx, ws.ID, dirName, ws.BranchName, ws.Repos, CreateOptions{}); err != nil {
 				// Preserve original error type if it's already typed
 				var canopyErr *cerrors.CanopyError
 				if isCanopyError(err, &canopyErr) {

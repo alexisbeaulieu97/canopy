@@ -30,6 +30,9 @@ type ConfigProvider interface {
 	// GetWorkspaceNaming returns the workspace naming pattern.
 	GetWorkspaceNaming() string
 
+	// ComputeWorkspaceDir computes the workspace directory name for a given ID.
+	ComputeWorkspaceDir(id string) (string, error)
+
 	// GetStaleThresholdDays returns the stale threshold in days.
 	GetStaleThresholdDays() int
 

@@ -33,19 +33,19 @@ func (s *Service) CloseWorkspaceWithOptions(ctx context.Context, workspaceID str
 
 //nolint:contextcheck // This function manages hook contexts internally with their own timeouts
 func (s *Service) closeWorkspaceWithOptionsUnlocked(ctx context.Context, workspaceID string, force bool, opts CloseOptions) error {
-	targetWorkspace, _, err := s.findWorkspace(ctx, workspaceID)
+	targetWorkspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
 
 	if !force {
-		if err := s.ensureWorkspaceClean(ctx, targetWorkspace, workspaceID, "close"); err != nil {
+		if err := s.ensureWorkspaceClean(ctx, targetWorkspace, dirName, "close"); err != nil {
 			return err
 		}
 	}
 
 	// Run pre_close hooks before deletion
-	if err := s.executePreCloseHooks(targetWorkspace, workspaceID, opts); err != nil {
+	if err := s.executePreCloseHooks(targetWorkspace, workspaceID, dirName, opts); err != nil {
 		return err
 	}
 
@@ -56,7 +56,7 @@ func (s *Service) closeWorkspaceWithOptionsUnlocked(ctx context.Context, workspa
 	}
 
 	// Remove worktrees from canonical repos after successful deletion
-	s.removeWorkspaceWorktrees(targetWorkspace, workspaceID)
+	s.removeWorkspaceWorktrees(targetWorkspace, dirName)
 
 	// Invalidate cache after workspace deletion
 	s.cache.Invalidate(workspaceID)
@@ -89,19 +89,19 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(ctx context.Context, wor
 
 //nolint:contextcheck // This function manages hook contexts internally with their own timeouts
 func (s *Service) closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx context.Context, workspaceID string, force bool, opts CloseOptions) (*domain.ClosedWorkspace, error) {
-	targetWorkspace, _, err := s.findWorkspace(ctx, workspaceID)
+	targetWorkspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
 
 	if !force {
-		if err := s.ensureWorkspaceClean(ctx, targetWorkspace, workspaceID, "close"); err != nil {
+		if err := s.ensureWorkspaceClean(ctx, targetWorkspace, dirName, "close"); err != nil {
 			return nil, err
 		}
 	}
 
 	// Run pre_close hooks before archiving
-	if err := s.executePreCloseHooks(targetWorkspace, workspaceID, opts); err != nil {
+	if err := s.executePreCloseHooks(targetWorkspace, workspaceID, dirName, opts); err != nil {
 		return nil, err
 	}
 
@@ -126,7 +126,7 @@ func (s *Service) closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx context.Cont
 	}
 
 	// Remove worktrees from canonical repos after successful deletion
-	s.removeWorkspaceWorktrees(targetWorkspace, workspaceID)
+	s.removeWorkspaceWorktrees(targetWorkspace, dirName)
 
 	// Invalidate cache after workspace deletion
 	s.cache.Invalidate(workspaceID)
@@ -138,7 +138,7 @@ func (s *Service) closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx context.Cont
 // Returns nil if hooks are skipped, succeed, or ContinueOnHookErr is set.
 //
 //nolint:contextcheck // Hooks manage their own timeout context per-hook
-func (s *Service) executePreCloseHooks(workspace *domain.Workspace, workspaceID string, opts CloseOptions) error {
+func (s *Service) executePreCloseHooks(workspace *domain.Workspace, workspaceID, dirName string, opts CloseOptions) error {
 	if opts.SkipHooks {
 		return nil
 	}
@@ -150,7 +150,7 @@ func (s *Service) executePreCloseHooks(workspace *domain.Workspace, workspaceID 
 
 	hookCtx := domain.HookContext{
 		WorkspaceID:   workspaceID,
-		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), workspaceID),
+		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
 		BranchName:    workspace.BranchName,
 		Repos:         workspace.Repos,
 	}
@@ -170,12 +170,12 @@ func (s *Service) executePreCloseHooks(workspace *domain.Workspace, workspaceID 
 
 // PreviewCloseWorkspace returns a preview of what would happen when closing a workspace.
 func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (*domain.WorkspaceClosePreview, error) {
-	targetWorkspace, _, err := s.findWorkspace(context.Background(), workspaceID)
+	targetWorkspace, dirName, err := s.findWorkspace(context.Background(), workspaceID)
 	if err != nil {
 		return nil, err
 	}
 
-	wsPath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID)
+	wsPath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
 
 	repoNames := []string{}
 	repoStatuses := []domain.RepoCloseStatus{}
@@ -225,7 +225,7 @@ func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (
 	}, nil
 }
 
-func (s *Service) ensureWorkspaceClean(ctx context.Context, workspace *domain.Workspace, workspaceID, action string) error {
+func (s *Service) ensureWorkspaceClean(ctx context.Context, workspace *domain.Workspace, dirName, action string) error {
 	if s.gitEngine == nil {
 		return cerrors.NewInternalError("git engine not initialized", nil)
 	}
@@ -236,7 +236,7 @@ func (s *Service) ensureWorkspaceClean(ctx context.Context, workspace *domain.Wo
 			return ctx.Err()
 		}
 
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		isDirty, unpushed, _, _, err := s.gitEngine.Status(ctx, worktreePath)
 		if err != nil {
@@ -259,13 +259,13 @@ func (s *Service) ensureWorkspaceClean(ctx context.Context, workspace *domain.Wo
 // removeWorkspaceWorktrees removes all worktrees from canonical repos for a workspace.
 // This is called during workspace close to properly clean up git worktree references.
 // Errors are logged but not returned since the workspace is being deleted anyway.
-func (s *Service) removeWorkspaceWorktrees(workspace *domain.Workspace, workspaceID string) {
+func (s *Service) removeWorkspaceWorktrees(workspace *domain.Workspace, dirName string) {
 	if s.gitEngine == nil {
 		return
 	}
 
 	for _, repo := range workspace.Repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		//nolint:contextcheck // Using background context since this is cleanup during close
 		if err := s.gitEngine.RemoveWorktree(context.Background(), repo.Name, worktreePath); err != nil {

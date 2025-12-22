@@ -12,12 +12,12 @@ import (
 // WorkspacePath returns the absolute path for a workspace ID.
 func (s *Service) WorkspacePath(ctx context.Context, workspaceID string) (string, error) {
 	// Use Load instead of List to avoid O(n) scan of all workspaces
-	_, err := s.wsEngine.Load(ctx, workspaceID)
+	_, dirName, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
 		return "", err
 	}
 
-	return filepath.Join(s.config.GetWorkspacesRoot(), workspaceID), nil
+	return filepath.Join(s.config.GetWorkspacesRoot(), dirName), nil
 }
 
 // ListWorkspaces returns all active workspaces
@@ -30,7 +30,19 @@ func (s *Service) ListWorkspaces(ctx context.Context) ([]domain.Workspace, error
 	var workspaces []domain.Workspace
 
 	for _, w := range workspaceList {
-		wsPath := filepath.Join(s.config.GetWorkspacesRoot(), w.ID)
+		dirName := w.DirName
+		if dirName == "" {
+			var dirErr error
+
+			dirName, dirErr = s.config.ComputeWorkspaceDir(w.ID)
+			if dirErr != nil {
+				return nil, dirErr
+			}
+
+			w.DirName = dirName
+		}
+
+		wsPath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
 
 		usage, latest, sizeErr := s.diskUsage.CachedUsage(wsPath)
 		if sizeErr != nil {
@@ -71,7 +83,7 @@ func (s *Service) ListClosedWorkspaces(ctx context.Context) ([]domain.ClosedWork
 
 // GetStatus returns the aggregate status of a workspace
 func (s *Service) GetStatus(ctx context.Context, workspaceID string) (*domain.WorkspaceStatus, error) {
-	targetWorkspace, _, err := s.findWorkspace(ctx, workspaceID)
+	targetWorkspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +97,7 @@ func (s *Service) GetStatus(ctx context.Context, workspaceID string) (*domain.Wo
 			return nil, ctx.Err()
 		}
 
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		isDirty, unpushed, behind, branch, err := s.gitEngine.Status(ctx, worktreePath)
 		if err != nil {

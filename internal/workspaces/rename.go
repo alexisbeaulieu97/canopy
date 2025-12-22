@@ -15,7 +15,8 @@ import (
 // If force is true, an existing workspace with the new ID will be deleted first.
 func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, renameBranch, force bool) error {
 	if s.lockManager == nil {
-		return s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
+		_, err := s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
+		return err
 	}
 
 	handle, err := s.lockManager.Acquire(ctx, oldID, false)
@@ -23,9 +24,9 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 		return s.handleClosedWorkspaceError(ctx, oldID, err)
 	}
 
-	renameErr := s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
-	if renameErr == nil {
-		handle.UpdateLocation(newID, filepath.Join(s.config.GetWorkspacesRoot(), newID, lockFileName))
+	newDirName, renameErr := s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
+	if renameErr == nil && newDirName != "" {
+		handle.UpdateLocation(newID, filepath.Join(s.config.GetWorkspacesRoot(), newDirName, lockFileName))
 	}
 
 	releaseErr := handle.Release()
@@ -40,33 +41,38 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 	return nil
 }
 
-func (s *Service) renameWorkspaceUnlocked(ctx context.Context, oldID, newID string, renameBranch, force bool) error {
-	workspace, _, err := s.findWorkspace(ctx, oldID)
+func (s *Service) renameWorkspaceUnlocked(ctx context.Context, oldID, newID string, renameBranch, force bool) (string, error) {
+	workspace, dirName, err := s.findWorkspace(ctx, oldID)
 	if err != nil {
-		return s.handleClosedWorkspaceError(ctx, oldID, err)
+		return "", s.handleClosedWorkspaceError(ctx, oldID, err)
 	}
 
 	if err := s.validateRenameInputs(newID); err != nil {
-		return err
+		return "", err
 	}
 
 	if oldID == newID {
-		return cerrors.NewInvalidArgument("new_id", "cannot rename workspace to the same ID")
+		return "", cerrors.NewInvalidArgument("new_id", "cannot rename workspace to the same ID")
 	}
 
 	if err := s.ensureTargetAvailableOrDelete(ctx, newID, force); err != nil {
-		return err
+		return "", err
 	}
 
 	shouldRenameBranch := renameBranch && workspace.BranchName == oldID
 
-	if err := s.executeRename(ctx, *workspace, oldID, newID, shouldRenameBranch); err != nil {
-		return err
+	newDirName, err := s.config.ComputeWorkspaceDir(newID)
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.executeRename(ctx, *workspace, oldID, newID, dirName, newDirName, shouldRenameBranch); err != nil {
+		return "", err
 	}
 
 	s.invalidateWorkspaceCache(oldID, newID)
 
-	return nil
+	return newDirName, nil
 }
 
 // validateRenameInputs validates the inputs for renaming a workspace.
@@ -199,10 +205,10 @@ func (s *Service) updateBranchMetadata(ctx context.Context, workspaceID, newBran
 }
 
 // renameWorkspaceDir renames the workspace directory and handles rollback on failure.
-func (s *Service) renameWorkspaceDir(ctx context.Context, workspace domain.Workspace, oldID, newID string, shouldRenameBranch bool) error {
+func (s *Service) renameWorkspaceDir(ctx context.Context, workspace domain.Workspace, oldID, newID, oldDirName string, shouldRenameBranch bool) error {
 	if err := s.wsEngine.Rename(ctx, oldID, newID); err != nil {
 		if shouldRenameBranch {
-			s.rollbackBranchRenames(ctx, workspace, oldID, oldID, newID)
+			s.rollbackBranchRenames(ctx, workspace, oldDirName, oldID, newID)
 		}
 
 		return err
@@ -221,12 +227,12 @@ func (s *Service) invalidateWorkspaceCache(ids ...string) {
 }
 
 // updateBranchMetadataWithRollback updates workspace metadata and rolls back branch and directory renames on failure.
-func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspace domain.Workspace, oldID, newID string) error {
+func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspace domain.Workspace, oldID, newID, newDirName string) error {
 	if err := s.updateBranchMetadata(ctx, newID, newID); err != nil {
 		var rollbackErrors []error
 
 		// Attempt to rollback branch renames first so repo state aligns with directory rollback.
-		if branchRollbackErr := s.rollbackBranchRenamesWithError(ctx, workspace, newID, oldID, newID); branchRollbackErr != nil {
+		if branchRollbackErr := s.rollbackBranchRenamesWithError(ctx, workspace, newDirName, oldID, newID); branchRollbackErr != nil {
 			if s.logger != nil {
 				s.logger.Error("failed to rollback branch renames after metadata update error",
 					"error", branchRollbackErr,
@@ -262,19 +268,19 @@ func (s *Service) updateBranchMetadataWithRollback(ctx context.Context, workspac
 }
 
 // executeRename performs the actual rename operations: branch rename, directory rename, and metadata update.
-func (s *Service) executeRename(ctx context.Context, workspace domain.Workspace, oldID, newID string, shouldRenameBranch bool) error {
+func (s *Service) executeRename(ctx context.Context, workspace domain.Workspace, oldID, newID, oldDirName, newDirName string, shouldRenameBranch bool) error {
 	if shouldRenameBranch {
-		if err := s.renameBranchesInRepos(ctx, workspace, oldID, oldID, newID); err != nil {
+		if err := s.renameBranchesInRepos(ctx, workspace, oldDirName, oldID, newID); err != nil {
 			return err
 		}
 	}
 
-	if err := s.renameWorkspaceDir(ctx, workspace, oldID, newID, shouldRenameBranch); err != nil {
+	if err := s.renameWorkspaceDir(ctx, workspace, oldID, newID, oldDirName, shouldRenameBranch); err != nil {
 		return err
 	}
 
 	if shouldRenameBranch {
-		if err := s.updateBranchMetadataWithRollback(ctx, workspace, oldID, newID); err != nil {
+		if err := s.updateBranchMetadataWithRollback(ctx, workspace, oldID, newID, newDirName); err != nil {
 			return err
 		}
 	}
