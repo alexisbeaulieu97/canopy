@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
+	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
 // CheckSeverity indicates the severity level of a check result.
@@ -26,6 +27,10 @@ const (
 	SeverityWarning CheckSeverity = "warning"
 	// SeverityError indicates a critical issue.
 	SeverityError CheckSeverity = "error"
+
+	statusPass  = "pass"
+	statusFail  = "fail"
+	statusFixed = "fixed"
 )
 
 // CheckResult represents the outcome of a single diagnostic check.
@@ -48,33 +53,29 @@ type DoctorReport struct {
 // statusSymbol returns a symbol for the check status.
 func statusSymbol(status string) string {
 	switch status {
-	case "pass":
+	case statusPass:
 		return "✓"
-	case "fail":
+	case statusFail:
 		return "✗"
-	case "fixed":
+	case statusFixed:
 		return "⚡"
 	default:
 		return "?"
 	}
 }
 
-// severityColor returns ANSI color code for severity.
-func severityColor(sev CheckSeverity) string {
+func severityStyle(sev CheckSeverity) func(string) string {
 	switch sev {
 	case SeverityError:
-		return "\033[31m" // red
+		return func(text string) string { return output.Colorize(output.ErrorStyle, text) }
 	case SeverityWarning:
-		return "\033[33m" // yellow
+		return func(text string) string { return output.Colorize(output.WarningStyle, text) }
 	case SeverityInfo:
-		return "\033[36m" // cyan
+		return func(text string) string { return output.Colorize(output.InfoStyle, text) }
 	default:
-		return "\033[0m" // reset
+		return func(text string) string { return text }
 	}
 }
-
-// colorResetDoctor avoids redeclaration with repo.go.
-const colorResetDoctor = "\033[0m"
 
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
@@ -150,7 +151,7 @@ func calculateReportSummary(report *DoctorReport) {
 	var errors, warnings int
 
 	for _, c := range report.Checks {
-		if c.Status == "fail" {
+		if c.Status == statusFail {
 			switch c.Severity {
 			case SeverityError:
 				errors++
@@ -193,17 +194,18 @@ func outputDoctorReport(out io.Writer, report *DoctorReport, jsonOutput bool) er
 // Write errors are intentionally ignored as this is CLI output with no recovery path.
 func printHumanReport(out io.Writer, report *DoctorReport) {
 	_, _ = fmt.Fprintln(out, "Canopy Doctor")
-	_, _ = fmt.Fprintln(out, strings.Repeat("=", 50))
+	_, _ = fmt.Fprintln(out, output.SeparatorLine(output.SeparatorWidth))
 	_, _ = fmt.Fprintln(out)
 
 	for _, c := range report.Checks {
-		color := severityColor(c.Severity)
+		style := severityStyle(c.Severity)
 		symbol := statusSymbol(c.Status)
 
-		if c.Status == "pass" {
+		if c.Status == statusPass {
 			_, _ = fmt.Fprintf(out, "  %s %s: %s\n", symbol, c.Name, c.Message)
 		} else {
-			_, _ = fmt.Fprintf(out, "  %s%s %s: %s%s\n", color, symbol, c.Name, c.Message, colorResetDoctor)
+			line := fmt.Sprintf("  %s %s: %s", symbol, c.Name, c.Message)
+			_, _ = fmt.Fprintln(out, style(line))
 
 			if c.Details != "" {
 				_, _ = fmt.Fprintf(out, "      %s\n", c.Details)
@@ -212,7 +214,7 @@ func printHumanReport(out io.Writer, report *DoctorReport) {
 	}
 
 	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintln(out, strings.Repeat("-", 50))
+	_, _ = fmt.Fprintln(out, output.SeparatorLine(output.SeparatorWidth))
 	_, _ = fmt.Fprintf(out, "Summary: %s\n", report.Summary)
 }
 
@@ -237,7 +239,7 @@ func checkGitInstalled() CheckResult {
 
 	output, err := cmd.Output()
 	if err != nil {
-		result.Status = "fail"
+		result.Status = statusFail
 		result.Message = "git is not installed or not in PATH"
 		result.Details = "Install git: https://git-scm.com/downloads"
 
@@ -245,7 +247,7 @@ func checkGitInstalled() CheckResult {
 	}
 
 	version := strings.TrimSpace(string(output))
-	result.Status = "pass"
+	result.Status = statusPass
 	result.Message = version
 	result.Severity = SeverityInfo
 
@@ -260,14 +262,14 @@ func checkConfigFile(configErr error) CheckResult {
 	}
 
 	if configErr != nil {
-		result.Status = "fail"
+		result.Status = statusFail
 		result.Message = "configuration error"
 		result.Details = configErr.Error()
 
 		return result
 	}
 
-	result.Status = "pass"
+	result.Status = statusPass
 	result.Message = "configuration is valid"
 	result.Severity = SeverityInfo
 
@@ -289,16 +291,16 @@ func checkDirectory(name, path string, fix bool) []CheckResult {
 			// Attempt to create the directory
 			// User workspace directories need 0755 for proper access
 			if mkErr := os.MkdirAll(path, 0o755); mkErr != nil { //nolint:gosec // G301: 0755 is intentional for user workspace directories
-				result.Status = "fail"
+				result.Status = statusFail
 				result.Message = fmt.Sprintf("directory does not exist: %s", path)
 				result.Details = fmt.Sprintf("Failed to create: %v", mkErr)
 			} else {
-				result.Status = "fixed"
+				result.Status = statusFixed
 				result.Message = fmt.Sprintf("created directory: %s", path)
 				result.Severity = SeverityInfo
 			}
 		} else {
-			result.Status = "fail"
+			result.Status = statusFail
 			result.Message = fmt.Sprintf("directory does not exist: %s", path)
 			result.Details = "Run with --fix to create it"
 		}
@@ -309,7 +311,7 @@ func checkDirectory(name, path string, fix bool) []CheckResult {
 	}
 
 	if err != nil {
-		result.Status = "fail"
+		result.Status = statusFail
 		result.Message = fmt.Sprintf("cannot access directory: %s", path)
 		result.Details = err.Error()
 		results = append(results, result)
@@ -318,7 +320,7 @@ func checkDirectory(name, path string, fix bool) []CheckResult {
 	}
 
 	if !info.IsDir() {
-		result.Status = "fail"
+		result.Status = statusFail
 		result.Message = fmt.Sprintf("path is not a directory: %s", path)
 		results = append(results, result)
 
@@ -330,7 +332,7 @@ func checkDirectory(name, path string, fix bool) []CheckResult {
 
 	f, err := os.Create(testFile) //nolint:gosec // G304: testFile is constructed from validated path parameter
 	if err != nil {
-		result.Status = "fail"
+		result.Status = statusFail
 		result.Severity = SeverityError
 		result.Message = fmt.Sprintf("directory not writable: %s", path)
 		result.Details = err.Error()
@@ -342,7 +344,7 @@ func checkDirectory(name, path string, fix bool) []CheckResult {
 	_ = f.Close()
 	_ = os.Remove(testFile)
 
-	result.Status = "pass"
+	result.Status = statusPass
 	result.Message = fmt.Sprintf("directory exists and is writable: %s", path)
 	result.Severity = SeverityInfo
 	results = append(results, result)
@@ -408,7 +410,7 @@ func checkCanonicalRepos(_ context.Context, cfg doctorConfig) []CheckResult {
 		info, err := os.Stat(fetchHead)
 		if err != nil {
 			// FETCH_HEAD doesn't exist - repo may never have been fetched
-			result.Status = "fail"
+			result.Status = statusFail
 			result.Message = "never fetched"
 			result.Details = "Run: canopy repo sync " + entry.Name()
 			results = append(results, result)
@@ -417,7 +419,7 @@ func checkCanonicalRepos(_ context.Context, cfg doctorConfig) []CheckResult {
 		}
 
 		if info.ModTime().Before(staleCutoff) {
-			result.Status = "fail"
+			result.Status = statusFail
 			result.Message = fmt.Sprintf("stale (last fetch: %s)", info.ModTime().Format("2006-01-02"))
 			result.Details = "Run: canopy repo sync " + entry.Name()
 			results = append(results, result)
@@ -425,7 +427,7 @@ func checkCanonicalRepos(_ context.Context, cfg doctorConfig) []CheckResult {
 			continue
 		}
 
-		result.Status = "pass"
+		result.Status = statusPass
 		result.Message = fmt.Sprintf("healthy (last fetch: %s)", info.ModTime().Format("2006-01-02"))
 		result.Severity = SeverityInfo
 		results = append(results, result)

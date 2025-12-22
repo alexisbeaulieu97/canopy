@@ -18,10 +18,10 @@ func printGitResults(results []workspaces.RepoGitResult) {
 			output.Info("")
 		}
 
-		output.Printf("\033[1;36m=== %s ===\033[0m\n", r.RepoName)
+		output.Printf("%s\n", output.Colorize(output.AccentStyle, fmt.Sprintf("=== %s ===", r.RepoName)))
 
 		if r.Error != nil {
-			output.Printf("\033[1;31mError: %s\033[0m\n", r.Error)
+			output.Printf("%s\n", output.Colorize(output.ErrorStyle, fmt.Sprintf("Error: %s", r.Error)))
 			continue
 		}
 
@@ -34,7 +34,7 @@ func printGitResults(results []workspaces.RepoGitResult) {
 		}
 
 		if r.ExitCode != 0 {
-			output.Printf("\033[1;31mExit code: %d\033[0m\n", r.ExitCode)
+			output.Printf("%s\n", output.Colorize(output.ErrorStyle, fmt.Sprintf("Exit code: %d", r.ExitCode)))
 		}
 	}
 }
@@ -44,7 +44,7 @@ func printWorkspaceClosePreview(preview *domain.WorkspaceClosePreview) {
 		return
 	}
 
-	output.Printf("\033[33m[DRY RUN]\033[0m Would close workspace: %s\n", preview.WorkspaceID)
+	output.Printf("%s Would close workspace: %s\n", output.Colorize(output.WarningStyle, "[DRY RUN]"), preview.WorkspaceID)
 
 	action := "Delete"
 	if preview.KeepMetadata {
@@ -61,11 +61,11 @@ func printWorkspaceClosePreview(preview *domain.WorkspaceClosePreview) {
 	// Show warnings for repos with uncommitted changes or unpushed commits.
 	for _, status := range preview.RepoStatuses {
 		if status.IsDirty {
-			output.Printf("  \033[33m⚠ %s has uncommitted changes\033[0m\n", status.Name)
+			output.Printf("  %s\n", output.Colorize(output.WarningStyle, fmt.Sprintf("⚠ %s has uncommitted changes", status.Name)))
 		}
 
 		if status.UnpushedCount > 0 {
-			output.Printf("  \033[33m⚠ %s has %d unpushed commit(s)\033[0m\n", status.Name, status.UnpushedCount)
+			output.Printf("  %s\n", output.Colorize(output.WarningStyle, fmt.Sprintf("⚠ %s has %d unpushed commit(s)", status.Name, status.UnpushedCount)))
 		}
 	}
 

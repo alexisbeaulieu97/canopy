@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
@@ -261,12 +262,6 @@ var repoUnregisterCmd = &cobra.Command{
 	},
 }
 
-const (
-	colorGreen  = "\033[32m"
-	colorYellow = "\033[33m"
-	colorReset  = "\033[0m"
-)
-
 var repoListRegistryCmd = &cobra.Command{
 	Use:   "list-registry",
 	Short: "List registered repository aliases",
@@ -279,9 +274,17 @@ var repoListRegistryCmd = &cobra.Command{
 		tagsRaw, _ := cmd.Flags().GetString("tags")
 		entries := app.Config.GetRegistry().List(parseTags(tagsRaw))
 
-		output.Printf("%s%-16s%s %-45s %-20s\n", colorGreen, "ALIAS", colorReset, "URL", "TAGS")
+		output.Printf("%s %s %s\n",
+			output.Column("ALIAS", output.RepoAliasWidth, output.AccentStyle),
+			output.Column("URL", output.RepoURLWidth, output.MutedStyle),
+			output.Column("TAGS", output.RepoTagsWidth, output.MutedStyle),
+		)
 		for _, entry := range entries {
-			output.Printf("%s%-16s%s %-45s %-20s\n", colorGreen, entry.Alias, colorReset, entry.URL, strings.Join(entry.Tags, ", "))
+			output.Printf("%s %s %s\n",
+				output.Column(entry.Alias, output.RepoAliasWidth, output.AccentStyle),
+				output.Column(entry.URL, output.RepoURLWidth, lipgloss.NewStyle()),
+				output.Column(strings.Join(entry.Tags, ", "), output.RepoTagsWidth, lipgloss.NewStyle()),
+			)
 		}
 		output.Infof("\n%d entries", len(entries))
 		return nil
@@ -527,7 +530,7 @@ func printRepoRemovePreview(preview *domain.RepoRemovePreview) {
 		return
 	}
 
-	output.Printf("%s[DRY RUN]%s Would remove repository: %s\n", colorYellow, colorReset, preview.RepoName)
+	output.Printf("%s Would remove repository: %s\n", output.Colorize(output.WarningStyle, "[DRY RUN]"), preview.RepoName)
 	output.Infof("  Remove directory: %s", preview.RepoPath)
 
 	if len(preview.WorkspacesAffected) > 0 {
@@ -563,8 +566,18 @@ func printRepoStatusesTable(statuses []domain.CanonicalRepoStatus) {
 		return
 	}
 
-	output.Printf("%-20s %-10s %-20s %s\n", "NAME", "SIZE", "LAST FETCH", "WORKSPACES")
-	output.Printf("%-20s %-10s %-20s %s\n", strings.Repeat("-", 20), strings.Repeat("-", 10), strings.Repeat("-", 20), strings.Repeat("-", 10))
+	output.Printf("%s %s %s %s\n",
+		output.Column("NAME", output.RepoNameWidth, output.AccentStyle),
+		output.Column("SIZE", output.RepoSizeWidth, output.MutedStyle),
+		output.Column("LAST FETCH", output.RepoLastFetchWidth, output.MutedStyle),
+		output.Column("WORKSPACES", output.RepoWorkspacesWidth, output.MutedStyle),
+	)
+	output.Printf("%s %s %s %s\n",
+		output.SeparatorLine(output.RepoNameWidth),
+		output.SeparatorLine(output.RepoSizeWidth),
+		output.SeparatorLine(output.RepoLastFetchWidth),
+		output.SeparatorLine(output.RepoWorkspacesWidth),
+	)
 
 	for _, s := range statuses {
 		fetchTime := "never"
@@ -572,11 +585,11 @@ func printRepoStatusesTable(statuses []domain.CanonicalRepoStatus) {
 			fetchTime = s.LastFetchTime.Format("2006-01-02 15:04")
 		}
 
-		output.Printf("%-20s %-10s %-20s %d\n",
-			s.Name,
-			output.FormatBytes(s.DiskUsageBytes),
-			fetchTime,
-			s.UsedByCount,
+		output.Printf("%s %s %s %s\n",
+			output.Column(s.Name, output.RepoNameWidth, lipgloss.NewStyle()),
+			output.Column(output.FormatBytes(s.DiskUsageBytes), output.RepoSizeWidth, lipgloss.NewStyle()),
+			output.Column(fetchTime, output.RepoLastFetchWidth, lipgloss.NewStyle()),
+			output.Column(fmt.Sprintf("%d", s.UsedByCount), output.RepoWorkspacesWidth, lipgloss.NewStyle()),
 		)
 	}
 

@@ -1,11 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
 // ExitCode represents CLI exit codes.
@@ -38,13 +37,6 @@ const (
 	ExitHookFailed       ExitCode = 22
 	ExitPathError        ExitCode = 23
 )
-
-// CLIError represents an error with additional CLI context.
-type CLIError struct {
-	Code    string `json:"code,omitempty"`
-	Message string `json:"message"`
-	Details string `json:"details,omitempty"`
-}
 
 // errorCodeToExitCode maps error codes to CLI exit codes.
 var errorCodeToExitCode = map[cerrors.ErrorCode]ExitCode{
@@ -108,22 +100,5 @@ func userFriendlyMessage(err error) string {
 
 // formatErrorJSON formats an error as JSON for --json output.
 func formatErrorJSON(err error) string {
-	cliErr := CLIError{
-		Message: userFriendlyMessage(err),
-	}
-
-	var canopyErr *cerrors.CanopyError
-	if errors.As(err, &canopyErr) {
-		cliErr.Code = string(canopyErr.Code)
-		if canopyErr.Cause != nil {
-			cliErr.Details = canopyErr.Cause.Error()
-		}
-	}
-
-	data, marshalErr := json.MarshalIndent(cliErr, "", "  ")
-	if marshalErr != nil {
-		return fmt.Sprintf(`{"message": %q}`, err.Error())
-	}
-
-	return string(data)
+	return output.FormatErrorJSON(err)
 }
