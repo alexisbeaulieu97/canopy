@@ -3,6 +3,7 @@ package workspaces
 
 import (
 	"context"
+	"errors"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -72,6 +73,10 @@ func ParallelMap[T any](ctx context.Context, executor *ParallelExecutor, total i
 	results := make([]ParallelResult[T], total)
 	if total == 0 {
 		return results, nil
+	}
+
+	if executor == nil {
+		return results, errors.New("parallel executor is nil")
 	}
 
 	workers := executor.workerLimit(total, opts.Workers)

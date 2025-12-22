@@ -101,11 +101,8 @@ func (s *Service) SyncWorkspacesMatching(ctx context.Context, pattern string, op
 			Err:         syncErr,
 		}, syncErr
 	}, ParallelOptions{ContinueOnError: true, AggregateErrors: true})
-	if err != nil {
-		return nil, err
-	}
 
-	return &BulkSyncResult{Results: ExtractValues(results)}, nil
+	return &BulkSyncResult{Results: ExtractValues(results)}, err
 }
 
 func compileWorkspacePattern(pattern string) (*regexp.Regexp, error) {
