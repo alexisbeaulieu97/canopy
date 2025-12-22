@@ -239,6 +239,8 @@ canopy workspace sync PROJ-123 --json
 canopy workspace sync --pattern "^FEATURE-"
 ```
 
+Bulk sync continues across workspaces and returns a non-zero exit code if any workspace fails.
+
 The output displays a table with:
 - **REPOSITORY**: Name of the repositories
 - **STATUS**: Outcome (UPDATED, UP-TO-DATE, CONFLICT, TIMEOUT, ERROR)

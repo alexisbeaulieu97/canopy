@@ -22,7 +22,8 @@ var workspaceSyncCmd = &cobra.Command{
 	Use:   "sync [ID]",
 	Short: "Pull updates for all repositories in a workspace",
 	Long: `Pull updates for all repositories in a workspace and display a summary.
-Per-repository timeouts can be configured to prevent slow remotes from blocking the entire operation.`,
+Per-repository timeouts can be configured to prevent slow remotes from blocking the entire operation.
+Bulk sync continues across workspaces and exits non-zero if any workspace fails.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		pattern, _ := cmd.Flags().GetString("pattern")
 		all, _ := cmd.Flags().GetBool("all")
