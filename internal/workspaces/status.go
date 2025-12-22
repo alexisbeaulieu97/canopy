@@ -2,6 +2,7 @@ package workspaces
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -88,9 +89,14 @@ func (s *Service) GetStatus(ctx context.Context, workspaceID string) (*domain.Wo
 
 		isDirty, unpushed, behind, branch, err := s.gitEngine.Status(ctx, worktreePath)
 		if err != nil {
+			statusErr := domain.StatusError(err.Error())
+			if errors.Is(err, context.DeadlineExceeded) {
+				statusErr = domain.StatusErrorTimeout
+			}
+
 			repoStatuses = append(repoStatuses, domain.RepoStatus{
-				Name:   repo.Name,
-				Branch: "ERROR: " + err.Error(),
+				Name:  repo.Name,
+				Error: statusErr,
 			})
 
 			continue

@@ -79,7 +79,16 @@ type RepoStatus struct {
 	UnpushedCommits int
 	BehindRemote    int
 	Branch          string
+	Error           StatusError
 }
+
+// StatusError represents an error state for repository status checks.
+type StatusError string
+
+// Known status error values.
+const (
+	StatusErrorTimeout StatusError = "timeout"
+)
 
 // WorkspaceStatus represents the aggregate status of a workspace
 type WorkspaceStatus struct {

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 
 	"github.com/alexisbeaulieu97/canopy/internal/output"
@@ -41,6 +43,11 @@ var workspaceViewCmd = &cobra.Command{
 
 		output.Println("Repositories:")
 		for _, r := range status.Repos {
+			if r.Error != "" {
+				output.Warnf("  - %s: Error: %s", r.Name, strings.ReplaceAll(string(r.Error), "\n", " "))
+				continue
+			}
+
 			statusStr := "Clean"
 			if r.IsDirty {
 				statusStr = "Dirty"

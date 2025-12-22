@@ -126,6 +126,8 @@ canopy workspace list --json
 canopy workspace list --status --json
 ```
 
+Status entries include an `Error` field for status failures (e.g., `timeout`). When `Error` is set, `Branch` is empty.
+
 ### Viewing Workspace Details
 
 ```bash

@@ -56,6 +56,11 @@ var statusCmd = &cobra.Command{
 
 		output.Infof("Workspace: %s", status.ID)
 		for _, r := range status.Repos {
+			if r.Error != "" {
+				output.Warnf("- %s: Error: %s", r.Name, strings.ReplaceAll(string(r.Error), "\n", " "))
+				continue
+			}
+
 			statusStr := "Clean"
 			if r.IsDirty {
 				statusStr = "Dirty"

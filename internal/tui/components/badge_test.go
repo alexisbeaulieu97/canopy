@@ -20,6 +20,14 @@ func TestNewStatusBadge(t *testing.T) {
 			expected: HealthError,
 		},
 		{
+			name: "error when repo errors exist",
+			input: StatusBadgeInput{
+				IsLoaded:   true,
+				ErrorRepos: 1,
+			},
+			expected: HealthError,
+		},
+		{
 			name: "loading when not loaded",
 			input: StatusBadgeInput{
 				HasError: false,
@@ -128,6 +136,14 @@ func TestNewBadgeSet(t *testing.T) {
 			expectContain: "ERROR",
 		},
 		{
+			name: "has repo error badge",
+			input: BadgeSetInput{
+				IsLoaded:   true,
+				ErrorRepos: 2,
+			},
+			expectContain: "errors",
+		},
+		{
 			name: "has dirty badge",
 			input: BadgeSetInput{
 				IsLoaded:   true,
@@ -224,6 +240,13 @@ func TestNewStatusLine(t *testing.T) {
 				BehindRepos: 1,
 			},
 			expectContain: "behind",
+		},
+		{
+			name: "shows error count",
+			input: StatusLineInput{
+				ErrorRepos: 1,
+			},
+			expectContain: "error",
 		},
 	}
 

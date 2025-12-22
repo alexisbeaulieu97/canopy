@@ -100,6 +100,25 @@ var workspaceListCmd = &cobra.Command{
 		}
 
 		if showStatus {
+			setRepoStatusError := func(ws *workspaceWithStatus, statusErr error) {
+				if statusErr == nil {
+					return
+				}
+
+				errorValue := domain.StatusError(statusErr.Error())
+				if errors.Is(statusErr, context.DeadlineExceeded) {
+					errorValue = domain.StatusErrorTimeout
+				}
+
+				ws.RepoStatuses = ws.RepoStatuses[:0]
+				for _, repo := range ws.Repos {
+					ws.RepoStatuses = append(ws.RepoStatuses, domain.RepoStatus{
+						Name:  repo.Name,
+						Error: errorValue,
+					})
+				}
+			}
+
 			if sequentialStatus && parallelStatus && cmd.Flags().Changed("parallel-status") {
 				return cerrors.NewInvalidArgument("flags", "cannot use --parallel-status with --sequential-status")
 			}
@@ -126,18 +145,11 @@ var workspaceListCmd = &cobra.Command{
 						continue
 					}
 
-					if errors.Is(result.Err, context.DeadlineExceeded) {
-						for _, repo := range ws.Repos {
-							ws.RepoStatuses = append(ws.RepoStatuses, domain.RepoStatus{
-								Name:   repo.Name,
-								Branch: "timeout",
-							})
-						}
-						continue
-					}
-
 					if result.Err != nil {
-						output.Warnf("Failed to get status for %s: %v", ws.ID, result.Err)
+						setRepoStatusError(ws, result.Err)
+						if !errors.Is(result.Err, context.DeadlineExceeded) {
+							output.Warnf("Failed to get status for %s: %v", ws.ID, result.Err)
+						}
 					}
 				}
 			} else {
@@ -149,16 +161,11 @@ var workspaceListCmd = &cobra.Command{
 					ws := &workspacesWithStatus[i]
 					if statusErr == nil && status != nil {
 						ws.RepoStatuses = status.Repos
-					} else if errors.Is(statusErr, context.DeadlineExceeded) {
-						// Timeout - add placeholder status.
-						for _, repo := range w.Repos {
-							ws.RepoStatuses = append(ws.RepoStatuses, domain.RepoStatus{
-								Name:   repo.Name,
-								Branch: "timeout",
-							})
-						}
 					} else if statusErr != nil {
-						output.Warnf("Failed to get status for %s: %v", w.ID, statusErr)
+						setRepoStatusError(ws, statusErr)
+						if !errors.Is(statusErr, context.DeadlineExceeded) {
+							output.Warnf("Failed to get status for %s: %v", w.ID, statusErr)
+						}
 					}
 				}
 			}
