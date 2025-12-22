@@ -57,6 +57,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -186,6 +187,11 @@ type Config struct {
 	Git                GitConfig           `mapstructure:"git"`
 	Registry           *RepoRegistry       `mapstructure:"-"`
 	Warnings           []string            `mapstructure:"-"` // Warnings collected during loading (e.g., deprecated keys)
+}
+
+// WorkspaceNamingTemplateData defines the data available to workspace naming templates.
+type WorkspaceNamingTemplateData struct {
+	ID string
 }
 
 // WorkspacePattern defines a regex pattern and default repos
@@ -612,39 +618,11 @@ func (c *Config) Validate() error {
 // values, regex patterns, and numeric constraints. Use this method when you
 // need fast validation that doesn't depend on the environment.
 func (c *Config) ValidateValues() error {
-	if err := c.validateRequiredFields(); err != nil {
+	if err := c.validateWorkspaceSettings(); err != nil {
 		return err
 	}
 
-	if err := c.validateCloseDefault(); err != nil {
-		return err
-	}
-
-	if err := c.validatePatterns(); err != nil {
-		return err
-	}
-
-	if err := c.validateTemplates(); err != nil {
-		return err
-	}
-
-	if err := c.validateStaleThreshold(); err != nil {
-		return err
-	}
-
-	if err := c.validateHooks(); err != nil {
-		return err
-	}
-
-	if err := c.validateGitRetry(); err != nil {
-		return err
-	}
-
-	if err := c.validateParallelWorkers(); err != nil {
-		return err
-	}
-
-	if err := c.validateLockSettings(); err != nil {
+	if err := c.validateRuntimeSettings(); err != nil {
 		return err
 	}
 
@@ -687,6 +665,56 @@ func (c *Config) validateCloseDefault() error {
 	}
 
 	return nil
+}
+
+func (c *Config) validateWorkspaceSettings() error {
+	if err := c.validateRequiredFields(); err != nil {
+		return err
+	}
+
+	if err := c.validateCloseDefault(); err != nil {
+		return err
+	}
+
+	if err := c.validateWorkspaceNaming(); err != nil {
+		return err
+	}
+
+	if err := c.validatePatterns(); err != nil {
+		return err
+	}
+
+	return c.validateTemplates()
+}
+
+func (c *Config) validateRuntimeSettings() error {
+	if err := c.validateStaleThreshold(); err != nil {
+		return err
+	}
+
+	if err := c.validateHooks(); err != nil {
+		return err
+	}
+
+	if err := c.validateGitRetry(); err != nil {
+		return err
+	}
+
+	if err := c.validateParallelWorkers(); err != nil {
+		return err
+	}
+
+	return c.validateLockSettings()
+}
+
+func (c *Config) validateWorkspaceNaming() error {
+	if strings.TrimSpace(c.WorkspaceNaming) == "" {
+		c.WorkspaceNaming = "{{.ID}}"
+	}
+
+	_, err := c.computeWorkspaceDir("EXAMPLE-123")
+
+	return err
 }
 
 // validatePatterns checks that all workspace regex patterns are valid.
@@ -987,6 +1015,40 @@ func (c *Config) GetCloseDefault() string {
 // GetWorkspaceNaming returns the workspace naming pattern.
 func (c *Config) GetWorkspaceNaming() string {
 	return c.WorkspaceNaming
+}
+
+// ComputeWorkspaceDir computes the workspace directory name for a given ID.
+func (c *Config) ComputeWorkspaceDir(id string) (string, error) {
+	if err := validation.ValidateWorkspaceID(id); err != nil {
+		return "", err
+	}
+
+	return c.computeWorkspaceDir(id)
+}
+
+func (c *Config) computeWorkspaceDir(id string) (string, error) {
+	if strings.TrimSpace(c.WorkspaceNaming) == "" {
+		c.WorkspaceNaming = "{{.ID}}"
+	}
+
+	tmpl, err := template.New("workspace_naming").Option("missingkey=error").Parse(c.WorkspaceNaming)
+	if err != nil {
+		return "", cerrors.NewConfigValidation("workspace_naming", fmt.Sprintf("invalid template: %v", err))
+	}
+
+	var rendered strings.Builder
+	if err := tmpl.Execute(&rendered, WorkspaceNamingTemplateData{ID: id}); err != nil {
+		return "", cerrors.NewConfigValidation("workspace_naming", fmt.Sprintf("template execution failed: %v", err))
+	}
+
+	rawDir := rendered.String()
+
+	dirName, err := validation.NormalizeWorkspaceDirName(rawDir)
+	if err != nil {
+		return "", cerrors.NewConfigValidation("workspace_naming", fmt.Sprintf("template output %q is invalid: %v", rawDir, err))
+	}
+
+	return dirName, nil
 }
 
 // GetStaleThresholdDays returns the stale threshold in days.

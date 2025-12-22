@@ -25,7 +25,7 @@ const (
 //
 //nolint:contextcheck // Hooks manage their own timeout context per-hook
 func (s *Service) RunHooks(workspaceID string, phase HookPhase, continueOnError bool) error {
-	workspace, _, err := s.findWorkspace(context.Background(), workspaceID)
+	workspace, dirName, err := s.findWorkspace(context.Background(), workspaceID)
 	if err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func (s *Service) RunHooks(workspaceID string, phase HookPhase, continueOnError 
 
 	hookCtx := domain.HookContext{
 		WorkspaceID:   workspaceID,
-		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), workspaceID),
+		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
 		BranchName:    workspace.BranchName,
 		Repos:         workspace.Repos,
 	}
@@ -73,7 +73,7 @@ func (s *Service) RunHooks(workspaceID string, phase HookPhase, continueOnError 
 //
 //nolint:contextcheck // Hooks manage their own timeout context per-hook
 func (s *Service) PreviewHooks(workspaceID string, phase HookPhase) ([]domain.HookCommandPreview, error) {
-	workspace, _, err := s.findWorkspace(context.Background(), workspaceID)
+	workspace, dirName, err := s.findWorkspace(context.Background(), workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (s *Service) PreviewHooks(workspaceID string, phase HookPhase) ([]domain.Ho
 
 	hookCtx := domain.HookContext{
 		WorkspaceID:   workspaceID,
-		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), workspaceID),
+		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
 		BranchName:    workspace.BranchName,
 		Repos:         workspace.Repos,
 	}

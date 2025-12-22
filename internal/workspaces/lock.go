@@ -23,6 +23,7 @@ type LockManager struct {
 	timeout        time.Duration
 	staleThreshold time.Duration
 	logger         *logging.Logger
+	dirNameForID   func(string) (string, error)
 	now            func() time.Time
 	sleep          func(time.Duration)
 }
@@ -39,12 +40,17 @@ type LockHandle struct {
 }
 
 // NewLockManager creates a new LockManager.
-func NewLockManager(root string, timeout, staleThreshold time.Duration, logger *logging.Logger) *LockManager {
+func NewLockManager(root string, timeout, staleThreshold time.Duration, logger *logging.Logger, dirNameForID func(string) (string, error)) *LockManager {
+	if dirNameForID == nil {
+		dirNameForID = validation.NormalizeWorkspaceDirName
+	}
+
 	return &LockManager{
 		root:           root,
 		timeout:        timeout,
 		staleThreshold: staleThreshold,
 		logger:         logger,
+		dirNameForID:   dirNameForID,
 		now:            time.Now,
 		sleep:          time.Sleep,
 	}
@@ -132,7 +138,12 @@ func (m *LockManager) lockPath(workspaceID string, createDir bool) (string, erro
 		return "", err
 	}
 
-	workspacePath := filepath.Join(m.root, workspaceID)
+	dirName, err := m.dirNameForID(workspaceID)
+	if err != nil {
+		return "", err
+	}
+
+	workspacePath := filepath.Join(m.root, dirName)
 	if createDir {
 		if err := os.MkdirAll(workspacePath, 0o750); err != nil {
 			return "", cerrors.NewIOFailed("create workspace directory", err)

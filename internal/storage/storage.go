@@ -15,6 +15,7 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
+	"github.com/alexisbeaulieu97/canopy/internal/validation"
 )
 
 // Compile-time check that Engine implements ports.WorkspaceStorage.
@@ -24,13 +25,24 @@ var _ ports.WorkspaceStorage = (*Engine)(nil)
 type Engine struct {
 	WorkspacesRoot string
 	ClosedRoot     string
+	dirNameForID   func(string) (string, error)
 }
 
 // New creates a new Workspace Engine.
 func New(workspacesRoot, closedRoot string) *Engine {
+	return NewWithNaming(workspacesRoot, closedRoot, nil)
+}
+
+// NewWithNaming creates a new Workspace Engine with a custom naming resolver.
+func NewWithNaming(workspacesRoot, closedRoot string, dirNameForID func(string) (string, error)) *Engine {
+	if dirNameForID == nil {
+		dirNameForID = validation.NormalizeWorkspaceDirName
+	}
+
 	return &Engine{
 		WorkspacesRoot: workspacesRoot,
 		ClosedRoot:     closedRoot,
+		dirNameForID:   dirNameForID,
 	}
 }
 
@@ -38,36 +50,86 @@ func New(workspacesRoot, closedRoot string) *Engine {
 // It requires that the workspace ID equals the directory name (after sanitization).
 // If the directory exists but contains corrupt metadata, an error is returned.
 func (e *Engine) resolveDirectory(id string) (string, error) {
-	safeID, err := sanitizeDirName(id)
-	if err != nil {
-		return "", cerrors.NewWorkspaceNotFound(id)
+	if dirName, ok, err := e.resolveDirectoryFromTemplate(id); err != nil {
+		return "", err
+	} else if ok {
+		return dirName, nil
 	}
 
-	path := filepath.Join(e.WorkspacesRoot, safeID)
-	metaPath := filepath.Join(path, "workspace.yaml")
+	return e.resolveDirectoryByScan(id)
+}
 
-	//nolint:gosec // metaPath is derived from sanitized workspace ID and fixed filename
-	f, openErr := os.Open(metaPath)
-	if openErr != nil {
-		if os.IsNotExist(openErr) {
+func (e *Engine) resolveDirectoryFromTemplate(id string) (string, bool, error) {
+	dirName, err := e.dirNameForID(id)
+	if err != nil {
+		return "", false, cerrors.NewWorkspaceNotFound(id)
+	}
+
+	path := filepath.Join(e.WorkspacesRoot, dirName)
+
+	match, err := e.matchWorkspaceID(path, id)
+	if err != nil {
+		return "", false, err
+	}
+
+	if match {
+		return dirName, true, nil
+	}
+
+	return "", false, nil
+}
+
+func (e *Engine) resolveDirectoryByScan(id string) (string, error) {
+	entries, err := os.ReadDir(e.WorkspacesRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
 			return "", cerrors.NewWorkspaceNotFound(id)
 		}
 
-		return "", cerrors.NewIOFailed("open workspace metadata", openErr)
+		return "", cerrors.NewIOFailed("read workspaces root", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		path := filepath.Join(e.WorkspacesRoot, entry.Name())
+
+		match, err := e.matchWorkspaceID(path, id)
+		if err != nil {
+			return "", err
+		}
+
+		if match {
+			return entry.Name(), nil
+		}
+	}
+
+	return "", cerrors.NewWorkspaceNotFound(id)
+}
+
+func (e *Engine) matchWorkspaceID(dirPath, id string) (bool, error) {
+	metaPath := filepath.Join(dirPath, "workspace.yaml")
+
+	//nolint:gosec // metaPath is derived from workspace directory and fixed filename
+	f, openErr := os.Open(metaPath)
+	if openErr != nil {
+		if os.IsNotExist(openErr) {
+			return false, nil
+		}
+
+		return false, cerrors.NewIOFailed("open workspace metadata", openErr)
 	}
 
 	defer func() { _ = f.Close() }()
 
 	var w domain.Workspace
 	if decodeErr := yaml.NewDecoder(f).Decode(&w); decodeErr != nil {
-		return "", cerrors.NewWorkspaceMetadataError(id, "decode", decodeErr)
+		return false, cerrors.NewWorkspaceMetadataError(id, "decode", decodeErr)
 	}
 
-	if w.ID != id {
-		return "", cerrors.NewWorkspaceNotFound(id)
-	}
-
-	return safeID, nil
+	return w.ID == id, nil
 }
 
 // resolveClosedDirectory resolves a closed workspace ID and timestamp to its directory path.
@@ -76,7 +138,7 @@ func (e *Engine) resolveClosedDirectory(id string, closedAt time.Time) (string, 
 		return "", cerrors.NewConfigInvalid("closed_root is not configured")
 	}
 
-	safeDir, err := sanitizeDirName(id)
+	safeDir, err := validation.NormalizeWorkspaceDirName(id)
 	if err != nil {
 		return "", cerrors.NewPathInvalid(id, err.Error())
 	}
@@ -98,12 +160,12 @@ func (e *Engine) resolveClosedDirectory(id string, closedAt time.Time) (string, 
 
 // Create creates a new workspace from the provided domain object.
 func (e *Engine) Create(_ context.Context, ws domain.Workspace) error {
-	safeDir, err := sanitizeDirName(ws.ID)
+	dirName, err := e.workspaceDirName(ws)
 	if err != nil {
 		return cerrors.NewPathInvalid(ws.ID, err.Error())
 	}
 
-	path := filepath.Join(e.WorkspacesRoot, safeDir)
+	path := filepath.Join(e.WorkspacesRoot, dirName)
 
 	if err := os.Mkdir(path, 0o750); err != nil {
 		if os.IsExist(err) {
@@ -168,7 +230,7 @@ func (e *Engine) Close(_ context.Context, id string, closedAt time.Time) (*domai
 
 	_ = f.Close()
 
-	safeDir, err := sanitizeDirName(dirName)
+	safeDir, err := validation.NormalizeWorkspaceDirName(workspace.ID)
 	if err != nil {
 		return nil, cerrors.NewPathInvalid(dirName, err.Error())
 	}
@@ -311,6 +373,8 @@ func (e *Engine) tryLoadMetadata(dirPath string) (domain.Workspace, bool) {
 		return domain.Workspace{}, false
 	}
 
+	w.DirName = filepath.Base(dirPath)
+
 	// Handle version: missing version defaults to 0 (legacy)
 	// Version 0 workspaces are auto-migrated to version 1 on next save
 	// Note: Future versions are loaded as-is - callers should validate if needed
@@ -363,6 +427,8 @@ func (e *Engine) Load(_ context.Context, id string) (*domain.Workspace, error) {
 	// Version 0 workspaces are auto-migrated to version 1 on next save
 	// Note: Future versions are loaded as-is - callers should validate if needed
 
+	w.DirName = dirName
+
 	return &w, nil
 }
 
@@ -390,7 +456,7 @@ func (e *Engine) Rename(_ context.Context, oldID, newID string) error {
 		return err
 	}
 
-	safeNewDir, err := sanitizeDirName(newID)
+	safeNewDir, err := e.dirNameForID(newID)
 	if err != nil {
 		return cerrors.NewPathInvalid(newID, err.Error())
 	}
@@ -446,7 +512,7 @@ func (e *Engine) LatestClosed(_ context.Context, id string) (*domain.ClosedWorks
 		return nil, cerrors.NewConfigInvalid("closed_root is not configured")
 	}
 
-	safeDir, err := sanitizeDirName(id)
+	safeDir, err := validation.NormalizeWorkspaceDirName(id)
 	if err != nil {
 		return nil, cerrors.NewPathInvalid(id, err.Error())
 	}
@@ -506,19 +572,10 @@ func (e *Engine) DeleteClosed(_ context.Context, id string, closedAt time.Time) 
 	return os.RemoveAll(closedDir)
 }
 
-func sanitizeDirName(name string) (string, error) {
-	cleaned := filepath.Clean(strings.TrimSpace(name))
-	if cleaned == "" || cleaned == "." {
-		return "", cerrors.NewInvalidArgument("name", "workspace name cannot be empty")
+func (e *Engine) workspaceDirName(ws domain.Workspace) (string, error) {
+	if strings.TrimSpace(ws.DirName) != "" {
+		return validation.NormalizeWorkspaceDirName(ws.DirName)
 	}
 
-	if filepath.IsAbs(cleaned) {
-		return "", cerrors.NewInvalidArgument("name", "workspace name must be relative")
-	}
-
-	if cleaned != filepath.Base(cleaned) || strings.Contains(cleaned, "..") || strings.ContainsRune(cleaned, filepath.Separator) {
-		return "", cerrors.NewInvalidArgument("name", "workspace name contains invalid path elements")
-	}
-
-	return cleaned, nil
+	return e.dirNameForID(ws.ID)
 }

@@ -39,17 +39,22 @@ func (s *Service) CreateWorkspaceWithOptions(ctx context.Context, id, branchName
 		return "", err
 	}
 
-	if err := s.withWorkspaceLock(ctx, id, true, func() error {
-		return s.createWorkspaceWithOptionsUnlocked(ctx, id, branchName, repos, opts)
-	}); err != nil {
-		return id, err
+	dirName, err := s.config.ComputeWorkspaceDir(id)
+	if err != nil {
+		return "", err
 	}
 
-	return id, nil
+	if err := s.withWorkspaceLock(ctx, id, true, func() error {
+		return s.createWorkspaceWithOptionsUnlocked(ctx, id, dirName, branchName, repos, opts)
+	}); err != nil {
+		return dirName, err
+	}
+
+	return dirName, nil
 }
 
-func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, branchName string, repos []domain.Repo, opts CreateOptions) error {
-	if err := s.ensureWorkspaceAvailable(id); err != nil {
+func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, dirName, branchName string, repos []domain.Repo, opts CreateOptions) error {
+	if err := s.ensureWorkspaceAvailable(id, dirName); err != nil {
 		return err
 	}
 
@@ -57,9 +62,10 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, br
 		ID:         id,
 		BranchName: branchName,
 		Repos:      repos,
+		DirName:    dirName,
 	}
 
-	if err := s.executeWorkspaceCreate(ctx, ws, repos); err != nil {
+	if err := s.executeWorkspaceCreate(ctx, ws, repos, dirName); err != nil {
 		return err
 	}
 
@@ -67,7 +73,7 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, br
 	s.cache.Invalidate(id)
 
 	if opts.Template != nil && len(opts.Template.SetupCommands) > 0 {
-		setupFailed := s.runTemplateSetupCommands(ctx, id, opts.Template.SetupCommands)
+		setupFailed := s.runTemplateSetupCommands(ctx, id, dirName, opts.Template.SetupCommands)
 		if setupFailed {
 			ws.SetupIncomplete = true
 			if err := s.wsEngine.Save(ctx, ws); err != nil {
@@ -80,7 +86,7 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, br
 
 	// Run post_create hooks
 	//nolint:contextcheck // Hooks manage their own timeout context per-hook
-	if err := s.runPostCreateHooks(id, id, branchName, repos, opts); err != nil {
+	if err := s.runPostCreateHooks(id, dirName, branchName, repos, opts); err != nil {
 		// Hook failures don't rollback the workspace (per design.md)
 		// But we return the error if not continuing on hook errors
 		return err
@@ -89,12 +95,12 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, br
 	return nil
 }
 
-func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID string, commands []string) bool {
+func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID, dirName string, commands []string) bool {
 	if len(commands) == 0 {
 		return false
 	}
 
-	workspacePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID)
+	workspacePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
 	failed := false
 
 	for i, command := range commands {
@@ -165,53 +171,24 @@ func (s *Service) resolveCreateBranchName(id, branchName string) (string, error)
 	return branchName, nil
 }
 
-func (s *Service) executeWorkspaceCreate(ctx context.Context, ws domain.Workspace, repos []domain.Repo) error {
-	workspacePath := filepath.Join(s.config.GetWorkspacesRoot(), ws.ID)
+func (s *Service) executeWorkspaceCreate(ctx context.Context, ws domain.Workspace, repos []domain.Repo, dirName string) error {
 	op := NewOperation(s.logger)
 	op.AddStep(func() error {
-		if err := os.Mkdir(workspacePath, 0o750); err != nil {
-			if os.IsExist(err) {
-				entries, readErr := os.ReadDir(workspacePath)
-				if readErr != nil {
-					return cerrors.NewIOFailed("read workspace directory", readErr)
-				}
-
-				if len(entries) == 0 {
-					return nil
-				}
-
-				if len(entries) == 1 && entries[0].Name() == lockFileName {
-					return nil
-				}
-
-				return cerrors.NewWorkspaceExists(ws.ID)
-			}
-
-			return cerrors.NewIOFailed("create workspace directory", err)
-		}
-
-		return nil
-	}, func() error {
-		if err := os.RemoveAll(workspacePath); err != nil {
-			return cerrors.NewIOFailed("remove workspace directory", err)
-		}
-
-		return nil
-	})
-	op.AddStep(func() error {
-		return s.cloneWorkspaceRepos(ctx, repos, ws.ID, ws.BranchName)
-	}, func() error {
-		return s.removeWorkspaceRepoWorktrees(ctx, ws.ID, repos)
-	})
-	op.AddStep(func() error {
 		return s.wsEngine.Create(ctx, ws)
-	}, nil)
+	}, func() error {
+		return s.wsEngine.Delete(ctx, ws.ID)
+	})
+	op.AddStep(func() error {
+		return s.cloneWorkspaceRepos(ctx, repos, dirName, ws.BranchName)
+	}, func() error {
+		return s.removeWorkspaceRepoWorktrees(ctx, dirName, repos)
+	})
 
 	return op.Execute()
 }
 
-func (s *Service) ensureWorkspaceAvailable(workspaceID string) error {
-	metaPath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, "workspace.yaml")
+func (s *Service) ensureWorkspaceAvailable(workspaceID, dirName string) error {
+	metaPath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, "workspace.yaml")
 	if _, err := os.Stat(metaPath); err == nil {
 		return cerrors.NewWorkspaceExists(workspaceID)
 	} else if err != nil && !os.IsNotExist(err) {
@@ -221,7 +198,7 @@ func (s *Service) ensureWorkspaceAvailable(workspaceID string) error {
 	return nil
 }
 
-func (s *Service) removeWorkspaceRepoWorktrees(ctx context.Context, workspaceID string, repos []domain.Repo) error {
+func (s *Service) removeWorkspaceRepoWorktrees(ctx context.Context, dirName string, repos []domain.Repo) error {
 	if s.gitEngine == nil {
 		return cerrors.NewInternalError("git engine not initialized", nil)
 	}
@@ -229,7 +206,7 @@ func (s *Service) removeWorkspaceRepoWorktrees(ctx context.Context, workspaceID 
 	var errs []error
 
 	for _, repo := range repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), workspaceID, repo.Name)
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		if err := s.gitEngine.RemoveWorktree(ctx, repo.Name, worktreePath); err != nil {
 			errs = append(errs, err)
 		}

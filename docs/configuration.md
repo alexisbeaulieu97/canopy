@@ -132,6 +132,9 @@ The `workspace_naming` setting uses Go templates:
 
 Examples:
 - `{{.ID}}` → `PROJ-123`
+- `ws-{{.ID}}` → `ws-PROJ-123`
+
+The rendered name must be a valid directory name (no path separators or traversal sequences).
 
 ## Workspace Patterns
 

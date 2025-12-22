@@ -113,7 +113,7 @@ func New(debug bool, opts ...Option) (*App, error) {
 	// Use provided workspace storage or create default
 	wsEngine := options.wsStorage
 	if wsEngine == nil {
-		wsEngine = storage.New(cfg.GetWorkspacesRoot(), cfg.GetClosedRoot())
+		wsEngine = storage.NewWithNaming(cfg.GetWorkspacesRoot(), cfg.GetClosedRoot(), cfg.ComputeWorkspaceDir)
 	}
 
 	return &App{

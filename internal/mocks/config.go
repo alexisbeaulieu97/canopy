@@ -7,6 +7,7 @@ import (
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
+	"github.com/alexisbeaulieu97/canopy/internal/validation"
 )
 
 // Compile-time check that MockConfigProvider implements ports.ConfigProvider.
@@ -21,6 +22,7 @@ type MockConfigProvider struct {
 	GetClosedRootFunc         func() string
 	GetCloseDefaultFunc       func() string
 	GetWorkspaceNamingFunc    func() string
+	ComputeWorkspaceDirFunc   func(id string) (string, error)
 	GetStaleThresholdDaysFunc func() int
 	GetParallelWorkersFunc    func() int
 	GetLockTimeoutFunc        func() time.Duration
@@ -126,6 +128,15 @@ func (m *MockConfigProvider) GetWorkspaceNaming() string {
 	}
 
 	return m.WorkspaceNaming
+}
+
+// ComputeWorkspaceDir calls the mock function if set, otherwise returns the normalized ID.
+func (m *MockConfigProvider) ComputeWorkspaceDir(id string) (string, error) {
+	if m.ComputeWorkspaceDirFunc != nil {
+		return m.ComputeWorkspaceDirFunc(id)
+	}
+
+	return validation.NormalizeWorkspaceDirName(id)
 }
 
 // GetStaleThresholdDays calls the mock function if set, otherwise returns StaleThresholdDays.

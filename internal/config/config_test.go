@@ -536,6 +536,38 @@ func TestValidateValues(t *testing.T) {
 			errType:   cerrors.ConfigValidation,
 		},
 		{
+			name: "invalid workspace naming template",
+			cfg: &Config{
+				ProjectsRoot:       "/tmp/projects",
+				WorkspacesRoot:     "/tmp/workspaces",
+				ClosedRoot:         "/tmp/closed",
+				CloseDefault:       "delete",
+				WorkspaceNaming:    "{{.ID",
+				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
+			},
+			wantErr:   true,
+			errSubstr: "workspace_naming",
+			errType:   cerrors.ConfigValidation,
+		},
+		{
+			name: "invalid workspace naming output",
+			cfg: &Config{
+				ProjectsRoot:       "/tmp/projects",
+				WorkspacesRoot:     "/tmp/workspaces",
+				ClosedRoot:         "/tmp/closed",
+				CloseDefault:       "delete",
+				WorkspaceNaming:    "{{.ID}}/invalid",
+				StaleThresholdDays: 14,
+				Git:                validGitConfig(),
+				ParallelWorkers:    DefaultParallelWorkers,
+			},
+			wantErr:   true,
+			errSubstr: "workspace_naming",
+			errType:   cerrors.ConfigValidation,
+		},
+		{
 			name: "empty close_default defaults to delete",
 			cfg: &Config{
 				ProjectsRoot:       "/tmp/projects",
@@ -771,6 +803,57 @@ func TestValidateValues(t *testing.T) {
 				t.Errorf("ValidateValues() unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestComputeWorkspaceDir(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		WorkspaceNaming: "ws-{{.ID}}",
+	}
+
+	dirName, err := cfg.ComputeWorkspaceDir("PROJ-123")
+	if err != nil {
+		t.Fatalf("ComputeWorkspaceDir failed: %v", err)
+	}
+
+	if dirName != "ws-PROJ-123" {
+		t.Fatalf("ComputeWorkspaceDir returned %q, want %q", dirName, "ws-PROJ-123")
+	}
+}
+
+func TestComputeWorkspaceDirInvalidTemplate(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		WorkspaceNaming: "{{.ID",
+	}
+
+	_, err := cfg.ComputeWorkspaceDir("PROJ-123")
+	if err == nil {
+		t.Fatal("expected error for invalid template")
+	}
+
+	if !errors.Is(err, cerrors.ConfigValidation) {
+		t.Fatalf("expected config validation error, got %v", err)
+	}
+}
+
+func TestComputeWorkspaceDirInvalidOutput(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		WorkspaceNaming: "{{.ID}}/invalid",
+	}
+
+	_, err := cfg.ComputeWorkspaceDir("PROJ-123")
+	if err == nil {
+		t.Fatal("expected error for invalid output")
+	}
+
+	if !strings.Contains(err.Error(), "workspace_naming") {
+		t.Fatalf("expected workspace_naming error, got %v", err)
 	}
 }
 
