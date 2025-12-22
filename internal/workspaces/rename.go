@@ -15,7 +15,8 @@ import (
 // If force is true, an existing workspace with the new ID will be deleted first.
 func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, renameBranch, force bool) error {
 	if s.lockManager == nil {
-		return s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
+		_, err := s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
+		return err
 	}
 
 	handle, err := s.lockManager.Acquire(ctx, oldID, false)
@@ -23,14 +24,9 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 		return s.handleClosedWorkspaceError(ctx, oldID, err)
 	}
 
-	renameErr := s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
-	if renameErr == nil {
-		newDirName, dirErr := s.config.ComputeWorkspaceDir(newID)
-		if dirErr == nil {
-			handle.UpdateLocation(newID, filepath.Join(s.config.GetWorkspacesRoot(), newDirName, lockFileName))
-		} else if s.logger != nil {
-			s.logger.Warn("Failed to compute workspace directory after rename", "workspace_id", newID, "error", dirErr)
-		}
+	newDirName, renameErr := s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
+	if renameErr == nil && newDirName != "" {
+		handle.UpdateLocation(newID, filepath.Join(s.config.GetWorkspacesRoot(), newDirName, lockFileName))
 	}
 
 	releaseErr := handle.Release()
@@ -45,38 +41,38 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 	return nil
 }
 
-func (s *Service) renameWorkspaceUnlocked(ctx context.Context, oldID, newID string, renameBranch, force bool) error {
+func (s *Service) renameWorkspaceUnlocked(ctx context.Context, oldID, newID string, renameBranch, force bool) (string, error) {
 	workspace, dirName, err := s.findWorkspace(ctx, oldID)
 	if err != nil {
-		return s.handleClosedWorkspaceError(ctx, oldID, err)
+		return "", s.handleClosedWorkspaceError(ctx, oldID, err)
 	}
 
 	if err := s.validateRenameInputs(newID); err != nil {
-		return err
+		return "", err
 	}
 
 	if oldID == newID {
-		return cerrors.NewInvalidArgument("new_id", "cannot rename workspace to the same ID")
+		return "", cerrors.NewInvalidArgument("new_id", "cannot rename workspace to the same ID")
 	}
 
 	if err := s.ensureTargetAvailableOrDelete(ctx, newID, force); err != nil {
-		return err
+		return "", err
 	}
 
 	shouldRenameBranch := renameBranch && workspace.BranchName == oldID
 
 	newDirName, err := s.config.ComputeWorkspaceDir(newID)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if err := s.executeRename(ctx, *workspace, oldID, newID, dirName, newDirName, shouldRenameBranch); err != nil {
-		return err
+		return "", err
 	}
 
 	s.invalidateWorkspaceCache(oldID, newID)
 
-	return nil
+	return newDirName, nil
 }
 
 // validateRenameInputs validates the inputs for renaming a workspace.

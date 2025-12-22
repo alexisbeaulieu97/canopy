@@ -38,6 +38,8 @@ func (s *Service) ListWorkspaces(ctx context.Context) ([]domain.Workspace, error
 			if dirErr != nil {
 				return nil, dirErr
 			}
+
+			w.DirName = dirName
 		}
 
 		wsPath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)

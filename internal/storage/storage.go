@@ -62,7 +62,11 @@ func (e *Engine) resolveDirectory(id string) (string, error) {
 func (e *Engine) resolveDirectoryFromTemplate(id string) (string, bool, error) {
 	dirName, err := e.dirNameForID(id)
 	if err != nil {
-		return "", false, cerrors.NewWorkspaceNotFound(id)
+		if isInvalidWorkspaceID(err) {
+			return "", false, nil
+		}
+
+		return "", false, err
 	}
 
 	path := filepath.Join(e.WorkspacesRoot, dirName)
@@ -77,6 +81,15 @@ func (e *Engine) resolveDirectoryFromTemplate(id string) (string, bool, error) {
 	}
 
 	return "", false, nil
+}
+
+func isInvalidWorkspaceID(err error) bool {
+	var canopyErr *cerrors.CanopyError
+	if errors.As(err, &canopyErr) {
+		return canopyErr.Code == cerrors.ErrInvalidArgument
+	}
+
+	return false
 }
 
 func (e *Engine) resolveDirectoryByScan(id string) (string, error) {
