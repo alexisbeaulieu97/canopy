@@ -29,6 +29,10 @@ var (
 
 // ColorEnabled returns true when color output should be used.
 func ColorEnabled() bool {
+	if val, ok := os.LookupEnv("NO_COLOR"); ok && strings.TrimSpace(val) != "" {
+		return false
+	}
+
 	if val, ok := os.LookupEnv(colorEnv); ok {
 		switch strings.ToLower(strings.TrimSpace(val)) {
 		case "0", "false", "no":
@@ -36,10 +40,6 @@ func ColorEnabled() bool {
 		default:
 			return true
 		}
-	}
-
-	if _, ok := os.LookupEnv("NO_COLOR"); ok {
-		return false
 	}
 
 	return term.IsTerminal(int(os.Stdout.Fd()))
@@ -60,9 +60,24 @@ func Column(text string, width int, style lipgloss.Style) string {
 		return text
 	}
 
+	truncated := truncateText(text, width)
+
 	if !ColorEnabled() {
-		return fmt.Sprintf("%-*s", width, text)
+		return fmt.Sprintf("%-*s", width, truncated)
 	}
 
-	return style.Width(width).Render(text)
+	return style.Inline(true).MaxWidth(width).Width(width).Render(truncated)
+}
+
+func truncateText(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+
+	runes := []rune(text)
+	if len(runes) <= width {
+		return text
+	}
+
+	return string(runes[:width])
 }
