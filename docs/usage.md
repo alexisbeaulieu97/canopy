@@ -169,6 +169,12 @@ canopy workspace close PROJ-123 --hooks-only
 
 # Force close even with uncommitted changes or unpushed commits
 canopy workspace close PROJ-123 --force
+
+# Close all workspaces matching a pattern (prompts for confirmation)
+canopy workspace close --pattern "^PROJ-"
+
+# Close all workspaces (equivalent to --pattern ".*")
+canopy workspace close --all --force
 ```
 
 #### Safety Checks
@@ -210,6 +216,9 @@ canopy workspace branch PROJ-123 develop
 
 # Create and switch to new branch
 canopy workspace branch PROJ-123 feature/new --create
+
+# Switch branch for all matching workspaces
+canopy workspace branch --pattern "^PROJ-" develop
 ```
 
 ### Syncing Workspaces
@@ -225,7 +234,12 @@ canopy workspace sync PROJ-123 --timeout 30s
 
 # Output JSON for automation
 canopy workspace sync PROJ-123 --json
+
+# Sync all workspaces matching a pattern
+canopy workspace sync --pattern "^FEATURE-"
 ```
+
+Bulk sync continues across workspaces and returns a non-zero exit code if any workspace fails.
 
 The output displays a table with:
 - **REPOSITORY**: Name of the repositories
