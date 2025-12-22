@@ -218,6 +218,19 @@ golangci-lint run --fix
 
 Example:
 
+## CLI Color Scheme
+
+Canopy CLI output uses centralized styles from `internal/output/colors.go`:
+
+- **Accent**: cyan for headers and emphasis
+- **Info**: blue for informational highlights
+- **Success**: green for successful outcomes
+- **Warning**: amber for warnings and dry-run labels
+- **Error**: red for errors and failures
+
+Color output is disabled automatically when not in a TTY or when `NO_COLOR` is set.
+You can override with `CANOPY_COLOR=1` to force color or `CANOPY_COLOR=0` to disable.
+
 ```go
 // CreateWorkspace creates a new workspace with the given ID and repositories.
 // It creates the workspace directory, clones all repositories, and runs

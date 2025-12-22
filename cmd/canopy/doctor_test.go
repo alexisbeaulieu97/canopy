@@ -151,22 +151,14 @@ func TestStatusSymbol(t *testing.T) {
 	}
 }
 
-func TestSeverityColor(t *testing.T) {
-	tests := []struct {
-		severity CheckSeverity
-		expected string
-	}{
-		{SeverityError, "\033[31m"},
-		{SeverityWarning, "\033[33m"},
-		{SeverityInfo, "\033[36m"},
-		{"unknown", "\033[0m"},
-	}
+func TestSeverityStyleNoColor(t *testing.T) {
+	t.Setenv("CANOPY_COLOR", "0")
 
-	for _, tt := range tests {
-		got := severityColor(tt.severity)
-		if got != tt.expected {
-			t.Errorf("severityColor(%q) = %q, want %q", tt.severity, got, tt.expected)
-		}
+	style := severityStyle(SeverityError)
+
+	got := style("test")
+	if got != "test" {
+		t.Errorf("severityStyle should return unstyled text when color is disabled, got %q", got)
 	}
 }
 

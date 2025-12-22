@@ -52,7 +52,7 @@ var templateListCmd = &cobra.Command{
 			if description == "" {
 				description = "-"
 			}
-			_, _ = fmt.Fprintf(w, "\033[1;36m%s\033[0m\t%s\t%s\n", name, repos, description)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", output.Colorize(output.AccentStyle, name), repos, description)
 		}
 		_ = w.Flush()
 

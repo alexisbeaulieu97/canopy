@@ -2,14 +2,22 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
+
+// Formatter provides consistent success/error formatting.
+type Formatter interface {
+	PrintSuccess(data interface{}) error
+	PrintError(err error) error
+}
 
 // Response is the standard JSON envelope for all CLI output.
 type Response struct {
@@ -23,6 +31,7 @@ type ErrorInfo struct {
 	Code    string            `json:"code"`
 	Message string            `json:"message"`
 	Context map[string]string `json:"context,omitempty"`
+	Details string            `json:"details,omitempty"`
 }
 
 // JSONPrinter handles JSON output formatting.
@@ -81,10 +90,16 @@ func errorToInfo(err error) *ErrorInfo {
 
 	var canopyErr *cerrors.CanopyError
 	if ok := errors.As(err, &canopyErr); ok {
+		var details string
+		if canopyErr.Cause != nil {
+			details = canopyErr.Cause.Error()
+		}
+
 		return &ErrorInfo{
 			Code:    string(canopyErr.Code),
 			Message: canopyErr.Message,
 			Context: canopyErr.Context,
+			Details: details,
 		}
 	}
 
@@ -103,6 +118,18 @@ func PrintJSON(v interface{}) error {
 // PrintErrorJSON writes an error as structured JSON to stdout.
 func PrintErrorJSON(err error) error {
 	return NewJSONPrinter().PrintError(err)
+}
+
+// FormatErrorJSON returns a standardized JSON error string.
+func FormatErrorJSON(err error) string {
+	var buf bytes.Buffer
+
+	printer := NewJSONPrinter().WithWriter(&buf)
+	if printErr := printer.PrintError(err); printErr != nil {
+		return fmt.Sprintf(`{"success":false,"error":{"code":"%s","message":%q}}`, cerrors.ErrInternalError, err.Error())
+	}
+
+	return strings.TrimSpace(buf.String())
 }
 
 // FormatBytes formats a byte count as a human-readable string (B, KB, MB, GB).
