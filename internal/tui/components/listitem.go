@@ -28,6 +28,7 @@ type WorkspaceSummary struct {
 	DirtyRepos    int
 	UnpushedRepos int
 	BehindRepos   int
+	ErrorRepos    int
 }
 
 // Title returns the workspace ID as the list item title.
@@ -51,6 +52,10 @@ func SummarizeStatus(status *domain.WorkspaceStatus) WorkspaceSummary {
 	}
 
 	for _, repo := range status.Repos {
+		if repo.Error != "" {
+			summary.ErrorRepos++
+		}
+
 		if repo.IsDirty {
 			summary.DirtyRepos++
 		}
@@ -125,6 +130,7 @@ func (d WorkspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 		DirtyRepos:    wsItem.Summary.DirtyRepos,
 		UnpushedRepos: wsItem.Summary.UnpushedRepos,
 		BehindRepos:   wsItem.Summary.BehindRepos,
+		ErrorRepos:    wsItem.Summary.ErrorRepos,
 		IsStale:       wsItem.Workspace.IsStale(d.staleThreshold),
 	})
 
@@ -145,6 +151,7 @@ func (d WorkspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 		DirtyRepos:        wsItem.Summary.DirtyRepos,
 		UnpushedRepos:     wsItem.Summary.UnpushedRepos,
 		BehindRepos:       wsItem.Summary.BehindRepos,
+		ErrorRepos:        wsItem.Summary.ErrorRepos,
 		IsStale:           wsItem.Workspace.IsStale(d.staleThreshold),
 	}).Render()
 
@@ -179,6 +186,7 @@ func (d WorkspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 			DirtyRepos:    wsItem.Summary.DirtyRepos,
 			UnpushedRepos: wsItem.Summary.UnpushedRepos,
 			BehindRepos:   wsItem.Summary.BehindRepos,
+			ErrorRepos:    wsItem.Summary.ErrorRepos,
 		}).Render()
 	}
 

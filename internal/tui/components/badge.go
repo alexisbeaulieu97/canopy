@@ -35,13 +35,14 @@ type StatusBadgeInput struct {
 	DirtyRepos    int
 	UnpushedRepos int
 	BehindRepos   int
+	ErrorRepos    int
 	IsStale       bool
 }
 
 // NewStatusBadge creates a StatusBadge based on the input health indicators.
 func NewStatusBadge(input StatusBadgeInput) StatusBadge {
 	switch {
-	case input.HasError:
+	case input.HasError || input.ErrorRepos > 0:
 		return StatusBadge{Status: HealthError, Icon: IconError, Style: StatusDirtyStyle}
 	case !input.IsLoaded:
 		return StatusBadge{Status: HealthLoading, Icon: IconLoading, Style: StatusLoadingStyle}
@@ -75,6 +76,7 @@ type BadgeSetInput struct {
 	DirtyRepos        int
 	UnpushedRepos     int
 	BehindRepos       int
+	ErrorRepos        int
 	IsStale           bool
 }
 
@@ -88,6 +90,11 @@ func NewBadgeSet(input BadgeSetInput) BadgeSet {
 
 	if input.HasError {
 		bs.badges = append(bs.badges, BadgeDirtyStyle.Render("ERROR"))
+	}
+
+	if input.ErrorRepos > 0 {
+		text := FormatCount(input.ErrorRepos, "error", "errors")
+		bs.badges = append(bs.badges, BadgeDirtyStyle.Render(text))
 	}
 
 	if orphanBadge := buildOrphanBadge(input.OrphanCount, input.OrphanCheckFailed); orphanBadge != "" {
@@ -149,15 +156,21 @@ type StatusLineInput struct {
 	DirtyRepos    int
 	UnpushedRepos int
 	BehindRepos   int
+	ErrorRepos    int
 }
 
 // NewStatusLine creates a StatusLine from the input data.
 func NewStatusLine(input StatusLineInput) StatusLine {
 	sl := StatusLine{}
 
-	if input.DirtyRepos == 0 && input.UnpushedRepos == 0 && input.BehindRepos == 0 {
+	if input.DirtyRepos == 0 && input.UnpushedRepos == 0 && input.BehindRepos == 0 && input.ErrorRepos == 0 {
 		sl.parts = append(sl.parts, StatusCleanStyle.Render("✓ All repos clean"))
 		return sl
+	}
+
+	if input.ErrorRepos > 0 {
+		sl.parts = append(sl.parts, StatusDirtyStyle.Render(
+			FormatCount(input.ErrorRepos, "error", "errors")))
 	}
 
 	if input.DirtyRepos > 0 {

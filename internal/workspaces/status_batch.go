@@ -94,6 +94,9 @@ func (s *Service) getWorkspaceStatusParallel(ctx context.Context, workspaceIDs [
 	}
 
 	err := g.Wait()
+	if err == nil && ctx.Err() != nil {
+		err = ctx.Err()
+	}
 
 	close(resultsCh)
 

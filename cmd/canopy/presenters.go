@@ -85,8 +85,13 @@ func printClosed(id string, closedAt *time.Time) {
 
 // formatRepoStatusIndicator creates a human-readable status indicator for a repo.
 func formatRepoStatusIndicator(status domain.RepoStatus) string {
-	if status.Branch == "timeout" {
-		return "[timeout]"
+	if status.Error != "" {
+		if status.Error == domain.StatusErrorTimeout {
+			return "[timeout]"
+		}
+
+		errText := strings.ReplaceAll(string(status.Error), "\n", " ")
+		return fmt.Sprintf("[error: %s]", errText)
 	}
 
 	var parts []string

@@ -262,19 +262,30 @@ func (m Model) renderDetailRepos() string {
 // renderRepoLine renders a single repository line.
 func (m Model) renderRepoLine(repo domain.RepoStatus) string {
 	var statusParts []string
+	branchLabel := repo.Branch
 
-	if repo.IsDirty {
-		statusParts = append(statusParts, statusDirtyStyle.Render("dirty"))
-	}
-
-	if repo.UnpushedCommits > 0 {
+	if repo.Error != "" {
+		errText := strings.ReplaceAll(string(repo.Error), "\n", " ")
 		statusParts = append(statusParts,
-			statusDirtyStyle.Render(fmt.Sprintf("%d unpushed", repo.UnpushedCommits)))
-	}
+			statusDirtyStyle.Render(fmt.Sprintf("error: %s", errText)))
+		branchLabel = "error"
+		if repo.Error == domain.StatusErrorTimeout {
+			branchLabel = "timeout"
+		}
+	} else {
+		if repo.IsDirty {
+			statusParts = append(statusParts, statusDirtyStyle.Render("dirty"))
+		}
 
-	if repo.BehindRemote > 0 {
-		statusParts = append(statusParts,
-			statusWarnStyle.Render(fmt.Sprintf("%d behind", repo.BehindRemote)))
+		if repo.UnpushedCommits > 0 {
+			statusParts = append(statusParts,
+				statusDirtyStyle.Render(fmt.Sprintf("%d unpushed", repo.UnpushedCommits)))
+		}
+
+		if repo.BehindRemote > 0 {
+			statusParts = append(statusParts,
+				statusWarnStyle.Render(fmt.Sprintf("%d behind", repo.BehindRemote)))
+		}
 	}
 
 	if len(statusParts) == 0 {
@@ -287,7 +298,7 @@ func (m Model) renderRepoLine(repo domain.RepoStatus) string {
 	return fmt.Sprintf("  %s %-20s %s  %s",
 		m.symbols.Repo(),
 		repo.Name,
-		subtleTextStyle.Render(fmt.Sprintf("[%s]", repo.Branch)),
+		subtleTextStyle.Render(fmt.Sprintf("[%s]", branchLabel)),
 		statusStr)
 }
 

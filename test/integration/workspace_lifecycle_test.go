@@ -270,4 +270,9 @@ func TestWorkspaceListWithStatus(t *testing.T) {
 	if !strings.Contains(out, "IsDirty") {
 		t.Errorf("JSON output should contain IsDirty field: %s", out)
 	}
+
+	// JSON should contain Error field
+	if !strings.Contains(out, "Error") {
+		t.Errorf("JSON output should contain Error field: %s", out)
+	}
 }
