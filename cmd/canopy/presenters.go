@@ -91,6 +91,7 @@ func formatRepoStatusIndicator(status domain.RepoStatus) string {
 		}
 
 		errText := strings.ReplaceAll(string(status.Error), "\n", " ")
+
 		return fmt.Sprintf("[error: %s]", errText)
 	}
 

@@ -74,6 +74,10 @@ func TestGetStatusSetsTimeoutError(t *testing.T) {
 		t.Fatalf("GetStatus failed: %v", err)
 	}
 
+	if len(status.Repos) == 0 {
+		t.Fatalf("expected at least one repo status, got 0")
+	}
+
 	repoStatus := status.Repos[0]
 	if repoStatus.Error != domain.StatusErrorTimeout {
 		t.Fatalf("expected timeout error, got %q", repoStatus.Error)

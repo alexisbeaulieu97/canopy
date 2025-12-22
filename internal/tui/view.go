@@ -262,12 +262,14 @@ func (m Model) renderDetailRepos() string {
 // renderRepoLine renders a single repository line.
 func (m Model) renderRepoLine(repo domain.RepoStatus) string {
 	var statusParts []string
+
 	branchLabel := repo.Branch
 
 	if repo.Error != "" {
 		errText := strings.ReplaceAll(string(repo.Error), "\n", " ")
 		statusParts = append(statusParts,
 			statusDirtyStyle.Render(fmt.Sprintf("error: %s", errText)))
+
 		branchLabel = "error"
 		if repo.Error == domain.StatusErrorTimeout {
 			branchLabel = "timeout"
