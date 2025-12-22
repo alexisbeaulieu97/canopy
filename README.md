@@ -91,11 +91,11 @@ See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 | `canopy workspace list` | List active workspaces |
 | `canopy workspace view <ID>` | View workspace details |
 | `canopy workspace path <ID>` | Print workspace path |
-| `canopy workspace close <ID>` | Close and optionally archive workspace |
+| `canopy workspace close [ID]` | Close a workspace (or bulk close with patterns) |
 | `canopy workspace reopen <ID>` | Restore an archived workspace |
 | `canopy workspace rename <OLD> <NEW>` | Rename a workspace |
-| `canopy workspace branch <ID> <BRANCH>` | Switch branch for all repos |
-| `canopy workspace sync <ID>` | Pull updates for all repositories |
+| `canopy workspace branch [ID] <BRANCH>` | Switch branch for all repos (or bulk switch with patterns) |
+| `canopy workspace sync [ID]` | Pull updates for all repositories (or bulk sync with patterns) |
 | `canopy workspace git <ID> <git-args...>` | Run git command across all repos |
 | `canopy workspace export <ID>` | Export workspace definition |
 | `canopy workspace import <file>` | Import workspace from file |
@@ -122,10 +122,19 @@ See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 - `--dry-run` — Preview what would be deleted
 - `--no-hooks` — Skip pre_close hooks
 - `--hooks-only` — Run pre_close hooks without closing workspace
+- `--pattern` — Close workspaces matching a regex pattern
+- `--all` — Close all workspaces (equivalent to `--pattern ".*"`)
 
 **Flags for `workspace sync`:**
 - `--timeout` — Timeout for each repository sync (default: 60s)
 - `--json` — Output in JSON format
+- `--pattern` — Sync workspaces matching a regex pattern
+- `--all` — Sync all workspaces (equivalent to `--pattern ".*"`)
+
+**Flags for `workspace branch`:**
+- `--create` — Create branch if it doesn't exist
+- `--pattern` — Switch branches for workspaces matching a regex pattern
+- `--all` — Switch branches for all workspaces (equivalent to `--pattern ".*"`)
 
 ### Repositories
 

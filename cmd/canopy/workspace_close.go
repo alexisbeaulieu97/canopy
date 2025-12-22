@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -18,11 +19,30 @@ import (
 // workspace_close.go defines the "workspace close" subcommand.
 
 var workspaceCloseCmd = &cobra.Command{
-	Use:   "close <ID>",
+	Use:   "close [ID]",
 	Short: "Close a workspace (keep metadata or delete)",
-	Args:  cobra.ExactArgs(1),
+	Args: func(cmd *cobra.Command, args []string) error {
+		pattern, _ := cmd.Flags().GetString("pattern")
+		all, _ := cmd.Flags().GetBool("all")
+		if all && pattern != "" {
+			return cerrors.NewInvalidArgument("pattern", "cannot use --pattern with --all")
+		}
+
+		if pattern != "" || all {
+			if len(args) != 0 {
+				return cerrors.NewInvalidArgument("id", "cannot provide workspace ID with --pattern or --all")
+			}
+
+			return nil
+		}
+
+		if len(args) != 1 {
+			return cerrors.NewInvalidArgument("id", "workspace ID is required")
+		}
+
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id := args[0]
 		force, _ := cmd.Flags().GetBool("force")
 		keepFlag, _ := cmd.Flags().GetBool("keep")
 		deleteFlag, _ := cmd.Flags().GetBool("delete")
@@ -31,6 +51,8 @@ var workspaceCloseCmd = &cobra.Command{
 		noHooks, _ := cmd.Flags().GetBool("no-hooks")
 		hooksOnly, _ := cmd.Flags().GetBool("hooks-only")
 		dryRunHooks, _ := cmd.Flags().GetBool("dry-run-hooks")
+		pattern, _ := cmd.Flags().GetString("pattern")
+		all, _ := cmd.Flags().GetBool("all")
 
 		if keepFlag && deleteFlag {
 			return cerrors.NewInvalidArgument("flags", "cannot use --keep and --delete together")
@@ -64,6 +86,122 @@ var workspaceCloseCmd = &cobra.Command{
 		closeOpts := workspaces.CloseOptions{
 			SkipHooks: noHooks || dryRunHooks,
 		}
+
+		if all {
+			pattern = ".*"
+		}
+
+		if pattern != "" {
+			if hooksOnly || dryRunHooks {
+				return cerrors.NewInvalidArgument("flags", "--hooks-only and --dry-run-hooks require a single workspace ID")
+			}
+
+			keepMetadata := configDefaultArchive
+			if keepFlag {
+				keepMetadata = true
+			} else if deleteFlag {
+				keepMetadata = false
+			}
+
+			matched, err := service.ListWorkspacesMatching(cmd.Context(), pattern)
+			if err != nil {
+				return err
+			}
+
+			if len(matched) == 0 {
+				output.Info("No matching workspaces found.")
+				return nil
+			}
+
+			ids := make([]string, len(matched))
+			for i, ws := range matched {
+				ids[i] = ws.ID
+			}
+
+			output.Infof("Matched %d workspaces:", len(ids))
+			for _, id := range ids {
+				output.Infof("  - %s", id)
+			}
+
+			if dryRun {
+				previews := make([]*domain.WorkspaceClosePreview, 0, len(ids))
+				for _, id := range ids {
+					preview, previewErr := service.PreviewCloseWorkspace(id, keepMetadata)
+					if previewErr != nil {
+						return previewErr
+					}
+					previews = append(previews, preview)
+				}
+
+				if jsonOutput {
+					return output.PrintJSON(map[string]interface{}{
+						"dry_run": true,
+						"preview": previews,
+					})
+				}
+
+				for _, preview := range previews {
+					printWorkspaceClosePreview(preview)
+					output.Println("")
+				}
+
+				return nil
+			}
+
+			if !force {
+				if !interactive {
+					return cerrors.NewInvalidArgument("force", "bulk close requires confirmation; rerun with --force")
+				}
+
+				reader := bufio.NewReader(os.Stdin)
+				output.Printf("Close %d workspaces? [y/N]: ", len(ids))
+				answer, readErr := reader.ReadString('\n')
+				if readErr != nil {
+					return cerrors.NewOperationCancelled("bulk close")
+				}
+
+				answer = strings.ToLower(strings.TrimSpace(answer))
+				if answer != "y" && answer != "yes" {
+					return cerrors.NewOperationCancelled("bulk close")
+				}
+			}
+
+			var (
+				successIDs []string
+				failedIDs  []string
+				firstErr   error
+			)
+
+			for i, id := range ids {
+				output.Infof("Closing workspace %s (%d/%d)", id, i+1, len(ids))
+				if keepMetadata {
+					_, err = service.CloseWorkspaceKeepMetadataWithOptions(cmd.Context(), id, force, closeOpts)
+				} else {
+					err = service.CloseWorkspaceWithOptions(cmd.Context(), id, force, closeOpts)
+				}
+
+				if err != nil {
+					if firstErr == nil {
+						firstErr = err
+					}
+					failedIDs = append(failedIDs, id)
+					output.Warnf("Failed to close workspace %s: %v", id, err)
+					continue
+				}
+
+				successIDs = append(successIDs, id)
+			}
+
+			output.Success("Bulk close completed", fmt.Sprintf("%d succeeded, %d failed", len(successIDs), len(failedIDs)))
+			if len(failedIDs) > 0 {
+				output.Warnf("Failed workspaces: %s", strings.Join(failedIDs, ", "))
+				return cerrors.NewCommandFailed("bulk close", firstErr)
+			}
+
+			return nil
+		}
+
+		id := args[0]
 
 		if hooksOnly {
 			if keepFlag || deleteFlag {
@@ -274,4 +412,6 @@ func init() {
 	workspaceCloseCmd.Flags().Bool("no-hooks", false, "Skip pre_close hooks")
 	workspaceCloseCmd.Flags().Bool("hooks-only", false, "Run pre_close hooks without closing the workspace")
 	workspaceCloseCmd.Flags().Bool("dry-run-hooks", false, "Preview pre_close hooks without executing them")
+	workspaceCloseCmd.Flags().String("pattern", "", "Close workspaces matching a regex pattern")
+	workspaceCloseCmd.Flags().Bool("all", false, "Close all workspaces (equivalent to --pattern \".*\")")
 }
