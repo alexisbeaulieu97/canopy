@@ -56,7 +56,7 @@ func (s *Service) closeWorkspaceWithOptionsUnlocked(ctx context.Context, workspa
 	}
 
 	// Remove worktrees from canonical repos after successful deletion
-	s.removeWorkspaceWorktrees(targetWorkspace, dirName)
+	s.removeWorkspaceWorktrees(ctx, targetWorkspace, dirName)
 
 	// Invalidate cache after workspace deletion
 	s.cache.Invalidate(workspaceID)
@@ -126,7 +126,7 @@ func (s *Service) closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx context.Cont
 	}
 
 	// Remove worktrees from canonical repos after successful deletion
-	s.removeWorkspaceWorktrees(targetWorkspace, dirName)
+	s.removeWorkspaceWorktrees(ctx, targetWorkspace, dirName)
 
 	// Invalidate cache after workspace deletion
 	s.cache.Invalidate(workspaceID)
@@ -169,8 +169,8 @@ func (s *Service) executePreCloseHooks(workspace *domain.Workspace, workspaceID,
 }
 
 // PreviewCloseWorkspace returns a preview of what would happen when closing a workspace.
-func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (*domain.WorkspaceClosePreview, error) {
-	targetWorkspace, dirName, err := s.findWorkspace(context.Background(), workspaceID)
+func (s *Service) PreviewCloseWorkspace(ctx context.Context, workspaceID string, keepMetadata bool) (*domain.WorkspaceClosePreview, error) {
+	targetWorkspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (s *Service) PreviewCloseWorkspace(workspaceID string, keepMetadata bool) (
 		if s.gitEngine != nil {
 			worktreePath := filepath.Join(wsPath, r.Name)
 
-			isDirty, unpushed, _, _, statusErr := s.gitEngine.Status(context.Background(), worktreePath)
+			isDirty, unpushed, _, _, statusErr := s.gitEngine.Status(ctx, worktreePath)
 			if statusErr != nil {
 				if s.logger != nil {
 					s.logger.Debug("Failed to check repo status for preview",
@@ -259,16 +259,19 @@ func (s *Service) ensureWorkspaceClean(ctx context.Context, workspace *domain.Wo
 // removeWorkspaceWorktrees removes all worktrees from canonical repos for a workspace.
 // This is called during workspace close to properly clean up git worktree references.
 // Errors are logged but not returned since the workspace is being deleted anyway.
-func (s *Service) removeWorkspaceWorktrees(workspace *domain.Workspace, dirName string) {
+func (s *Service) removeWorkspaceWorktrees(ctx context.Context, workspace *domain.Workspace, dirName string) {
 	if s.gitEngine == nil {
 		return
 	}
 
 	for _, repo := range workspace.Repos {
+		if ctx.Err() != nil {
+			return
+		}
+
 		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
-		//nolint:contextcheck // Using background context since this is cleanup during close
-		if err := s.gitEngine.RemoveWorktree(context.Background(), repo.Name, worktreePath); err != nil {
+		if err := s.gitEngine.RemoveWorktree(ctx, repo.Name, worktreePath); err != nil {
 			if s.logger != nil {
 				s.logger.Warn("Failed to remove worktree from canonical repo",
 					"repo", repo.Name,
@@ -278,8 +281,7 @@ func (s *Service) removeWorkspaceWorktrees(workspace *domain.Workspace, dirName 
 		}
 
 		// Prune stale references in case the worktree directory was already removed.
-		//nolint:contextcheck // Using background context since this is cleanup during close
-		if err := s.gitEngine.PruneWorktrees(context.Background(), repo.Name); err != nil {
+		if err := s.gitEngine.PruneWorktrees(ctx, repo.Name); err != nil {
 			if s.logger != nil {
 				s.logger.Warn("Failed to prune worktrees for canonical repo",
 					"repo", repo.Name,

@@ -68,7 +68,7 @@ var workspaceNewCmd = &cobra.Command{
 				return cerrors.NewInvalidArgument("flags", "--hooks-only cannot be combined with --print-path")
 			}
 
-			if err := service.RunHooks(id, workspaces.HookPhasePostCreate, false); err != nil {
+			if err := service.RunHooks(cmd.Context(), id, workspaces.HookPhasePostCreate, false); err != nil {
 				return err
 			}
 
@@ -123,7 +123,7 @@ var workspaceNewCmd = &cobra.Command{
 		workspacePath := filepath.Join(cfg.GetWorkspacesRoot(), dirName)
 
 		if dryRunHooks {
-			previews, err := service.PreviewHooks(id, workspaces.HookPhasePostCreate)
+			previews, err := service.PreviewHooks(cmd.Context(), id, workspaces.HookPhasePostCreate)
 			if err != nil {
 				return err
 			}

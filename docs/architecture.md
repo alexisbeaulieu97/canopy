@@ -204,6 +204,14 @@ type WorkspaceStorage interface {
         └── workspace.yaml
 ```
 
+## Parallel Execution
+
+Canopy uses a shared `ParallelExecutor` helper for bounded concurrency in workspace and repository operations. The executor:
+
+- Respects the `parallel_workers` configuration setting (default: 4).
+- Propagates caller contexts for cancellation and timeouts.
+- Supports both fail-fast (cancel on first error) and continue-on-error behavior, depending on the operation.
+
 ## Git Worktree Architecture
 
 Canopy uses **true git worktrees** to share git objects between the canonical repository and workspace checkouts. This provides:

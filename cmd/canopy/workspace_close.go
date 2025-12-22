@@ -126,7 +126,7 @@ var workspaceCloseCmd = &cobra.Command{
 			if dryRun {
 				previews := make([]*domain.WorkspaceClosePreview, 0, len(ids))
 				for _, id := range ids {
-					preview, previewErr := service.PreviewCloseWorkspace(id, keepMetadata)
+					preview, previewErr := service.PreviewCloseWorkspace(cmd.Context(), id, keepMetadata)
 					if previewErr != nil {
 						return previewErr
 					}
@@ -216,7 +216,7 @@ var workspaceCloseCmd = &cobra.Command{
 				return cerrors.NewInvalidArgument("flags", "--hooks-only cannot be combined with --json")
 			}
 
-			if err := service.RunHooks(id, workspaces.HookPhasePreClose, false); err != nil {
+			if err := service.RunHooks(cmd.Context(), id, workspaces.HookPhasePreClose, false); err != nil {
 				return err
 			}
 
@@ -226,7 +226,7 @@ var workspaceCloseCmd = &cobra.Command{
 
 		var hookPreviews []domain.HookCommandPreview
 		if dryRunHooks {
-			hookPreviews, err = service.PreviewHooks(id, workspaces.HookPhasePreClose)
+			hookPreviews, err = service.PreviewHooks(cmd.Context(), id, workspaces.HookPhasePreClose)
 			if err != nil {
 				return err
 			}
@@ -242,7 +242,7 @@ var workspaceCloseCmd = &cobra.Command{
 
 		// Handle dry-run mode.
 		if dryRun {
-			preview, err := service.PreviewCloseWorkspace(id, keepMetadata)
+			preview, err := service.PreviewCloseWorkspace(cmd.Context(), id, keepMetadata)
 			if err != nil {
 				return err
 			}

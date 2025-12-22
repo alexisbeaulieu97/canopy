@@ -75,7 +75,7 @@ var (
 				return err
 			}
 
-			previews, err := app.Service.PreviewHooks(workspaceID, phase)
+			previews, err := app.Service.PreviewHooks(cmd.Context(), workspaceID, phase)
 			if err != nil {
 				return err
 			}

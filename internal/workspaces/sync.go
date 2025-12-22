@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -29,57 +28,16 @@ func (s *Service) SyncWorkspace(ctx context.Context, id string, opts SyncOptions
 			opts.Timeout = 60 * time.Second // Default timeout
 		}
 
-		results := make([]domain.RepoSyncStatus, len(ws.Repos))
-
-		var (
-			wg sync.WaitGroup
-			mu sync.Mutex
-		)
-
-		numWorkers := s.config.GetParallelWorkers()
-		if numWorkers <= 0 {
-			numWorkers = 1
+		executor := NewParallelExecutor(s.config.GetParallelWorkers())
+		results, err := ParallelMap(ctx, executor, len(ws.Repos), func(runCtx context.Context, index int) (domain.RepoSyncStatus, error) {
+			repo := ws.Repos[index]
+			return s.syncRepo(runCtx, dirName, repo, opts.Timeout), nil
+		}, ParallelOptions{ContinueOnError: true})
+		if err != nil {
+			return err
 		}
 
-		reposChan := make(chan struct {
-			index int
-			repo  domain.Repo
-		}, len(ws.Repos))
-
-		for i, repo := range ws.Repos {
-			reposChan <- struct {
-				index int
-				repo  domain.Repo
-			}{i, repo}
-		}
-
-		close(reposChan)
-
-		if numWorkers > len(ws.Repos) {
-			numWorkers = len(ws.Repos)
-		}
-
-		for w := 0; w < numWorkers; w++ {
-			wg.Add(1)
-
-			go func() {
-				defer wg.Done()
-
-				for r := range reposChan {
-					repoResult := s.syncRepo(ctx, dirName, r.repo, opts.Timeout)
-
-					mu.Lock()
-
-					results[r.index] = repoResult
-
-					mu.Unlock()
-				}
-			}()
-		}
-
-		wg.Wait()
-
-		result = s.aggregateSyncResults(id, results)
+		result = s.aggregateSyncResults(id, ExtractValues(results))
 
 		return nil
 	}); err != nil {

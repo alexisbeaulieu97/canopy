@@ -655,7 +655,7 @@ func TestPreviewCloseWorkspace(t *testing.T) {
 	}
 
 	// Test preview
-	preview, err := deps.svc.PreviewCloseWorkspace("TEST-PREVIEW", true)
+	preview, err := deps.svc.PreviewCloseWorkspace(context.Background(), "TEST-PREVIEW", true)
 	if err != nil {
 		t.Fatalf("PreviewCloseWorkspace failed: %v", err)
 	}
@@ -686,7 +686,7 @@ func TestPreviewCloseWorkspace(t *testing.T) {
 func TestPreviewCloseWorkspaceNonexistent(t *testing.T) {
 	deps := newTestService(t)
 
-	_, err := deps.svc.PreviewCloseWorkspace("NONEXISTENT", false)
+	_, err := deps.svc.PreviewCloseWorkspace(context.Background(), "NONEXISTENT", false)
 	if err == nil {
 		t.Fatalf("expected error when previewing nonexistent workspace")
 	}
@@ -1300,7 +1300,7 @@ func TestService_RunHooksHooksOnly(t *testing.T) {
 	logger := logging.New(false)
 	svc := NewService(mockConfig, mocks.NewMockGitOperations(), mockStorage, logger)
 
-	if err := svc.RunHooks("HOOKS-1", HookPhasePostCreate, false); err != nil {
+	if err := svc.RunHooks(context.Background(), "HOOKS-1", HookPhasePostCreate, false); err != nil {
 		t.Fatalf("RunHooks post_create failed: %v", err)
 	}
 
@@ -1313,7 +1313,7 @@ func TestService_RunHooksHooksOnly(t *testing.T) {
 		t.Fatalf("post_create hook did not run, got %q", string(postData))
 	}
 
-	if err := svc.RunHooks("HOOKS-1", HookPhasePreClose, false); err != nil {
+	if err := svc.RunHooks(context.Background(), "HOOKS-1", HookPhasePreClose, false); err != nil {
 		t.Fatalf("RunHooks pre_close failed: %v", err)
 	}
 

@@ -5,16 +5,12 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"sync"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
-
-// defaultMaxParallel is the maximum number of parallel git operations.
-const defaultMaxParallel = 8
 
 // GitService defines the interface for git operations on workspaces.
 type GitService interface {
@@ -152,98 +148,39 @@ func (s *WorkspaceGitService) runGitSequential(ctx context.Context, workspace *d
 }
 
 func (s *WorkspaceGitService) runGitParallel(ctx context.Context, workspace *domain.Workspace, dirName string, args []string, continueOnError bool) ([]RepoGitResult, error) {
-	results := make([]RepoGitResult, len(workspace.Repos))
+	executor := NewParallelExecutor(s.config.GetParallelWorkers())
+	results, err := ParallelMap(ctx, executor, len(workspace.Repos), func(runCtx context.Context, index int) (RepoGitResult, error) {
+		repo := workspace.Repos[index]
+		if runCtx.Err() != nil {
+			ctxErr := cerrors.NewContextError(runCtx, "git command", repo.Name)
+			return RepoGitResult{RepoName: repo.Name, Error: ctxErr}, runCtx.Err()
+		}
 
-	var wg sync.WaitGroup
+		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		result := RepoGitResult{RepoName: repo.Name}
 
-	// Bounded worker pool to avoid exhausting resources for large workspaces
-	sem := make(chan struct{}, defaultMaxParallel)
-
-	// Create a cancellable context for goroutines
-	cancelCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// Track the first error for early termination
-	var (
-		firstErr     error
-		firstErrOnce sync.Once
-	)
-
-	for i, repo := range workspace.Repos {
-		wg.Add(1)
-
-		go func(idx int, r domain.Repo) {
-			defer wg.Done()
-
-			// Check if context is cancelled before acquiring semaphore
-			select {
-			case <-cancelCtx.Done():
-				ctxErr := cerrors.NewContextError(cancelCtx, "git command", r.Name)
-				results[idx] = RepoGitResult{
-					RepoName: r.Name,
-					Error:    ctxErr,
-				}
-
-				// Propagate cancellation error to caller if not continuing on error
-				if !continueOnError {
-					firstErrOnce.Do(func() {
-						firstErr = ctxErr
-					})
-				}
-
-				return
-			case sem <- struct{}{}:
+		cmdResult, cmdErr := s.gitEngine.RunCommand(runCtx, worktreePath, args...)
+		if cmdErr != nil {
+			result.Error = cmdErr
+			if continueOnError {
+				return result, nil
 			}
 
-			defer func() { <-sem }()
+			return result, cmdErr
+		}
 
-			worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, r.Name)
+		result.Stdout = cmdResult.Stdout
+		result.Stderr = cmdResult.Stderr
+		result.ExitCode = cmdResult.ExitCode
 
-			result := RepoGitResult{
-				RepoName: r.Name,
-			}
+		if result.ExitCode != 0 && !continueOnError {
+			return result, cerrors.NewCommandFailed(fmt.Sprintf("git in repo %s", repo.Name), fmt.Errorf("exit code %d", result.ExitCode))
+		}
 
-			cmdResult, err := s.gitEngine.RunCommand(cancelCtx, worktreePath, args...)
-			if err != nil {
-				result.Error = err
-				results[idx] = result
+		return result, nil
+	}, ParallelOptions{ContinueOnError: continueOnError})
 
-				// Cancel other goroutines on first error if not continuing
-				if !continueOnError {
-					firstErrOnce.Do(func() {
-						firstErr = err
-
-						cancel()
-					})
-				}
-
-				return
-			}
-
-			result.Stdout = cmdResult.Stdout
-			result.Stderr = cmdResult.Stderr
-			result.ExitCode = cmdResult.ExitCode
-			results[idx] = result
-
-			// Also cancel on non-zero exit code if not continuing
-			if result.ExitCode != 0 && !continueOnError {
-				firstErrOnce.Do(func() {
-					firstErr = cerrors.NewCommandFailed(fmt.Sprintf("git in repo %s", r.Name), fmt.Errorf("exit code %d", result.ExitCode))
-
-					cancel()
-				})
-			}
-		}(i, repo)
-	}
-
-	wg.Wait()
-
-	// Return the first error that triggered cancellation
-	if firstErr != nil {
-		return results, firstErr
-	}
-
-	return results, nil
+	return ExtractValues(results), err
 }
 
 // SwitchBranch switches the branch for all repos in a workspace.

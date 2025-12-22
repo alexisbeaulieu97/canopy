@@ -232,10 +232,18 @@ func (s *Service) cloneWorkspaceRepos(ctx context.Context, repos []domain.Repo, 
 		return cerrors.NewContextError(ctx, "create workspace", dirName)
 	}
 
-	// Run EnsureCanonical operations in parallel
-	err := s.runParallelCanonical(ctx, repos, parallelCanonicalOptions{
-		workers: s.config.GetParallelWorkers(),
-	})
+	executor := NewParallelExecutor(s.config.GetParallelWorkers())
+
+	err := executor.Run(ctx, len(repos), func(runCtx context.Context, index int) error {
+		repo := repos[index]
+
+		_, err := s.gitEngine.EnsureCanonical(runCtx, repo.URL, repo.Name)
+		if err != nil {
+			return cerrors.WrapGitError(err, "ensure canonical for "+repo.Name)
+		}
+
+		return nil
+	}, ParallelOptions{ContinueOnError: false})
 	if err != nil {
 		return err
 	}

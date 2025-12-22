@@ -4,219 +4,110 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/go-git/go-git/v5"
-
 	"github.com/alexisbeaulieu97/canopy/internal/config"
-	"github.com/alexisbeaulieu97/canopy/internal/domain"
-	"github.com/alexisbeaulieu97/canopy/internal/mocks"
 )
 
-func TestRunParallelCanonical_Success(t *testing.T) {
+func TestParallelExecutor_RunSuccess(t *testing.T) {
 	t.Parallel()
 
-	mockGit := mocks.NewMockGitOperations()
-	mockCfg := mocks.NewMockConfigProvider()
-	mockCfg.ParallelWorkers = 4
+	executor := NewParallelExecutor(4)
 
 	var callCount atomic.Int32
 
-	mockGit.EnsureCanonicalFunc = func(_ context.Context, _, _ string) (*git.Repository, error) {
+	err := executor.Run(context.Background(), 3, func(_ context.Context, _ int) error {
 		callCount.Add(1)
-		return nil, nil
-	}
-
-	svc := &Service{
-		config:    mockCfg,
-		gitEngine: mockGit,
-	}
-
-	repos := []domain.Repo{
-		{Name: "repo1", URL: "https://github.com/org/repo1.git"},
-		{Name: "repo2", URL: "https://github.com/org/repo2.git"},
-		{Name: "repo3", URL: "https://github.com/org/repo3.git"},
-	}
-
-	err := svc.runParallelCanonical(context.Background(), repos, parallelCanonicalOptions{workers: 4})
+		return nil
+	}, ParallelOptions{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
 	if callCount.Load() != 3 {
-		t.Errorf("expected 3 EnsureCanonical calls, got %d", callCount.Load())
+		t.Errorf("expected 3 calls, got %d", callCount.Load())
 	}
 }
 
-func TestRunParallelCanonical_SingleRepo(t *testing.T) {
+func TestParallelExecutor_RunStopsOnError(t *testing.T) {
 	t.Parallel()
 
-	mockGit := mocks.NewMockGitOperations()
-	mockCfg := mocks.NewMockConfigProvider()
+	executor := NewParallelExecutor(4)
+	expectedErr := errors.New("boom")
 
-	var callCount atomic.Int32
-
-	mockGit.EnsureCanonicalFunc = func(_ context.Context, _, _ string) (*git.Repository, error) {
-		callCount.Add(1)
-		return nil, nil
-	}
-
-	svc := &Service{
-		config:    mockCfg,
-		gitEngine: mockGit,
-	}
-
-	repos := []domain.Repo{
-		{Name: "repo1", URL: "https://github.com/org/repo1.git"},
-	}
-
-	err := svc.runParallelCanonical(context.Background(), repos, parallelCanonicalOptions{workers: 4})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	if callCount.Load() != 1 {
-		t.Errorf("expected 1 EnsureCanonical call, got %d", callCount.Load())
-	}
-}
-
-func TestRunParallelCanonical_EmptyRepos(t *testing.T) {
-	t.Parallel()
-
-	mockGit := mocks.NewMockGitOperations()
-	mockCfg := mocks.NewMockConfigProvider()
-
-	svc := &Service{
-		config:    mockCfg,
-		gitEngine: mockGit,
-	}
-
-	err := svc.runParallelCanonical(context.Background(), nil, parallelCanonicalOptions{workers: 4})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-}
-
-func TestRunParallelCanonical_ErrorFailsFast(t *testing.T) {
-	t.Parallel()
-
-	mockGit := mocks.NewMockGitOperations()
-	mockCfg := mocks.NewMockConfigProvider()
-	mockCfg.ParallelWorkers = 4
-
-	expectedErr := errors.New("clone failed")
-
-	// Synchronization: repo1 signals when it has failed, other repos wait for this signal
-	repo1Failed := make(chan struct{})
-
-	mockGit.EnsureCanonicalFunc = func(ctx context.Context, _, repoName string) (*git.Repository, error) {
-		if repoName == "repo1" {
-			// repo1 fails immediately and signals other repos
-			defer close(repo1Failed)
-			return nil, expectedErr
-		}
-		// Other repos wait for repo1 to fail (or context cancellation)
-		select {
-		case <-repo1Failed:
-			// repo1 has failed, we can proceed (and likely be cancelled)
-		case <-ctx.Done():
-			return nil, ctx.Err()
+	err := executor.Run(context.Background(), 3, func(_ context.Context, index int) error {
+		if index == 0 {
+			return expectedErr
 		}
 
-		return nil, nil
-	}
+		time.Sleep(5 * time.Millisecond)
 
-	svc := &Service{
-		config:    mockCfg,
-		gitEngine: mockGit,
-	}
-
-	repos := []domain.Repo{
-		{Name: "repo1", URL: "https://github.com/org/repo1.git"},
-		{Name: "repo2", URL: "https://github.com/org/repo2.git"},
-		{Name: "repo3", URL: "https://github.com/org/repo3.git"},
-	}
-
-	err := svc.runParallelCanonical(context.Background(), repos, parallelCanonicalOptions{workers: 4})
+		return nil
+	}, ParallelOptions{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 
 	if !errors.Is(err, expectedErr) {
-		// The error should be wrapped, so check the message contains the original error
-		if !strings.Contains(err.Error(), expectedErr.Error()) {
-			t.Errorf("expected wrapped error containing %q, got %v", expectedErr.Error(), err)
+		t.Fatalf("expected %v, got %v", expectedErr, err)
+	}
+}
+
+func TestParallelExecutor_RunContinueOnError(t *testing.T) {
+	t.Parallel()
+
+	executor := NewParallelExecutor(2)
+
+	err := executor.Run(context.Background(), 3, func(_ context.Context, index int) error {
+		if index == 1 {
+			return errors.New("failure")
 		}
+
+		return nil
+	}, ParallelOptions{ContinueOnError: true})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
-func TestRunParallelCanonical_ContextCancellation(t *testing.T) {
+func TestParallelExecutor_MapCollectsResults(t *testing.T) {
 	t.Parallel()
 
-	mockGit := mocks.NewMockGitOperations()
-	mockCfg := mocks.NewMockConfigProvider()
-	mockCfg.ParallelWorkers = 4
+	executor := NewParallelExecutor(1)
 
-	// Synchronization: signal when at least one worker has started
-	workerStarted := make(chan struct{})
-
-	var startedOnce sync.Once
-
-	mockGit.EnsureCanonicalFunc = func(ctx context.Context, _, _ string) (*git.Repository, error) {
-		// Signal that a worker has started (only once)
-		startedOnce.Do(func() { close(workerStarted) })
-
-		// Block until context is cancelled
-		<-ctx.Done()
-
-		return nil, ctx.Err()
+	results, err := ParallelMap(context.Background(), executor, 3, func(_ context.Context, index int) (string, error) {
+		return "value-" + strconv.Itoa(index), nil
+	}, ParallelOptions{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
 
-	svc := &Service{
-		config:    mockCfg,
-		gitEngine: mockGit,
+	values := ExtractValues(results)
+	if len(values) != 3 {
+		t.Fatalf("expected 3 values, got %d", len(values))
 	}
 
-	repos := []domain.Repo{
-		{Name: "repo1", URL: "https://github.com/org/repo1.git"},
-		{Name: "repo2", URL: "https://github.com/org/repo2.git"},
-		{Name: "repo3", URL: "https://github.com/org/repo3.git"},
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Cancel only after at least one worker has started
-	go func() {
-		<-workerStarted
-		cancel()
-	}()
-
-	err := svc.runParallelCanonical(ctx, repos, parallelCanonicalOptions{workers: 4})
-	if err == nil {
-		t.Fatal("expected error due to context cancellation, got nil")
+	if values[0] != "value-0" || values[1] != "value-1" || values[2] != "value-2" {
+		t.Fatalf("unexpected values: %v", values)
 	}
 }
 
-func TestRunParallelCanonical_BoundedConcurrency(t *testing.T) {
+func TestParallelExecutor_BoundedConcurrency(t *testing.T) {
 	t.Parallel()
 
-	mockGit := mocks.NewMockGitOperations()
-	mockCfg := mocks.NewMockConfigProvider()
-	mockCfg.ParallelWorkers = 2
+	executor := NewParallelExecutor(2)
 
 	var (
 		concurrentCount atomic.Int32
 		maxConcurrent   atomic.Int32
 	)
 
-	mockGit.EnsureCanonicalFunc = func(_ context.Context, _, _ string) (*git.Repository, error) {
+	err := executor.Run(context.Background(), 4, func(_ context.Context, _ int) error {
 		current := concurrentCount.Add(1)
-		// Track max concurrent
+
 		for {
 			maxVal := maxConcurrent.Load()
 			if current <= maxVal || maxConcurrent.CompareAndSwap(maxVal, current) {
@@ -224,25 +115,11 @@ func TestRunParallelCanonical_BoundedConcurrency(t *testing.T) {
 			}
 		}
 
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		concurrentCount.Add(-1)
 
-		return nil, nil
-	}
-
-	svc := &Service{
-		config:    mockCfg,
-		gitEngine: mockGit,
-	}
-
-	repos := []domain.Repo{
-		{Name: "repo1", URL: "https://github.com/org/repo1.git"},
-		{Name: "repo2", URL: "https://github.com/org/repo2.git"},
-		{Name: "repo3", URL: "https://github.com/org/repo3.git"},
-		{Name: "repo4", URL: "https://github.com/org/repo4.git"},
-	}
-
-	err := svc.runParallelCanonical(context.Background(), repos, parallelCanonicalOptions{workers: 2})
+		return nil
+	}, ParallelOptions{Workers: 2})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -252,56 +129,53 @@ func TestRunParallelCanonical_BoundedConcurrency(t *testing.T) {
 	}
 }
 
-func TestRunParallelCanonical_SingleWorkerRunsSequentially(t *testing.T) {
+func TestParallelExecutor_ContextCancellation(t *testing.T) {
 	t.Parallel()
 
-	mockGit := mocks.NewMockGitOperations()
-	mockCfg := mocks.NewMockConfigProvider()
-	mockCfg.ParallelWorkers = 1
+	executor := NewParallelExecutor(4)
 
-	var (
-		callOrder []string
-		mu        sync.Mutex
-	)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	mockGit.EnsureCanonicalFunc = func(_ context.Context, _, repoName string) (*git.Repository, error) {
-		mu.Lock()
+	workerStarted := make(chan struct{})
 
-		callOrder = append(callOrder, repoName)
+	var startedOnce sync.Once
 
-		mu.Unlock()
+	go func() {
+		<-workerStarted
+		cancel()
+	}()
 
-		return nil, nil
+	err := executor.Run(ctx, 3, func(runCtx context.Context, _ int) error {
+		startedOnce.Do(func() { close(workerStarted) })
+		<-runCtx.Done()
+
+		return runCtx.Err()
+	}, ParallelOptions{})
+	if err == nil {
+		t.Fatal("expected cancellation error, got nil")
+	}
+}
+
+func TestParallelExecutor_ErrorHelpers(t *testing.T) {
+	t.Parallel()
+
+	results := []ParallelResult[string]{
+		{Value: "a"},
+		{Value: "b", Err: errors.New("fail")},
+		{Value: "c"},
 	}
 
-	svc := &Service{
-		config:    mockCfg,
-		gitEngine: mockGit,
+	if CountErrors(results) != 1 {
+		t.Fatalf("expected 1 error, got %d", CountErrors(results))
 	}
 
-	repos := []domain.Repo{
-		{Name: "repo1", URL: "https://github.com/org/repo1.git"},
-		{Name: "repo2", URL: "https://github.com/org/repo2.git"},
+	if FirstError(results) == nil {
+		t.Fatal("expected first error, got nil")
 	}
 
-	err := svc.runParallelCanonical(context.Background(), repos, parallelCanonicalOptions{workers: 1})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// With single worker, should run sequentially in order
-	mu.Lock()
-
-	orderCopy := make([]string, len(callOrder))
-	copy(orderCopy, callOrder)
-	mu.Unlock()
-
-	if len(orderCopy) != 2 {
-		t.Errorf("expected 2 calls, got %d", len(orderCopy))
-	}
-
-	if len(orderCopy) >= 2 && (orderCopy[0] != "repo1" || orderCopy[1] != "repo2") {
-		t.Errorf("expected sequential order [repo1, repo2], got %v", orderCopy)
+	if AggregateErrors(results) == nil {
+		t.Fatal("expected aggregate error, got nil")
 	}
 }
 
@@ -371,36 +245,25 @@ func TestConfigParallelWorkersDefault(t *testing.T) {
 	}
 }
 
-// BenchmarkRunParallelCanonical benchmarks parallel execution performance.
-func BenchmarkRunParallelCanonical(b *testing.B) {
-	mockGit := mocks.NewMockGitOperations()
-	mockCfg := mocks.NewMockConfigProvider()
-
-	// Simulate some work
-	mockGit.EnsureCanonicalFunc = func(_ context.Context, _, _ string) (*git.Repository, error) {
-		time.Sleep(time.Microsecond) // Minimal simulated work
-		return nil, nil
-	}
-
-	svc := &Service{
-		config:    mockCfg,
-		gitEngine: mockGit,
-	}
-
-	repos := make([]domain.Repo, 10)
-	for i := range repos {
-		repos[i] = domain.Repo{Name: "repo" + strconv.Itoa(i), URL: "https://github.com/org/repo.git"}
-	}
+// BenchmarkParallelExecutor benchmarks parallel execution performance.
+func BenchmarkParallelExecutor(b *testing.B) {
+	executor := NewParallelExecutor(4)
 
 	b.Run("parallel-4-workers", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = svc.runParallelCanonical(context.Background(), repos, parallelCanonicalOptions{workers: 4})
+			_ = executor.Run(context.Background(), 10, func(_ context.Context, _ int) error {
+				time.Sleep(time.Microsecond)
+				return nil
+			}, ParallelOptions{})
 		}
 	})
 
 	b.Run("sequential-1-worker", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = svc.runParallelCanonical(context.Background(), repos, parallelCanonicalOptions{workers: 1})
+			_ = executor.Run(context.Background(), 10, func(_ context.Context, _ int) error {
+				time.Sleep(time.Microsecond)
+				return nil
+			}, ParallelOptions{Workers: 1})
 		}
 	})
 }
