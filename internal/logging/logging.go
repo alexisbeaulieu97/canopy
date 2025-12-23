@@ -11,8 +11,8 @@ import (
 
 // sensitivePatterns matches common sensitive data patterns for redaction.
 var sensitivePatterns = []*regexp.Regexp{
-	// API keys, tokens, secrets (key=value or key:value) - captures up to next whitespace or quote
-	regexp.MustCompile(`(?i)(api[_-]?key|api[_-]?secret|auth[_-]?token|access[_-]?token|secret[_-]?key|password|passwd|pwd)\s*[=:]\s*[^\s]+`),
+	// API keys, tokens, secrets (key=value or key:value) - handles quoted and unquoted values
+	regexp.MustCompile(`(?i)(api[_-]?key|api[_-]?secret|auth[_-]?token|access[_-]?token|secret[_-]?key|password|passwd|pwd)\s*[=:]\s*(?:"[^"]*"|'[^']*'|[^\s]+)`),
 	// Bearer tokens (Authorization: Bearer xxx)
 	regexp.MustCompile(`(?i)bearer\s+[^\s]+`),
 	// SSH URLs with embedded credentials

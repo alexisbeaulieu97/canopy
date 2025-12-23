@@ -65,6 +65,21 @@ func TestRedactSensitive(t *testing.T) {
 			input:    "api_key=key1 password=pass1",
 			expected: "[REDACTED] [REDACTED]",
 		},
+		{
+			name:     "double-quoted value with spaces",
+			input:    `api_key="secret value with spaces"`,
+			expected: "[REDACTED]",
+		},
+		{
+			name:     "single-quoted value with spaces",
+			input:    `password='my secret password'`,
+			expected: "[REDACTED]",
+		},
+		{
+			name:     "quoted value in context",
+			input:    `Running command with api_key="secret value" on server`,
+			expected: "Running command with [REDACTED] on server",
+		},
 	}
 
 	for _, tt := range tests {
