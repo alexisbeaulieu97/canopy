@@ -7,6 +7,7 @@ This guide covers common workflows and detailed command usage for Canopy.
 - [Typical Workflow](#typical-workflow)
 - [Workspace Management](#workspace-management)
 - [Repository Management](#repository-management)
+- [Lifecycle Hooks](#lifecycle-hooks)
 - [Working with the TUI](#working-with-the-tui)
 - [Troubleshooting](#troubleshooting)
 - [Tips and Best Practices](#tips-and-best-practices)
@@ -119,6 +120,9 @@ canopy workspace list --status --parallel-status
 # With custom timeout for status check
 canopy workspace list --status --timeout 10s
 
+# Show workspace lock status
+canopy workspace list --show-locks
+
 # JSON output for scripting
 canopy workspace list --json
 
@@ -127,6 +131,8 @@ canopy workspace list --status --json
 ```
 
 Status entries include an `Error` field for status failures (e.g., `timeout`). When `Error` is set, `Branch` is empty.
+
+The `--show-locks` flag displays lock status for each workspace. Workspaces can be locked during long-running operations to prevent concurrent access. Stale locks (older than `lock_stale_threshold`) are automatically released.
 
 ### Viewing Workspace Details
 
@@ -388,6 +394,55 @@ canopy repo show api
 canopy repo unregister api
 ```
 
+## Lifecycle Hooks
+
+Canopy supports lifecycle hooks that run commands at specific points in the workspace lifecycle. See [Hooks Documentation](hooks.md) for configuration details.
+
+### Listing Configured Hooks
+
+View all hooks defined in your configuration:
+
+```bash
+canopy hooks list
+```
+
+Output shows each hook's command, repo filter, timeout, and other settings.
+
+### Testing Hooks (Dry Run)
+
+Preview what hooks would execute for a workspace without actually running them:
+
+```bash
+# Test post_create hooks for a workspace
+canopy hooks test post_create --workspace PROJ-123
+
+# Test pre_close hooks
+canopy hooks test pre_close --workspace PROJ-123
+
+# JSON output for scripting
+canopy hooks test post_create --workspace PROJ-123 --json
+```
+
+This resolves all template variables (like `{{.WorkspaceID}}` and `{{.WorkspacePath}}`) so you can verify the actual commands that would run.
+
+### Running Hooks During Workspace Operations
+
+Hooks run automatically during workspace operations. You can control this behavior:
+
+```bash
+# Create workspace without running post_create hooks
+canopy workspace new PROJ-123 --repos backend --no-hooks
+
+# Run only the hooks for an existing workspace (useful for retrying failed hooks)
+canopy workspace new PROJ-123 --repos backend --hooks-only
+
+# Preview hooks before workspace creation
+canopy workspace new PROJ-123 --repos backend --dry-run-hooks
+
+# Close workspace without running pre_close hooks
+canopy workspace close PROJ-123 --no-hooks
+```
+
 ## Working with the TUI
 
 Launch the interactive terminal UI:
@@ -548,6 +603,24 @@ hooks:
     - command: "cd {{.WorkspacePath}}/backend && make setup"
   pre_close:
     - command: "cd {{.WorkspacePath}} && docker-compose down"
+```
+
+### Shell Completion
+
+Enable tab completion for canopy commands:
+
+```bash
+# Bash
+source <(canopy completion bash)
+
+# Or add to ~/.bashrc (Linux) or $(brew --prefix)/etc/bash_completion.d/canopy (macOS)
+canopy completion bash > /etc/bash_completion.d/canopy
+
+# Zsh
+canopy completion zsh > "${fpath[1]}/_canopy"
+
+# Fish
+canopy completion fish > ~/.config/fish/completions/canopy.fish
 ```
 
 ### Shell Integration

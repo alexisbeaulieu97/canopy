@@ -129,6 +129,10 @@ func printHookList(name string, hooks []config.Hook) {
 	for i, hook := range hooks {
 		output.Infof("  [%d] %s", i, hook.Command)
 
+		if hook.Description != "" {
+			output.Infof("      description: %s", hook.Description)
+		}
+
 		if len(hook.Repos) > 0 {
 			output.Infof("      repos: %s", strings.Join(hook.Repos, ", "))
 		}

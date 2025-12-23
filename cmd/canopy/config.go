@@ -93,19 +93,7 @@ Exit codes:
 			if registry := cfg.GetRegistry(); registry != nil {
 				configInfo["registry_path"] = registry.Path()
 			}
-			if cfg.HasWarnings() {
-				configInfo["warnings"] = cfg.GetWarnings()
-			}
 			return output.PrintJSON(configInfo)
-		}
-
-		// Display any warnings first
-		if cfg.HasWarnings() {
-			output.Warn("Configuration warnings:")
-			for _, warning := range cfg.GetWarnings() {
-				output.Warnf("  • %s", warning)
-			}
-			output.Info("") // Empty line for spacing
 		}
 
 		output.Info("Configuration is valid.")
