@@ -238,6 +238,7 @@ type HookContext struct {
 type HookCommandPreview struct {
 	Index         int    `json:"index"`
 	Command       string `json:"command"`
+	Description   string `json:"description,omitempty"`
 	WorkingDir    string `json:"working_dir"`
 	WorkspaceID   string `json:"workspace_id"`
 	WorkspacePath string `json:"workspace_path"`

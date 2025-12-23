@@ -83,6 +83,7 @@ var (
 // Hook defines a single lifecycle hook command.
 type Hook struct {
 	Command         string   `mapstructure:"command"`
+	Description     string   `mapstructure:"description,omitempty"`       // human-readable description
 	Repos           []string `mapstructure:"repos,omitempty"`             // filter to specific repos
 	Shell           string   `mapstructure:"shell,omitempty"`             // default: sh -c
 	Timeout         int      `mapstructure:"timeout,omitempty"`           // default: 30 seconds
@@ -186,7 +187,6 @@ type Config struct {
 	TUI                TUIConfig           `mapstructure:"tui"`
 	Git                GitConfig           `mapstructure:"git"`
 	Registry           *RepoRegistry       `mapstructure:"-"`
-	Warnings           []string            `mapstructure:"-"` // Warnings collected during loading (e.g., deprecated keys)
 }
 
 // WorkspaceNamingTemplateData defines the data available to workspace naming templates.
@@ -248,6 +248,7 @@ var knownConfigFields = []string{
 	"git.retry.jitter_factor",
 	// Hook fields
 	"command",
+	"description",
 	"repos",
 	"shell",
 	"timeout",
@@ -264,52 +265,6 @@ var knownConfigFields = []string{
 	"cancel",
 	// Pattern fields
 	"pattern",
-}
-
-// DeprecatedKey represents a deprecated configuration key with migration guidance.
-type DeprecatedKey struct {
-	OldKey    string // The deprecated key name
-	NewKey    string // The replacement key name (empty if removed entirely)
-	Message   string // Migration guidance message
-	RemovedIn string // Version when the key will be removed (empty if just deprecated)
-}
-
-// deprecatedKeys maps deprecated config field names to their migration information.
-// Add entries here when deprecating config keys to provide helpful warnings to users.
-var deprecatedKeys = map[string]DeprecatedKey{
-	// Example (uncomment when deprecating a key):
-	// "old_field_name": {
-	//     OldKey:    "old_field_name",
-	//     NewKey:    "new_field_name",
-	//     Message:   "Use 'new_field_name' instead",
-	//     RemovedIn: "v2.0.0",
-	// },
-}
-
-// checkDeprecatedKeys checks for deprecated keys in the raw config map
-// and returns warnings for any that are found.
-func checkDeprecatedKeys(allSettings map[string]interface{}) []string {
-	var warnings []string
-
-	for oldKey, info := range deprecatedKeys {
-		if _, exists := allSettings[oldKey]; exists {
-			var warning string
-
-			if info.NewKey != "" {
-				warning = fmt.Sprintf("config key %q is deprecated, use %q instead", oldKey, info.NewKey)
-			} else {
-				warning = fmt.Sprintf("config key %q is deprecated: %s", oldKey, info.Message)
-			}
-
-			if info.RemovedIn != "" {
-				warning += fmt.Sprintf(" (will be removed in %s)", info.RemovedIn)
-			}
-
-			warnings = append(warnings, warning)
-		}
-	}
-
-	return warnings
 }
 
 // findSimilarField finds the most similar known field name using Levenshtein distance.
@@ -508,9 +463,6 @@ func Load(configPath string) (*Config, error) {
 	cfg.WorkspacesRoot = expandPath(cfg.WorkspacesRoot, home)
 	cfg.ClosedRoot = expandPath(cfg.ClosedRoot, home)
 	cfg.CloseDefault = strings.ToLower(cfg.CloseDefault)
-
-	// Check for deprecated keys and collect warnings
-	cfg.Warnings = checkDeprecatedKeys(viper.AllSettings())
 
 	registry, err := LoadRepoRegistry("")
 	if err != nil {
@@ -1119,17 +1071,6 @@ func (c *Config) GetUseEmoji() bool {
 func (c *Config) GetGitRetryConfig() ParsedRetryConfig {
 	parsed, _ := c.Git.Retry.Parse()
 	return parsed
-}
-
-// GetWarnings returns any warnings collected during config loading.
-// These may include deprecation warnings or other non-fatal issues.
-func (c *Config) GetWarnings() []string {
-	return c.Warnings
-}
-
-// HasWarnings returns true if there are any warnings from config loading.
-func (c *Config) HasWarnings() bool {
-	return len(c.Warnings) > 0
 }
 
 // copyKeys creates a copy of a string slice to avoid sharing references.

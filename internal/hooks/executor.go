@@ -96,7 +96,7 @@ func (e *Executor) executeHook(
 			}
 
 			if dryRun {
-				previews = append(previews, e.previewCommand(index, resolvedCommand, repoPath, ctx, &repo))
+				previews = append(previews, e.previewCommand(index, resolvedCommand, hook.Description, repoPath, ctx, &repo))
 				continue
 			}
 
@@ -115,7 +115,7 @@ func (e *Executor) executeHook(
 	}
 
 	if dryRun {
-		previews = append(previews, e.previewCommand(index, resolvedCommand, ctx.WorkspacePath, ctx, nil))
+		previews = append(previews, e.previewCommand(index, resolvedCommand, hook.Description, ctx.WorkspacePath, ctx, nil))
 		return previews, nil
 	}
 
@@ -146,7 +146,7 @@ func (e *Executor) runCommand(
 
 	e.logger.Debug("Executing hook",
 		"index", index,
-		"command", resolvedCommand,
+		"command", logging.RedactSensitive(resolvedCommand),
 		"working_dir", workDir,
 		"timeout", timeout,
 	)
@@ -250,6 +250,7 @@ func (e *Executor) resolveCommand(hook config.Hook, ctx domain.HookContext, repo
 func (e *Executor) previewCommand(
 	index int,
 	resolvedCommand string,
+	description string,
 	workDir string,
 	ctx domain.HookContext,
 	repo *domain.Repo,
@@ -257,6 +258,7 @@ func (e *Executor) previewCommand(
 	preview := domain.HookCommandPreview{
 		Index:         index,
 		Command:       resolvedCommand,
+		Description:   description,
 		WorkingDir:    workDir,
 		WorkspaceID:   ctx.WorkspaceID,
 		WorkspacePath: ctx.WorkspacePath,
@@ -301,15 +303,16 @@ func (e *Executor) handleCommandError(
 }
 
 // logCommandSuccess logs successful hook completion and any output.
+// Output is redacted to prevent accidental exposure of sensitive data.
 func (e *Executor) logCommandSuccess(index int, duration time.Duration, stdoutOutput, stderrOutput string) {
 	e.logger.Info("Hook completed", "index", index, "exit_code", 0, "duration", duration.Round(time.Millisecond))
 
 	if stdoutOutput != "" {
-		e.logger.Debug("Hook stdout output", "index", index, "stdout", stdoutOutput)
+		e.logger.Debug("Hook stdout output", "index", index, "stdout", logging.RedactSensitive(stdoutOutput))
 	}
 
 	if stderrOutput != "" {
-		e.logger.Warn("Hook stderr output", "index", index, "stderr", stderrOutput)
+		e.logger.Warn("Hook stderr output", "index", index, "stderr", logging.RedactSensitive(stderrOutput))
 	}
 }
 

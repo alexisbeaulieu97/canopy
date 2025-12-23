@@ -12,7 +12,8 @@ Canopy uses a YAML configuration file for all settings.
     - [Config Validate Command](#config-validate-command)
     - [Common Configuration Mistakes](#common-configuration-mistakes)
   - [Core Settings](#core-settings)
-    - [Workspace Naming Template](#workspace-naming-template)
+  - [Workspace Naming Template](#workspace-naming-template)
+  - [Git Retry Settings](#git-retry-settings)
   - [Workspace Patterns](#workspace-patterns)
   - [Workspace Templates](#workspace-templates)
     - [Common Templates](#common-templates)
@@ -120,10 +121,12 @@ Configuration is valid.
 | `workspace_close_default` | `delete` | Default behavior for `workspace close`. Set to `archive` to archive by default |
 | `workspace_naming` | `{{.ID}}` | Template for workspace directory names |
 | `parallel_workers` | `4` | Maximum number of parallel operations for workspace and repo tasks |
+| `lock_timeout` | `30s` | Time to wait when acquiring a workspace lock. Uses Go duration format (e.g., `30s`, `1m`) |
+| `lock_stale_threshold` | `5m` | Age after which a lock is considered stale and can be forcibly acquired. Uses Go duration format |
 
 All paths support `~` expansion and must be absolute (after expansion).
 
-### Workspace Naming Template
+## Workspace Naming Template
 
 The `workspace_naming` setting uses Go templates:
 
@@ -136,6 +139,33 @@ Examples:
 - `ws-{{.ID}}` → `ws-PROJ-123`
 
 The rendered name must be a valid directory name (no path separators or traversal sequences).
+
+## Git Retry Settings
+
+Configure retry behavior for transient network failures during git operations:
+
+```yaml
+git:
+  retry:
+    max_attempts: 3       # Number of retry attempts (1-10)
+    initial_delay: "1s"   # Delay before first retry
+    max_delay: "30s"      # Maximum delay between retries
+    multiplier: 2.0       # Exponential backoff multiplier (≥1.0)
+    jitter_factor: 0.25   # Random jitter factor (0-1) to prevent thundering herd
+```
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `git.retry.max_attempts` | `3` | Maximum number of retry attempts (1-10) |
+| `git.retry.initial_delay` | `1s` | Initial delay before retrying |
+| `git.retry.max_delay` | `30s` | Maximum delay between retries |
+| `git.retry.multiplier` | `2.0` | Multiplier for exponential backoff |
+| `git.retry.jitter_factor` | `0.25` | Random jitter factor to prevent synchronized retries |
+
+**When to tweak these settings:**
+- Slow/unreliable network: Increase `max_attempts` and `max_delay`
+- CI/CD environments: Lower `max_attempts` to fail faster
+- Rate-limited APIs: Increase `initial_delay` and reduce `jitter_factor`
 
 ## Workspace Patterns
 
@@ -219,6 +249,16 @@ closed_root: ~/.canopy/closed
 workspace_close_default: delete  # default; set to "archive" to keep metadata
 workspace_naming: "{{.ID}}"
 parallel_workers: 4
+lock_timeout: "30s"
+lock_stale_threshold: "5m"
+
+git:
+  retry:
+    max_attempts: 3
+    initial_delay: "1s"
+    max_delay: "30s"
+    multiplier: 2.0
+    jitter_factor: 0.25
 
 defaults:
   workspace_patterns:
@@ -245,6 +285,7 @@ templates:
 hooks:
   post_create:
     - command: "echo 'Workspace ready'"
+      description: "Notify workspace creation"
   pre_close:
     - command: "echo 'Closing workspace'"
 
