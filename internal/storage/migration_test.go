@@ -117,3 +117,21 @@ func TestNeedsMigration(t *testing.T) {
 		})
 	}
 }
+
+func TestMigrateWorkspace_InvalidVersion(t *testing.T) {
+	t.Parallel()
+
+	ws := &domain.Workspace{
+		Version: -1,
+		ID:      "test-ws",
+	}
+
+	migrated, err := MigrateWorkspace(ws)
+	if err == nil {
+		t.Fatal("expected migration error for invalid version")
+	}
+
+	if migrated {
+		t.Error("expected migrated to be false on error")
+	}
+}
