@@ -11,26 +11,78 @@ import (
 )
 
 // Update handles incoming Tea messages and state transitions.
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // message-driven switch covers multiple event types
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, handled := m.handleKeyMessage(msg); handled {
+		return m, cmd
+	}
+
+	if cmd, handled := m.handleWindowSizeMessage(msg); handled {
+		return m, cmd
+	}
+
+	if cmd, handled := m.handleWorkspaceListMessage(msg); handled {
+		return m, cmd
+	}
+
+	if cmd, handled := m.handleWorkspaceStatusMessage(msg); handled {
+		return m, cmd
+	}
+
+	if cmd, handled := m.handleWorkspaceDetailsMessage(msg); handled {
+		return m, cmd
+	}
+
+	if cmd, handled := m.handleOperationMessage(msg); handled {
+		return m, cmd
+	}
+
+	if cmd, handled := m.handleErrorMessage(msg); handled {
+		return m, cmd
+	}
+
+	listCmd := m.updateList(msg)
+	spinnerCmd := m.updateSpinner(msg)
+
+	return m, tea.Batch(listCmd, spinnerCmd)
+}
+
+func (m *Model) handleKeyMessage(msg tea.Msg) (tea.Cmd, bool) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return nil, false
+	}
+
+	newState, cmd, handled := m.viewState.HandleKey(m, keyMsg.String())
+	if handled {
+		m.viewState = newState
+		return cmd, true
+	}
+
+	return nil, false
+}
+
+func (m *Model) handleWindowSizeMessage(msg tea.Msg) (tea.Cmd, bool) {
+	sizeMsg, ok := msg.(tea.WindowSizeMsg)
+	if !ok {
+		return nil, false
+	}
+
+	m.ui.List.SetWidth(sizeMsg.Width)
+
+	height := sizeMsg.Height - 6 // Account for header/footer
+	if height < 8 {
+		height = sizeMsg.Height
+	}
+
+	m.ui.List.SetHeight(height)
+
+	return nil, true
+}
+
+func (m *Model) handleWorkspaceListMessage(msg tea.Msg) (tea.Cmd, bool) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		newState, cmd, handled := m.viewState.HandleKey(&m, msg.String())
-		if handled {
-			m.viewState = newState
-			return m, cmd
-		}
-	case tea.WindowSizeMsg:
-		m.ui.List.SetWidth(msg.Width)
-
-		height := msg.Height - 6 // Account for header/footer
-		if height < 8 {
-			height = msg.Height
-		}
-
-		m.ui.List.SetHeight(height)
 	case workspaceListMsg:
 		m.workspaces.SetItems(msg.items, msg.totalUsage)
-
 		m.applyFilters()
 
 		var cmds []tea.Cmd
@@ -38,9 +90,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 			cmds = append(cmds, m.loadWorkspaceStatus(it.Workspace.ID))
 		}
 
-		return m, tea.Batch(cmds...)
+		return tea.Batch(cmds...), true
 	case loadWorkspacesErrMsg:
 		m.err = msg.err
+		return nil, true
+	}
+
+	return nil, false
+}
+
+func (m *Model) handleWorkspaceStatusMessage(msg tea.Msg) (tea.Cmd, bool) {
+	switch msg := msg.(type) {
 	case workspaceStatusMsg:
 		m.workspaces.CacheStatus(msg.id, msg.status)
 		m.updateWorkspaceSummary(msg.id, msg.status, nil)
@@ -48,34 +108,59 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 		if m.isDetailView() && m.selectedWS != nil && m.selectedWS.ID == msg.id {
 			m.wsStatus = msg.status
 		}
+
+		return nil, true
 	case workspaceStatusErrMsg:
 		m.updateWorkspaceSummary(msg.id, nil, msg.err)
 		m.err = msg.err
-	case pushResultMsg:
-		m.pushing = false
 
-		m.pushTarget = ""
-		if msg.err != nil {
-			m.err = msg.err
-		} else {
-			m.infoMessage = "Push completed successfully"
-			return m, m.loadWorkspaceStatus(msg.id)
-		}
+		return nil, true
+	}
+
+	return nil, false
+}
+
+func (m *Model) handleWorkspaceDetailsMessage(msg tea.Msg) (tea.Cmd, bool) {
+	switch msg := msg.(type) {
 	case workspaceDetailsMsg:
 		m.selectedWS = msg.workspace
 		m.wsStatus = msg.status
-
 		m.wsOrphans = msg.orphans
+
 		if ds := m.getDetailState(); ds != nil {
 			ds.Loading = false
 		}
+
+		return nil, true
 	case workspaceDetailsErrMsg:
 		m.err = msg.err
 		if ds := m.getDetailState(); ds != nil {
 			ds.Loading = false
 		}
+
+		return nil, true
+	}
+
+	return nil, false
+}
+
+func (m *Model) handleOperationMessage(msg tea.Msg) (tea.Cmd, bool) {
+	switch msg := msg.(type) {
+	case pushResultMsg:
+		m.pushing = false
+		m.pushTarget = ""
+
+		if msg.err != nil {
+			m.err = msg.err
+			return nil, true
+		}
+
+		m.infoMessage = "Push completed successfully"
+
+		return m.loadWorkspaceStatus(msg.id), true
 	case closeWorkspaceErrMsg:
 		m.err = msg.err
+		return nil, true
 	case openEditorResultMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -83,31 +168,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyclo // me
 		} else {
 			m.infoMessage = "Opened in editor"
 		}
-	case error:
-		m.err = msg
-		if ds := m.getDetailState(); ds != nil {
-			ds.Loading = false
-		}
 
-		return m, nil
+		return nil, true
+	}
+
+	return nil, false
+}
+
+func (m *Model) handleErrorMessage(msg tea.Msg) (tea.Cmd, bool) {
+	errMsg, ok := msg.(error)
+	if !ok {
+		return nil, false
+	}
+
+	m.err = errMsg
+	if ds := m.getDetailState(); ds != nil {
+		ds.Loading = false
+	}
+
+	return nil, true
+}
+
+func (m *Model) updateList(msg tea.Msg) tea.Cmd {
+	if m.isDetailView() {
+		return nil
 	}
 
 	var cmd tea.Cmd
 
-	if !m.isDetailView() {
-		m.ui.List, cmd = m.ui.List.Update(msg)
+	m.ui.List, cmd = m.ui.List.Update(msg)
 
-		if m.ui.List.FilterValue() != m.lastFilterValue {
-			m.lastFilterValue = m.ui.List.FilterValue()
-			m.applyFilters()
-		}
+	if m.ui.List.FilterValue() != m.lastFilterValue {
+		m.lastFilterValue = m.ui.List.FilterValue()
+		m.applyFilters()
 	}
 
-	var sCmd tea.Cmd
+	return cmd
+}
 
-	m.ui.Spinner, sCmd = m.ui.Spinner.Update(msg)
+func (m *Model) updateSpinner(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
 
-	return m, tea.Batch(cmd, sCmd)
+	m.ui.Spinner, cmd = m.ui.Spinner.Update(msg)
+
+	return cmd
 }
 
 // updateWorkspaceSummary updates the summary for a workspace in both allItems and list.
@@ -141,13 +245,9 @@ func (m *Model) applyFilters() {
 }
 
 // handleListKeyWithState handles key events in the main list view using ViewState pattern.
-func (m *Model) handleListKeyWithState(state *ListViewState, key string) (ViewState, tea.Cmd, bool) { //nolint:gocyclo // key-driven switch covers multiple keybindings
+func (m *Model) handleListKeyWithState(state *ListViewState, key string) (ViewState, tea.Cmd, bool) {
 	if m.pushing {
-		if matchesKey(key, m.ui.Keybindings.Quit) {
-			return state, tea.Quit, true
-		}
-
-		return state, nil, true
+		return m.handleListKeyDuringPush(state, key)
 	}
 
 	if m.ui.List.FilterState() == list.Filtering {
@@ -155,24 +255,47 @@ func (m *Model) handleListKeyWithState(state *ListViewState, key string) (ViewSt
 		return state, nil, false
 	}
 
-	switch {
-	case matchesKey(key, m.ui.Keybindings.Quit):
+	return m.handleListKeyAction(state, key)
+}
+
+func (m *Model) handleListKeyDuringPush(state *ListViewState, key string) (ViewState, tea.Cmd, bool) {
+	if matchesKey(key, m.ui.Keybindings.Quit) {
 		return state, tea.Quit, true
-	case matchesKey(key, m.ui.Keybindings.Details):
+	}
+
+	return state, nil, true
+}
+
+func (m *Model) handleListKeyAction(state *ListViewState, key string) (ViewState, tea.Cmd, bool) {
+	if matchesKey(key, m.ui.Keybindings.Quit) {
+		return state, tea.Quit, true
+	}
+
+	if matchesKey(key, m.ui.Keybindings.Details) {
 		return m.handleEnterWithState()
-	case matchesKey(key, m.ui.Keybindings.Search):
+	}
+
+	if matchesKey(key, m.ui.Keybindings.Search) {
 		m.ui.List.SetFilterState(list.Filtering)
 		return state, nil, true
-	case matchesKey(key, m.ui.Keybindings.ToggleStale):
+	}
+
+	if matchesKey(key, m.ui.Keybindings.ToggleStale) {
 		m.workspaces.ToggleStaleFilter()
 		m.applyFilters()
 
 		return state, nil, true
-	case matchesKey(key, m.ui.Keybindings.Push):
+	}
+
+	if matchesKey(key, m.ui.Keybindings.Push) {
 		return m.handlePushConfirmWithState()
-	case matchesKey(key, m.ui.Keybindings.OpenEditor):
+	}
+
+	if matchesKey(key, m.ui.Keybindings.OpenEditor) {
 		return m.handleOpenEditorWithState(state)
-	case matchesKey(key, m.ui.Keybindings.Close):
+	}
+
+	if matchesKey(key, m.ui.Keybindings.Close) {
 		return m.handleCloseConfirmWithState()
 	}
 

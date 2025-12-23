@@ -109,6 +109,8 @@ go test -v ./...
 2. **Table-driven tests**: Preferred for testing multiple cases
 3. **Mocks**: Use interfaces and dependency injection
 4. **Test isolation**: Each test should be independent
+5. **Test fixtures**: Use shared helpers in package-level `_test.go` or `internal/testutil/` for common setup
+6. **Mock setup**: Prefer `internal/mocks` constructors to keep tests focused on behavior
 
 Example test structure:
 
@@ -159,6 +161,8 @@ make test-integration
 ### Test Helpers
 
 The `internal/testutil/` package provides shared test utilities to avoid code duplication across test files:
+
+For complex setups, add package-scoped helpers in `_test.go` files that wrap `internal/mocks` and `t.TempDir()` so tests stay concise.
 
 **Git Helpers** (`testutil/git.go`):
 - `CreateRepoWithCommit(t, path)` - Initialize a git repo with an initial commit
