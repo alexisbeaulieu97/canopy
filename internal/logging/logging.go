@@ -32,6 +32,7 @@ func RedactSensitive(input string) string {
 	for _, pattern := range sensitivePatterns {
 		result = pattern.ReplaceAllString(result, "[REDACTED]")
 	}
+
 	return result
 }
 

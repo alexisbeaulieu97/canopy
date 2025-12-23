@@ -12,8 +12,8 @@ Canopy uses a YAML configuration file for all settings.
     - [Config Validate Command](#config-validate-command)
     - [Common Configuration Mistakes](#common-configuration-mistakes)
   - [Core Settings](#core-settings)
+  - [Workspace Naming Template](#workspace-naming-template)
   - [Git Retry Settings](#git-retry-settings)
-    - [Workspace Naming Template](#workspace-naming-template)
   - [Workspace Patterns](#workspace-patterns)
   - [Workspace Templates](#workspace-templates)
     - [Common Templates](#common-templates)
@@ -126,6 +126,20 @@ Configuration is valid.
 
 All paths support `~` expansion and must be absolute (after expansion).
 
+## Workspace Naming Template
+
+The `workspace_naming` setting uses Go templates:
+
+| Variable | Description |
+|----------|-------------|
+| `{{.ID}}` | Workspace identifier |
+
+Examples:
+- `{{.ID}}` → `PROJ-123`
+- `ws-{{.ID}}` → `ws-PROJ-123`
+
+The rendered name must be a valid directory name (no path separators or traversal sequences).
+
 ## Git Retry Settings
 
 Configure retry behavior for transient network failures during git operations:
@@ -152,20 +166,6 @@ git:
 - Slow/unreliable network: Increase `max_attempts` and `max_delay`
 - CI/CD environments: Lower `max_attempts` to fail faster
 - Rate-limited APIs: Increase `initial_delay` and reduce `jitter_factor`
-
-### Workspace Naming Template
-
-The `workspace_naming` setting uses Go templates:
-
-| Variable | Description |
-|----------|-------------|
-| `{{.ID}}` | Workspace identifier |
-
-Examples:
-- `{{.ID}}` → `PROJ-123`
-- `ws-{{.ID}}` → `ws-PROJ-123`
-
-The rendered name must be a valid directory name (no path separators or traversal sequences).
 
 ## Workspace Patterns
 

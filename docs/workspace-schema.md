@@ -22,7 +22,7 @@ repos:
   - name: "frontend"
     url: "https://github.com/org/frontend.git"
 closed_at: null            # Only present for archived workspaces
-setup_incomplete: false    # Only present if template setup commands failed
+setup_incomplete: true     # Only present if template setup commands failed
 ```
 
 ## Field Reference
@@ -40,7 +40,7 @@ setup_incomplete: false    # Only present if template setup commands failed
 
 ### The `setup_incomplete` Field
 
-When a workspace is created with a template that includes `setup_commands`, Canopy runs each command sequentially. If any command fails, `setup_incomplete` is set to `true` in the workspace metadata. This allows you to:
+When a workspace is created with a template that includes `setup_commands`, Canopy runs each command sequentially. If any command fails, `setup_incomplete` is set to `true` in the workspace metadata. This field is only present when setup commands fail; successful setups do not include this field. This allows you to:
 
 1. Identify workspaces that may need manual intervention
 2. Re-run setup commands after fixing the issue

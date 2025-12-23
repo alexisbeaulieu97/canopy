@@ -186,7 +186,7 @@ type Config struct {
 	Hooks              Hooks               `mapstructure:"hooks"`
 	TUI                TUIConfig           `mapstructure:"tui"`
 	Git                GitConfig           `mapstructure:"git"`
-	Registry *RepoRegistry `mapstructure:"-"`
+	Registry           *RepoRegistry       `mapstructure:"-"`
 }
 
 // WorkspaceNamingTemplateData defines the data available to workspace naming templates.
@@ -248,6 +248,7 @@ var knownConfigFields = []string{
 	"git.retry.jitter_factor",
 	// Hook fields
 	"command",
+	"description",
 	"repos",
 	"shell",
 	"timeout",
@@ -265,7 +266,6 @@ var knownConfigFields = []string{
 	// Pattern fields
 	"pattern",
 }
-
 
 // findSimilarField finds the most similar known field name using Levenshtein distance.
 // Returns empty string if no similar field is found (distance > 3).
