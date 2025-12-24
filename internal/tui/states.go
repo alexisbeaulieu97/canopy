@@ -26,8 +26,8 @@ type DetailViewState struct {
 
 // ConfirmViewState represents a confirmation dialog state.
 type ConfirmViewState struct {
-	Action   components.ConfirmAction
-	TargetID string
+	Action    components.ConfirmAction
+	TargetIDs []string
 }
 
 // Ensure states implement ViewState interface.

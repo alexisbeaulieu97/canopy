@@ -40,6 +40,10 @@ type Model struct {
 	wsOrphans []domain.OrphanedWorktree
 	// lastFilterValue tracks the last filter value for change detection.
 	lastFilterValue string
+	// selectedIDs tracks workspaces selected for bulk operations.
+	selectedIDs map[string]bool
+	// selectionMode indicates whether multi-select mode is active.
+	selectionMode bool
 }
 
 // NewModel creates a new TUI model.
@@ -49,12 +53,13 @@ func NewModel(svc *workspaces.Service, printPath bool) Model {
 	useEmoji := svc.UseEmoji()
 
 	return Model{
-		viewState:  &ListViewState{},
-		workspaces: newWorkspaceModel(threshold),
-		ui:         NewUIComponents(kb, threshold),
-		svc:        svc,
-		symbols:    NewSymbols(useEmoji),
-		printPath:  printPath,
+		viewState:   &ListViewState{},
+		workspaces:  newWorkspaceModel(threshold),
+		ui:          NewUIComponents(kb, threshold),
+		svc:         svc,
+		symbols:     NewSymbols(useEmoji),
+		printPath:   printPath,
+		selectedIDs: make(map[string]bool),
 	}
 }
 
@@ -125,4 +130,106 @@ func (m Model) getDetailState() *DetailViewState {
 	}
 
 	return nil
+}
+
+func (m Model) selectionCount() int {
+	return len(m.selectedIDs)
+}
+
+func (m *Model) updateSelectionMode() {
+	m.selectionMode = len(m.selectedIDs) > 0
+}
+
+func (m *Model) applySelectionToItems() {
+	for idx, it := range m.workspaces.allItems {
+		it.Selected = m.selectedIDs[it.Workspace.ID]
+		m.workspaces.allItems[idx] = it
+	}
+}
+
+func (m *Model) syncSelectionState() {
+	m.applySelectionToItems()
+	m.applyFilters()
+}
+
+func (m *Model) toggleWorkspaceSelection(id string) {
+	if m.selectedIDs[id] {
+		delete(m.selectedIDs, id)
+	} else {
+		m.selectedIDs[id] = true
+	}
+
+	m.updateSelectionMode()
+	m.syncSelectionState()
+}
+
+func (m *Model) selectAllVisible() {
+	for _, item := range m.ui.List.Items() {
+		wsItem, ok := item.(workspaceItem)
+		if !ok {
+			continue
+		}
+
+		m.selectedIDs[wsItem.Workspace.ID] = true
+	}
+
+	m.updateSelectionMode()
+	m.syncSelectionState()
+}
+
+func (m *Model) clearSelection() {
+	if len(m.selectedIDs) == 0 {
+		return
+	}
+
+	m.selectedIDs = make(map[string]bool)
+	m.updateSelectionMode()
+	m.syncSelectionState()
+}
+
+func (m *Model) pruneSelectionIDs(items []workspaceItem) {
+	if len(m.selectedIDs) == 0 {
+		return
+	}
+
+	valid := make(map[string]bool, len(items))
+	for _, it := range items {
+		valid[it.Workspace.ID] = true
+	}
+
+	for id := range m.selectedIDs {
+		if !valid[id] {
+			delete(m.selectedIDs, id)
+		}
+	}
+
+	m.updateSelectionMode()
+}
+
+func (m *Model) selectedWorkspaceIDs() []string {
+	if len(m.selectedIDs) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(m.selectedIDs))
+	for _, it := range m.workspaces.Items() {
+		if m.selectedIDs[it.Workspace.ID] {
+			ids = append(ids, it.Workspace.ID)
+		}
+	}
+
+	return ids
+}
+
+func (m *Model) actionTargetIDs() []string {
+	if ids := m.selectedWorkspaceIDs(); len(ids) > 0 {
+		return ids
+	}
+
+	selected, ok := m.selectedWorkspaceItem()
+	if !ok {
+		return nil
+	}
+
+	return []string{selected.Workspace.ID}
 }

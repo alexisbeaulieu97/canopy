@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
@@ -46,27 +47,27 @@ func TestDetailViewState_Loading(t *testing.T) {
 
 func TestConfirmViewState_Fields(t *testing.T) {
 	tests := []struct {
-		name     string
-		action   components.ConfirmAction
-		targetID string
+		name      string
+		action    components.ConfirmAction
+		targetIDs []string
 	}{
-		{name: "close action", action: components.ActionClose, targetID: "ws-1"},
-		{name: "push action", action: components.ActionPush, targetID: "ws-2"},
+		{name: "close action", action: components.ActionClose, targetIDs: []string{"ws-1"}},
+		{name: "push action", action: components.ActionPush, targetIDs: []string{"ws-2"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			state := &ConfirmViewState{
-				Action:   tt.action,
-				TargetID: tt.targetID,
+				Action:    tt.action,
+				TargetIDs: tt.targetIDs,
 			}
 
 			if state.Action != tt.action {
 				t.Errorf("ConfirmViewState.Action = %s, want %s", state.Action, tt.action)
 			}
 
-			if state.TargetID != tt.targetID {
-				t.Errorf("ConfirmViewState.TargetID = %s, want %s", state.TargetID, tt.targetID)
+			if !reflect.DeepEqual(state.TargetIDs, tt.targetIDs) {
+				t.Errorf("ConfirmViewState.TargetIDs = %v, want %v", state.TargetIDs, tt.targetIDs)
 			}
 		})
 	}
@@ -115,7 +116,7 @@ func TestModel_IsConfirming(t *testing.T) {
 }
 
 func TestModel_GetConfirmState(t *testing.T) {
-	confirmState := &ConfirmViewState{Action: components.ActionPush, TargetID: "ws-1"}
+	confirmState := &ConfirmViewState{Action: components.ActionPush, TargetIDs: []string{"ws-1"}}
 
 	tests := []struct {
 		name      string

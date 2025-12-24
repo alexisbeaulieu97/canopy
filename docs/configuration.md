@@ -327,11 +327,15 @@ tui:
   keybindings:
     quit: ["q", "ctrl+c"]
     search: ["/"]
+    sync: ["s"]
     push: ["p"]
     close: ["c"]
     open_editor: ["o"]
-    toggle_stale: ["s"]
+    toggle_stale: ["t"]
     details: ["enter"]
+    select: ["space"]
+    select_all: ["a"]
+    deselect_all: ["A"]
     confirm: ["y", "Y"]
     cancel: ["n", "N", "esc"]
 ```
@@ -342,11 +346,15 @@ tui:
 |--------|-------------|-------------|
 | `quit` | `q`, `ctrl+c` | Exit the TUI |
 | `search` | `/` | Start workspace search/filter |
-| `push` | `p` | Push selected workspace |
-| `close` | `c` | Close selected workspace |
+| `sync` | `s` | Sync selected workspaces |
+| `push` | `p` | Push selected workspaces |
+| `close` | `c` | Close selected workspaces |
 | `open_editor` | `o` | Open workspace in editor |
-| `toggle_stale` | `s` | Toggle stale workspace filter |
+| `toggle_stale` | `t` | Toggle stale workspace filter |
 | `details` | `enter` | View workspace details |
+| `select` | `space` | Toggle workspace selection |
+| `select_all` | `a` | Select all visible workspaces |
+| `deselect_all` | `A` | Deselect all workspaces |
 | `confirm` | `y`, `Y` | Confirm action in dialogs |
 | `cancel` | `n`, `N`, `esc` | Cancel/go back |
 

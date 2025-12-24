@@ -11,6 +11,7 @@ type ConfirmAction string
 const (
 	ActionClose ConfirmAction = "close"
 	ActionPush  ConfirmAction = "push"
+	ActionSync  ConfirmAction = "sync"
 )
 
 // ActionDescription returns a human-readable description of the action.
@@ -20,6 +21,8 @@ func (a ConfirmAction) ActionDescription() string {
 		return "close (delete local files)"
 	case ActionPush:
 		return "push all changes in"
+	case ActionSync:
+		return "sync"
 	default:
 		return string(a)
 	}
@@ -27,9 +30,9 @@ func (a ConfirmAction) ActionDescription() string {
 
 // ConfirmDialog represents a confirmation dialog state.
 type ConfirmDialog struct {
-	Active   bool
-	Action   ConfirmAction
-	TargetID string
+	Active      bool
+	Action      ConfirmAction
+	TargetLabel string
 }
 
 // NewConfirmDialog creates a new inactive confirmation dialog.
@@ -40,17 +43,17 @@ func NewConfirmDialog() ConfirmDialog {
 }
 
 // Show activates the confirmation dialog with the specified action and target.
-func (d *ConfirmDialog) Show(action ConfirmAction, targetID string) {
+func (d *ConfirmDialog) Show(action ConfirmAction, targetLabel string) {
 	d.Active = true
 	d.Action = action
-	d.TargetID = targetID
+	d.TargetLabel = targetLabel
 }
 
 // Hide deactivates the confirmation dialog and clears its state.
 func (d *ConfirmDialog) Hide() {
 	d.Active = false
 	d.Action = ""
-	d.TargetID = ""
+	d.TargetLabel = ""
 }
 
 // Render renders the confirmation dialog prompt.
@@ -59,9 +62,9 @@ func (d ConfirmDialog) Render() string {
 		return ""
 	}
 
-	prompt := fmt.Sprintf("⚠️  Confirm %s workspace %s?",
+	prompt := fmt.Sprintf("⚠️  Confirm %s %s?",
 		d.Action.ActionDescription(),
-		AccentTextStyle.Render(d.TargetID))
+		d.TargetLabel)
 
 	hint := SubtleTextStyle.Render("Press [y] to confirm, [n] or [esc] to cancel")
 
@@ -73,7 +76,7 @@ func (d ConfirmDialog) Render() string {
 // - confirmed: true if user pressed y/Y to confirm
 // - handled: true if the key was processed by the dialog
 //
-// Note: Callers should read Action and TargetID before calling HandleKey
+// Note: Callers should read Action and TargetLabel before calling HandleKey
 // if they need those values, as Hide() clears them.
 func (d *ConfirmDialog) HandleKey(key string) (confirmed, handled bool) {
 	if !d.Active {

@@ -27,6 +27,18 @@ type pushResultMsg struct {
 	err error
 }
 
+// bulkPushResultMsg is sent when a bulk push operation completes.
+type bulkPushResultMsg struct {
+	ids []string
+	err error
+}
+
+// syncResultMsg is sent when a sync operation completes.
+type syncResultMsg struct {
+	ids []string
+	err error
+}
+
 // openEditorResultMsg is sent when opening an editor completes.
 type openEditorResultMsg struct {
 	err error
@@ -53,5 +65,11 @@ type workspaceDetailsErrMsg struct {
 // closeWorkspaceErrMsg is sent when closing a workspace fails.
 type closeWorkspaceErrMsg struct {
 	id  string
+	err error
+}
+
+// bulkCloseResultMsg is sent when closing multiple workspaces completes.
+type bulkCloseResultMsg struct {
+	ids []string
 	err error
 }

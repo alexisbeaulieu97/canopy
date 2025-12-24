@@ -71,11 +71,15 @@ import (
 var (
 	DefaultQuitKeys        = []string{"q", "ctrl+c"}
 	DefaultSearchKeys      = []string{"/"}
+	DefaultSyncKeys        = []string{"s"}
 	DefaultPushKeys        = []string{"p"}
 	DefaultCloseKeys       = []string{"c"}
 	DefaultOpenEditorKeys  = []string{"o"}
-	DefaultToggleStaleKeys = []string{"s"}
+	DefaultToggleStaleKeys = []string{"t"}
 	DefaultDetailsKeys     = []string{"enter"}
+	DefaultSelectKeys      = []string{"space"}
+	DefaultSelectAllKeys   = []string{"a"}
+	DefaultDeselectAllKeys = []string{"A"}
 	DefaultConfirmKeys     = []string{"y", "Y"}
 	DefaultCancelKeys      = []string{"n", "N", "esc"}
 )
@@ -100,11 +104,15 @@ type Hooks struct {
 type Keybindings struct {
 	Quit        []string `mapstructure:"quit"`
 	Search      []string `mapstructure:"search"`
+	Sync        []string `mapstructure:"sync"`
 	Push        []string `mapstructure:"push"`
 	Close       []string `mapstructure:"close"`
 	OpenEditor  []string `mapstructure:"open_editor"`
 	ToggleStale []string `mapstructure:"toggle_stale"`
 	Details     []string `mapstructure:"details"`
+	Select      []string `mapstructure:"select"`
+	SelectAll   []string `mapstructure:"select_all"`
+	DeselectAll []string `mapstructure:"deselect_all"`
 	Confirm     []string `mapstructure:"confirm"`
 	Cancel      []string `mapstructure:"cancel"`
 }
@@ -256,11 +264,15 @@ var knownConfigFields = []string{
 	// Keybinding fields
 	"quit",
 	"search",
+	"sync",
 	"push",
 	"close",
 	"open_editor",
 	"toggle_stale",
 	"details",
+	"select",
+	"select_all",
+	"deselect_all",
 	"confirm",
 	"cancel",
 	// Pattern fields
@@ -1085,46 +1097,30 @@ func copyKeys(keys []string) []string {
 	return result
 }
 
+func applyDefaultKeys(keys *[]string, defaults []string) {
+	if len(*keys) == 0 {
+		*keys = copyKeys(defaults)
+	}
+}
+
 // WithDefaults returns a copy of Keybindings with defaults applied for empty fields.
 // Returned slices are copies to prevent mutation of global defaults.
 func (k Keybindings) WithDefaults() Keybindings {
 	result := k
 
-	if len(result.Quit) == 0 {
-		result.Quit = copyKeys(DefaultQuitKeys)
-	}
-
-	if len(result.Search) == 0 {
-		result.Search = copyKeys(DefaultSearchKeys)
-	}
-
-	if len(result.Push) == 0 {
-		result.Push = copyKeys(DefaultPushKeys)
-	}
-
-	if len(result.Close) == 0 {
-		result.Close = copyKeys(DefaultCloseKeys)
-	}
-
-	if len(result.OpenEditor) == 0 {
-		result.OpenEditor = copyKeys(DefaultOpenEditorKeys)
-	}
-
-	if len(result.ToggleStale) == 0 {
-		result.ToggleStale = copyKeys(DefaultToggleStaleKeys)
-	}
-
-	if len(result.Details) == 0 {
-		result.Details = copyKeys(DefaultDetailsKeys)
-	}
-
-	if len(result.Confirm) == 0 {
-		result.Confirm = copyKeys(DefaultConfirmKeys)
-	}
-
-	if len(result.Cancel) == 0 {
-		result.Cancel = copyKeys(DefaultCancelKeys)
-	}
+	applyDefaultKeys(&result.Quit, DefaultQuitKeys)
+	applyDefaultKeys(&result.Search, DefaultSearchKeys)
+	applyDefaultKeys(&result.Sync, DefaultSyncKeys)
+	applyDefaultKeys(&result.Push, DefaultPushKeys)
+	applyDefaultKeys(&result.Close, DefaultCloseKeys)
+	applyDefaultKeys(&result.OpenEditor, DefaultOpenEditorKeys)
+	applyDefaultKeys(&result.ToggleStale, DefaultToggleStaleKeys)
+	applyDefaultKeys(&result.Details, DefaultDetailsKeys)
+	applyDefaultKeys(&result.Select, DefaultSelectKeys)
+	applyDefaultKeys(&result.SelectAll, DefaultSelectAllKeys)
+	applyDefaultKeys(&result.DeselectAll, DefaultDeselectAllKeys)
+	applyDefaultKeys(&result.Confirm, DefaultConfirmKeys)
+	applyDefaultKeys(&result.Cancel, DefaultCancelKeys)
 
 	return result
 }
@@ -1190,11 +1186,15 @@ func (k Keybindings) ValidateKeybindings() error {
 
 	validateKeys(k.Quit, "quit")
 	validateKeys(k.Search, "search")
+	validateKeys(k.Sync, "sync")
 	validateKeys(k.Push, "push")
 	validateKeys(k.Close, "close")
 	validateKeys(k.OpenEditor, "open_editor")
 	validateKeys(k.ToggleStale, "toggle_stale")
 	validateKeys(k.Details, "details")
+	validateKeys(k.Select, "select")
+	validateKeys(k.SelectAll, "select_all")
+	validateKeys(k.DeselectAll, "deselect_all")
 	validateKeys(k.Confirm, "confirm")
 	validateKeys(k.Cancel, "cancel")
 
@@ -1209,11 +1209,15 @@ func (k Keybindings) ValidateKeybindings() error {
 
 	addKeys(k.Quit, "quit")
 	addKeys(k.Search, "search")
+	addKeys(k.Sync, "sync")
 	addKeys(k.Push, "push")
 	addKeys(k.Close, "close")
 	addKeys(k.OpenEditor, "open_editor")
 	addKeys(k.ToggleStale, "toggle_stale")
 	addKeys(k.Details, "details")
+	addKeys(k.Select, "select")
+	addKeys(k.SelectAll, "select_all")
+	addKeys(k.DeselectAll, "deselect_all")
 	addKeys(k.Confirm, "confirm")
 	addKeys(k.Cancel, "cancel")
 

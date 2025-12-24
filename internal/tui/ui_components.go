@@ -34,15 +34,19 @@ func NewUIComponents(keybindings config.Keybindings, staleThreshold int) UICompo
 	// Build keybinding help based on configured keys
 	searchKey := firstKey(keybindings.Search)
 	toggleStaleKey := firstKey(keybindings.ToggleStale)
+	syncKey := firstKey(keybindings.Sync)
 	pushKey := firstKey(keybindings.Push)
 	openKey := firstKey(keybindings.OpenEditor)
+	selectKey := firstKey(keybindings.Select)
 
 	l.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			key.NewBinding(key.WithKeys(searchKey), key.WithHelp(searchKey, "search")),
 			key.NewBinding(key.WithKeys(toggleStaleKey), key.WithHelp(toggleStaleKey, "toggle stale")),
+			key.NewBinding(key.WithKeys(syncKey), key.WithHelp(syncKey, "sync selected")),
 			key.NewBinding(key.WithKeys(pushKey), key.WithHelp(pushKey, "push selected")),
 			key.NewBinding(key.WithKeys(openKey), key.WithHelp(openKey, "open in editor")),
+			key.NewBinding(key.WithKeys(selectKey), key.WithHelp(selectKey, "select workspace")),
 		}
 	}
 
