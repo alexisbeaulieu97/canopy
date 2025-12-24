@@ -15,10 +15,10 @@ import (
 // OrphanService defines the interface for orphan detection operations.
 type OrphanService interface {
 	// DetectOrphans finds orphaned worktrees across all workspaces.
-	DetectOrphans() ([]domain.OrphanedWorktree, error)
+	DetectOrphans(ctx context.Context) ([]domain.OrphanedWorktree, error)
 
 	// DetectOrphansForWorkspace returns orphans for a specific workspace.
-	DetectOrphansForWorkspace(workspaceID string) ([]domain.OrphanedWorktree, error)
+	DetectOrphansForWorkspace(ctx context.Context, workspaceID string) ([]domain.OrphanedWorktree, error)
 
 	// PruneAllWorktrees cleans up stale worktree references from all canonical repos.
 	PruneAllWorktrees(ctx context.Context) error
@@ -55,13 +55,13 @@ func NewOrphanService(
 // - References a canonical repo that no longer exists
 // - Has a worktree directory that doesn't exist
 // - Has an invalid git directory
-func (s *WorkspaceOrphanService) DetectOrphans() ([]domain.OrphanedWorktree, error) {
-	workspaceList, err := s.wsEngine.List(context.Background())
+func (s *WorkspaceOrphanService) DetectOrphans(ctx context.Context) ([]domain.OrphanedWorktree, error) {
+	workspaceList, err := s.wsEngine.List(ctx)
 	if err != nil {
 		return nil, cerrors.NewIOFailed("list workspaces", err)
 	}
 
-	canonicalSet, err := s.buildCanonicalRepoSet()
+	canonicalSet, err := s.buildCanonicalRepoSet(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +69,10 @@ func (s *WorkspaceOrphanService) DetectOrphans() ([]domain.OrphanedWorktree, err
 	var orphans []domain.OrphanedWorktree
 
 	for _, ws := range workspaceList {
+		if ctx.Err() != nil {
+			return nil, cerrors.NewContextError(ctx, "detect orphans", ws.ID)
+		}
+
 		wsOrphans := s.checkWorkspaceForOrphans(ws, ws.ID, canonicalSet)
 		orphans = append(orphans, wsOrphans...)
 	}
@@ -78,13 +82,13 @@ func (s *WorkspaceOrphanService) DetectOrphans() ([]domain.OrphanedWorktree, err
 
 // DetectOrphansForWorkspace returns orphans for a specific workspace.
 // This is more efficient than DetectOrphans when only checking a single workspace.
-func (s *WorkspaceOrphanService) DetectOrphansForWorkspace(workspaceID string) ([]domain.OrphanedWorktree, error) {
-	ws, dirName, err := s.workspaceFinder.FindWorkspace(workspaceID)
+func (s *WorkspaceOrphanService) DetectOrphansForWorkspace(ctx context.Context, workspaceID string) ([]domain.OrphanedWorktree, error) {
+	ws, dirName, err := s.workspaceFinder.FindWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
 
-	canonicalSet, err := s.buildCanonicalRepoSet()
+	canonicalSet, err := s.buildCanonicalRepoSet(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -93,8 +97,8 @@ func (s *WorkspaceOrphanService) DetectOrphansForWorkspace(workspaceID string) (
 }
 
 // buildCanonicalRepoSet returns a set of canonical repo names.
-func (s *WorkspaceOrphanService) buildCanonicalRepoSet() (map[string]bool, error) {
-	canonicalRepos, err := s.gitEngine.List(context.Background())
+func (s *WorkspaceOrphanService) buildCanonicalRepoSet(ctx context.Context) (map[string]bool, error) {
+	canonicalRepos, err := s.gitEngine.List(ctx)
 	if err != nil {
 		return nil, cerrors.NewIOFailed("list canonical repos", err)
 	}

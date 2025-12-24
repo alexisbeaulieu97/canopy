@@ -48,8 +48,8 @@ func NewExportService(
 }
 
 // ExportWorkspace creates a portable export of a workspace definition.
-func (s *WorkspaceExportService) ExportWorkspace(_ context.Context, workspaceID string) (*domain.WorkspaceExport, error) {
-	workspace, _, err := s.workspaceFinder.FindWorkspace(workspaceID)
+func (s *WorkspaceExportService) ExportWorkspace(ctx context.Context, workspaceID string) (*domain.WorkspaceExport, error) {
+	workspace, _, err := s.workspaceFinder.FindWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (s *WorkspaceExportService) resolveImportOverrides(export *domain.Workspace
 
 // prepareForImport checks for existing workspace and removes it if force is set.
 func (s *WorkspaceExportService) prepareForImport(ctx context.Context, workspaceID string, force bool) error {
-	_, _, findErr := s.workspaceFinder.FindWorkspace(workspaceID)
+	_, _, findErr := s.workspaceFinder.FindWorkspace(ctx, workspaceID)
 	if findErr == nil {
 		// Workspace exists
 		if !force {

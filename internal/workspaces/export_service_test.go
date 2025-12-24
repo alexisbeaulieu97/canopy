@@ -152,6 +152,33 @@ func TestWorkspaceExportService_ExportWorkspace(t *testing.T) {
 	}
 }
 
+func TestWorkspaceExportService_ExportWorkspace_PropagatesDeadline(t *testing.T) {
+	t.Parallel()
+
+	finder := &mockWorkspaceFinder{
+		workspace: &domain.Workspace{ID: "test-ws"},
+		dirName:   "test-ws",
+	}
+
+	svc := NewExportService(&mocks.MockConfigProvider{}, finder, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	_, err := svc.ExportWorkspace(ctx, "test-ws")
+	if err != nil {
+		t.Fatalf("ExportWorkspace() error = %v", err)
+	}
+
+	if finder.lastCtx == nil {
+		t.Fatal("expected workspace finder to receive context")
+	}
+
+	if _, ok := finder.lastCtx.Deadline(); !ok {
+		t.Fatal("expected context deadline to be propagated")
+	}
+}
+
 func TestWorkspaceExportService_ImportWorkspace(t *testing.T) {
 	t.Parallel()
 

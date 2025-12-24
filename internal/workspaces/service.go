@@ -176,8 +176,8 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 }
 
 // FindWorkspace implements WorkspaceFinder interface for sub-services.
-func (s *Service) FindWorkspace(workspaceID string) (*domain.Workspace, string, error) {
-	return s.findWorkspace(context.Background(), workspaceID)
+func (s *Service) FindWorkspace(ctx context.Context, workspaceID string) (*domain.Workspace, string, error) {
+	return s.findWorkspace(ctx, workspaceID)
 }
 
 func (s *Service) withWorkspaceLock(ctx context.Context, workspaceID string, createDir bool, fn func() error) error {
@@ -297,8 +297,8 @@ func (s *Service) SwitchBranch(ctx context.Context, workspaceID, branchName stri
 // - References a canonical repo that no longer exists
 // - Has a worktree directory that doesn't exist
 // - Has an invalid git directory
-func (s *Service) DetectOrphans() ([]domain.OrphanedWorktree, error) {
-	return s.orphanService.DetectOrphans()
+func (s *Service) DetectOrphans(ctx context.Context) ([]domain.OrphanedWorktree, error) {
+	return s.orphanService.DetectOrphans(ctx)
 }
 
 // GetWorkspacesUsingRepo returns the IDs of workspaces that use the given canonical repo.
@@ -308,8 +308,8 @@ func (s *Service) GetWorkspacesUsingRepo(ctx context.Context, repoName string) (
 
 // DetectOrphansForWorkspace returns orphans for a specific workspace.
 // This is more efficient than DetectOrphans when only checking a single workspace.
-func (s *Service) DetectOrphansForWorkspace(workspaceID string) ([]domain.OrphanedWorktree, error) {
-	return s.orphanService.DetectOrphansForWorkspace(workspaceID)
+func (s *Service) DetectOrphansForWorkspace(ctx context.Context, workspaceID string) ([]domain.OrphanedWorktree, error) {
+	return s.orphanService.DetectOrphansForWorkspace(ctx, workspaceID)
 }
 
 // PruneAllWorktrees cleans up stale worktree references from all canonical repos.

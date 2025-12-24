@@ -20,7 +20,7 @@ func (m Model) loadWorkspaces() tea.Msg {
 	}
 
 	// Detect orphans for all workspaces
-	allOrphans, orphanErr := m.svc.DetectOrphans()
+	allOrphans, orphanErr := m.svc.DetectOrphans(context.Background())
 	orphanCheckFailed := orphanErr != nil
 
 	// Count orphans per workspace
@@ -81,7 +81,7 @@ func (m Model) loadWorkspaceDetails(id string) tea.Cmd {
 		}
 
 		// Get orphans for this workspace
-		orphans, _ := m.svc.DetectOrphansForWorkspace(id)
+		orphans, _ := m.svc.DetectOrphansForWorkspace(context.Background(), id)
 
 		wsCopy := wsItem.Workspace
 

@@ -75,7 +75,7 @@ func TestWorkspaceOrphanService_DetectOrphans(t *testing.T) {
 
 			svc := NewOrphanService(mockConfig, mockGit, mockStorage, nil, nil)
 
-			orphans, err := svc.DetectOrphans()
+			orphans, err := svc.DetectOrphans(context.Background())
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DetectOrphans() error = %v, wantErr %v", err, tt.wantErr)
@@ -149,7 +149,7 @@ func TestWorkspaceOrphanService_DetectOrphansForWorkspace(t *testing.T) {
 
 			svc := NewOrphanService(mockConfig, mockGit, nil, nil, finder)
 
-			orphans, err := svc.DetectOrphansForWorkspace("ws1")
+			orphans, err := svc.DetectOrphansForWorkspace(context.Background(), "ws1")
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("DetectOrphansForWorkspace() error = %v, wantErr %v", err, tt.wantErr)
@@ -159,6 +159,36 @@ func TestWorkspaceOrphanService_DetectOrphansForWorkspace(t *testing.T) {
 				t.Errorf("DetectOrphansForWorkspace() got %d orphans, want %d", len(orphans), tt.wantOrphans)
 			}
 		})
+	}
+}
+
+func TestWorkspaceOrphanService_DetectOrphans_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	mockGit := mocks.NewMockGitOperations()
+	mockGit.ListFunc = func(_ context.Context) ([]string, error) {
+		return nil, nil
+	}
+
+	mockStorage := &mocks.MockWorkspaceStorage{
+		ListFunc: func(ctx context.Context) ([]domain.Workspace, error) {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+
+			return []domain.Workspace{{ID: "ws1"}}, nil
+		},
+	}
+
+	svc := NewOrphanService(&mocks.MockConfigProvider{}, mockGit, mockStorage, nil, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := svc.DetectOrphans(ctx)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation error, got %v", err)
 	}
 }
 

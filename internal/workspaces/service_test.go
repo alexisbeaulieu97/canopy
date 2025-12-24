@@ -443,7 +443,7 @@ func TestDetectOrphans_MissingCanonicalRepo(t *testing.T) {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
-	orphans, err := deps.svc.DetectOrphans()
+	orphans, err := deps.svc.DetectOrphans(context.Background())
 	if err != nil {
 		t.Fatalf("DetectOrphans failed: %v", err)
 	}
@@ -491,7 +491,7 @@ func TestDetectOrphans_MissingWorktreeDirectory(t *testing.T) {
 
 	// Don't create the worktree directory - it should be detected as orphaned
 
-	orphans, err := deps.svc.DetectOrphans()
+	orphans, err := deps.svc.DetectOrphans(context.Background())
 	if err != nil {
 		t.Fatalf("DetectOrphans failed: %v", err)
 	}
@@ -539,7 +539,7 @@ func TestDetectOrphans_InvalidGitDir(t *testing.T) {
 		t.Fatalf("failed to write file: %v", err)
 	}
 
-	orphans, err := deps.svc.DetectOrphans()
+	orphans, err := deps.svc.DetectOrphans(context.Background())
 	if err != nil {
 		t.Fatalf("DetectOrphans failed: %v", err)
 	}
@@ -577,7 +577,7 @@ func TestDetectOrphans_NoOrphans(t *testing.T) {
 		t.Fatalf("failed to create workspace: %v", err)
 	}
 
-	orphans, err := deps.svc.DetectOrphans()
+	orphans, err := deps.svc.DetectOrphans(context.Background())
 	if err != nil {
 		t.Fatalf("DetectOrphans failed: %v", err)
 	}
