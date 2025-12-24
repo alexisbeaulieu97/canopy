@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
@@ -65,7 +66,7 @@ func TestConfirmViewState_Fields(t *testing.T) {
 				t.Errorf("ConfirmViewState.Action = %s, want %s", state.Action, tt.action)
 			}
 
-			if len(state.TargetIDs) != len(tt.targetIDs) || state.TargetIDs[0] != tt.targetIDs[0] {
+			if !reflect.DeepEqual(state.TargetIDs, tt.targetIDs) {
 				t.Errorf("ConfirmViewState.TargetIDs = %v, want %v", state.TargetIDs, tt.targetIDs)
 			}
 		})
