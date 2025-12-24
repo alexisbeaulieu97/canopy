@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -83,6 +84,8 @@ func (m *Model) handleWorkspaceListMessage(msg tea.Msg) (tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case workspaceListMsg:
 		m.workspaces.SetItems(msg.items, msg.totalUsage)
+		m.pruneSelectionIDs(msg.items)
+		m.applySelectionToItems()
 		m.applyFilters()
 
 		var cmds []tea.Cmd
@@ -158,9 +161,42 @@ func (m *Model) handleOperationMessage(msg tea.Msg) (tea.Cmd, bool) {
 		m.infoMessage = "Push completed successfully"
 
 		return m.loadWorkspaceStatus(msg.id), true
+	case bulkPushResultMsg:
+		m.pushing = false
+		m.pushTarget = ""
+
+		if msg.err != nil {
+			m.err = msg.err
+			return nil, true
+		}
+
+		m.infoMessage = fmt.Sprintf("Push completed for %d workspaces", len(msg.ids))
+
+		return m.loadWorkspaceStatuses(msg.ids), true
+	case syncResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return nil, true
+		}
+
+		if len(msg.ids) == 1 {
+			m.infoMessage = "Sync completed successfully"
+		} else {
+			m.infoMessage = fmt.Sprintf("Sync completed for %d workspaces", len(msg.ids))
+		}
+
+		return m.loadWorkspaceStatuses(msg.ids), true
 	case closeWorkspaceErrMsg:
 		m.err = msg.err
 		return nil, true
+	case bulkCloseResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.infoMessage = fmt.Sprintf("Closed %d workspaces", len(msg.ids))
+		}
+
+		return m.loadWorkspaces, true
 	case openEditorResultMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -244,6 +280,19 @@ func (m *Model) applyFilters() {
 	m.ui.List.SetItems(items)
 }
 
+func (m *Model) loadWorkspaceStatuses(ids []string) tea.Cmd {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	cmds := make([]tea.Cmd, 0, len(ids))
+	for _, id := range ids {
+		cmds = append(cmds, m.loadWorkspaceStatus(id))
+	}
+
+	return tea.Batch(cmds...)
+}
+
 // handleListKeyWithState handles key events in the main list view using ViewState pattern.
 func (m *Model) handleListKeyWithState(state *ListViewState, key string) (ViewState, tea.Cmd, bool) {
 	if m.pushing {
@@ -287,6 +336,31 @@ func (m *Model) handleListKeyAction(state *ListViewState, key string) (ViewState
 		return state, nil, true
 	}
 
+	if matchesKey(key, m.ui.Keybindings.Select) {
+		selected, ok := m.selectedWorkspaceItem()
+		if ok {
+			m.toggleWorkspaceSelection(selected.Workspace.ID)
+		}
+
+		return state, nil, true
+	}
+
+	if matchesKey(key, m.ui.Keybindings.SelectAll) {
+		m.selectAllVisible()
+
+		return state, nil, true
+	}
+
+	if matchesKey(key, m.ui.Keybindings.DeselectAll) {
+		m.clearSelection()
+
+		return state, nil, true
+	}
+
+	if matchesKey(key, m.ui.Keybindings.Sync) {
+		return m.handleSyncConfirmWithState()
+	}
+
 	if matchesKey(key, m.ui.Keybindings.Push) {
 		return m.handlePushConfirmWithState()
 	}
@@ -321,16 +395,33 @@ func (m *Model) handleConfirmKeyWithState(state *ConfirmViewState, key string) (
 	if matchesKey(key, m.ui.Keybindings.Confirm) {
 		switch state.Action {
 		case components.ActionClose:
-			if state.TargetID != "" {
-				return &ListViewState{}, m.closeWorkspace(state.TargetID), true
+			if len(state.TargetIDs) > 0 {
+				if len(state.TargetIDs) == 1 {
+					return &ListViewState{}, m.closeWorkspace(state.TargetIDs[0]), true
+				}
+
+				return &ListViewState{}, m.closeWorkspaces(state.TargetIDs), true
 			}
 		case components.ActionPush:
-			if state.TargetID != "" {
+			if len(state.TargetIDs) > 0 {
 				m.pushing = true
-				m.pushTarget = state.TargetID
+				if len(state.TargetIDs) == 1 {
+					m.pushTarget = state.TargetIDs[0]
+				} else {
+					m.pushTarget = fmt.Sprintf("%d workspaces", len(state.TargetIDs))
+				}
 				m.infoMessage = ""
 
-				return &ListViewState{}, m.pushWorkspace(state.TargetID), true
+				if len(state.TargetIDs) == 1 {
+					return &ListViewState{}, m.pushWorkspace(state.TargetIDs[0]), true
+				}
+
+				return &ListViewState{}, m.pushWorkspaces(state.TargetIDs), true
+			}
+		case components.ActionSync:
+			if len(state.TargetIDs) > 0 {
+				m.infoMessage = ""
+				return &ListViewState{}, m.syncWorkspaces(state.TargetIDs), true
 			}
 		}
 
@@ -384,16 +475,16 @@ func (m *Model) handleEnterWithState() (ViewState, tea.Cmd, bool) {
 
 // handlePushConfirmWithState initiates push confirmation using ViewState pattern.
 func (m *Model) handlePushConfirmWithState() (ViewState, tea.Cmd, bool) {
-	selected, ok := m.selectedWorkspaceItem()
-	if !ok {
+	m.infoMessage = ""
+
+	targets := m.actionTargetIDs()
+	if len(targets) == 0 {
 		return &ListViewState{}, nil, true
 	}
 
-	m.infoMessage = ""
-
 	return &ConfirmViewState{
-		Action:   components.ActionPush,
-		TargetID: selected.Workspace.ID,
+		Action:    components.ActionPush,
+		TargetIDs: targets,
 	}, nil, true
 }
 
@@ -409,13 +500,28 @@ func (m *Model) handleOpenEditorWithState(state *ListViewState) (ViewState, tea.
 
 // handleCloseConfirmWithState initiates close confirmation using ViewState pattern.
 func (m *Model) handleCloseConfirmWithState() (ViewState, tea.Cmd, bool) {
-	selected, ok := m.selectedWorkspaceItem()
-	if !ok {
+	targets := m.actionTargetIDs()
+	if len(targets) == 0 {
 		return &ListViewState{}, nil, true
 	}
 
 	return &ConfirmViewState{
-		Action:   components.ActionClose,
-		TargetID: selected.Workspace.ID,
+		Action:    components.ActionClose,
+		TargetIDs: targets,
+	}, nil, true
+}
+
+// handleSyncConfirmWithState initiates sync confirmation using ViewState pattern.
+func (m *Model) handleSyncConfirmWithState() (ViewState, tea.Cmd, bool) {
+	m.infoMessage = ""
+
+	targets := m.actionTargetIDs()
+	if len(targets) == 0 {
+		return &ListViewState{}, nil, true
+	}
+
+	return &ConfirmViewState{
+		Action:    components.ActionSync,
+		TargetIDs: targets,
 	}, nil, true
 }

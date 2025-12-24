@@ -166,9 +166,14 @@ canopy tui
 | Key | Action |
 |-----|--------|
 | `Enter` | View workspace details |
+| `Space` | Toggle workspace selection |
+| `a` | Select all visible workspaces |
+| `A` | Deselect all workspaces |
 | `o` | Open workspace in editor |
-| `c` | Close workspace |
-| `s` | Toggle stale filter |
+| `s` | Sync selected workspaces |
+| `p` | Push selected workspaces |
+| `c` | Close selected workspaces |
+| `t` | Toggle stale filter |
 | `/` | Search workspaces |
 | `q` | Quit |
 

@@ -22,16 +22,16 @@ func TestConfirmDialog_Show(t *testing.T) {
 		t.Errorf("expected action %s, got %s", ActionClose, dialog.Action)
 	}
 
-	if dialog.TargetID != "test-workspace" {
-		t.Errorf("expected targetID %s, got %s", "test-workspace", dialog.TargetID)
+	if dialog.TargetLabel != "test-workspace" {
+		t.Errorf("expected targetLabel %s, got %s", "test-workspace", dialog.TargetLabel)
 	}
 }
 
 func TestConfirmDialog_Hide(t *testing.T) {
 	dialog := ConfirmDialog{
-		Active:   true,
-		Action:   ActionPush,
-		TargetID: "test-workspace",
+		Active:      true,
+		Action:      ActionPush,
+		TargetLabel: "test-workspace",
 	}
 
 	dialog.Hide()
@@ -44,8 +44,8 @@ func TestConfirmDialog_Hide(t *testing.T) {
 		t.Error("expected action to be cleared after Hide")
 	}
 
-	if dialog.TargetID != "" {
-		t.Error("expected targetID to be cleared after Hide")
+	if dialog.TargetLabel != "" {
+		t.Error("expected targetLabel to be cleared after Hide")
 	}
 }
 
@@ -119,9 +119,9 @@ func TestConfirmDialog_HandleKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dialog := ConfirmDialog{
-				Active:   tt.active,
-				Action:   ActionClose,
-				TargetID: "test",
+				Active:      tt.active,
+				Action:      ActionClose,
+				TargetLabel: "test",
 			}
 
 			confirmed, handled := dialog.HandleKey(tt.key)
@@ -153,9 +153,9 @@ func TestConfirmDialog_Render(t *testing.T) {
 
 	t.Run("active dialog renders prompt", func(t *testing.T) {
 		dialog := ConfirmDialog{
-			Active:   true,
-			Action:   ActionClose,
-			TargetID: "my-workspace",
+			Active:      true,
+			Action:      ActionClose,
+			TargetLabel: "workspace my-workspace",
 		}
 
 		result := dialog.Render()
@@ -176,6 +176,7 @@ func TestActionDescription(t *testing.T) {
 	}{
 		{ActionClose, "close"},
 		{ActionPush, "push"},
+		{ActionSync, "sync"},
 		{ConfirmAction("custom"), "custom"},
 	}
 

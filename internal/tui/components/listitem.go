@@ -20,6 +20,7 @@ type WorkspaceItem struct {
 	OrphanCheckFailed bool // true if orphan detection failed for this workspace
 	Err               error
 	Loaded            bool
+	Selected          bool
 }
 
 // WorkspaceSummary holds aggregated status info for a workspace.
@@ -122,6 +123,13 @@ func (d WorkspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 		cursor = CursorStyle.Render(IconCursor)
 	}
 
+	selectionIndicator := "[ ]"
+	selectionStyle := SubtleTextStyle
+	if wsItem.Selected {
+		selectionIndicator = "[x]"
+		selectionStyle = AccentTextStyle
+	}
+
 	// Get health status badge
 	badge := NewStatusBadge(StatusBadgeInput{
 		HasError:      wsItem.Err != nil,
@@ -155,8 +163,8 @@ func (d WorkspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 		IsStale:           wsItem.Workspace.IsStale(d.staleThreshold),
 	}).Render()
 
-	// First line: cursor + status + title + badges
-	line1 := fmt.Sprintf("%s %s %s %s", cursor, statusIndicator, title, badges)
+	// First line: cursor + selection + status + title + badges
+	line1 := fmt.Sprintf("%s %s %s %s %s", cursor, selectionStyle.Render(selectionIndicator), statusIndicator, title, badges)
 
 	// Build description line
 	descStyle := d.styles.NormalDesc

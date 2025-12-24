@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
 // loadWorkspaces creates a command to load all workspaces.
@@ -43,6 +44,7 @@ func (m Model) loadWorkspaces() tea.Msg {
 			},
 			OrphanCount:       orphanCounts[w.ID],
 			OrphanCheckFailed: orphanCheckFailed,
+			Selected:          m.selectedIDs[w.ID],
 		})
 		totalUsage += w.DiskUsageBytes
 	}
@@ -97,6 +99,24 @@ func (m Model) pushWorkspace(id string) tea.Cmd {
 	}
 }
 
+// pushWorkspaces creates a command to push changes in multiple workspaces.
+func (m Model) pushWorkspaces(ids []string) tea.Cmd {
+	return func() tea.Msg {
+		var firstErr error
+
+		for _, id := range ids {
+			if err := m.svc.PushWorkspace(context.Background(), id); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+
+		return bulkPushResultMsg{
+			ids: ids,
+			err: firstErr,
+		}
+	}
+}
+
 // closeWorkspace creates a command to close/delete a workspace.
 func (m Model) closeWorkspace(id string) tea.Cmd {
 	return func() tea.Msg {
@@ -106,6 +126,43 @@ func (m Model) closeWorkspace(id string) tea.Cmd {
 		}
 		// Reload list
 		return m.loadWorkspaces()
+	}
+}
+
+// closeWorkspaces creates a command to close/delete multiple workspaces.
+func (m Model) closeWorkspaces(ids []string) tea.Cmd {
+	return func() tea.Msg {
+		var firstErr error
+
+		for _, id := range ids {
+			if err := m.svc.CloseWorkspace(context.Background(), id, false); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+
+		return bulkCloseResultMsg{
+			ids: ids,
+			err: firstErr,
+		}
+	}
+}
+
+// syncWorkspaces creates a command to sync repositories in multiple workspaces.
+func (m Model) syncWorkspaces(ids []string) tea.Cmd {
+	return func() tea.Msg {
+		var firstErr error
+
+		for _, id := range ids {
+			_, err := m.svc.SyncWorkspace(context.Background(), id, workspaces.SyncOptions{})
+			if err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+
+		return syncResultMsg{
+			ids: ids,
+			err: firstErr,
+		}
 	}
 }
 

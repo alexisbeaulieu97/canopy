@@ -465,9 +465,13 @@ canopy tui
 | Key | Action |
 |-----|--------|
 | `o` | Open workspace in editor |
-| `c` | Close selected workspace |
-| `p` | Push workspace changes |
-| `s` | Toggle stale workspace filter |
+| `c` | Close selected workspaces |
+| `p` | Push selected workspaces |
+| `s` | Sync selected workspaces |
+| `Space` | Toggle workspace selection |
+| `a` | Select all visible workspaces |
+| `A` | Deselect all workspaces |
+| `t` | Toggle stale workspace filter |
 | `q` | Quit |
 
 ### Customizing Keybindings

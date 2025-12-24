@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -59,9 +60,9 @@ func (m Model) renderListViewWithConfirm(state *ConfirmViewState) string {
 
 	// Confirmation prompt
 	dialog := components.ConfirmDialog{
-		Active:   true,
-		Action:   state.Action,
-		TargetID: state.TargetID,
+		Active:      true,
+		Action:      state.Action,
+		TargetLabel: m.confirmTargetLabel(state),
 	}
 	b.WriteString(dialog.Render())
 	b.WriteString("\n\n")
@@ -74,6 +75,18 @@ func (m Model) renderListViewWithConfirm(state *ConfirmViewState) string {
 	b.WriteString(m.renderFooter())
 
 	return b.String()
+}
+
+func (m Model) confirmTargetLabel(state *ConfirmViewState) string {
+	if state == nil || len(state.TargetIDs) == 0 {
+		return ""
+	}
+
+	if len(state.TargetIDs) == 1 {
+		return fmt.Sprintf("workspace %s", accentTextStyle.Render(state.TargetIDs[0]))
+	}
+
+	return fmt.Sprintf("%s workspaces", accentTextStyle.Render(strconv.Itoa(len(state.TargetIDs))))
 }
 
 // renderHeader renders the top header bar.
@@ -113,6 +126,10 @@ func (m Model) renderHeader() string {
 		parts = append(parts, strings.Join(filters, " "))
 	}
 
+	if count := m.selectionCount(); count > 0 {
+		parts = append(parts, mutedTextStyle.Render(fmt.Sprintf("%d selected", count)))
+	}
+
 	header := strings.Join(parts, "  ")
 
 	// Error message if any
@@ -143,22 +160,36 @@ func (m Model) renderFooter() string {
 	toggleStaleKey := firstKey(m.ui.Keybindings.ToggleStale)
 	detailsKey := firstKey(m.ui.Keybindings.Details)
 	openKey := firstKey(m.ui.Keybindings.OpenEditor)
+	syncKey := firstKey(m.ui.Keybindings.Sync)
 	pushKey := firstKey(m.ui.Keybindings.Push)
 	closeKey := firstKey(m.ui.Keybindings.Close)
+	selectKey := firstKey(m.ui.Keybindings.Select)
+	selectAllKey := firstKey(m.ui.Keybindings.SelectAll)
+	deselectAllKey := firstKey(m.ui.Keybindings.DeselectAll)
 	quitKey := firstKey(m.ui.Keybindings.Quit)
 
-	shortcuts := []string{
-		"[↑↓] navigate",
-		fmt.Sprintf("[%s] search", searchKey),
-		fmt.Sprintf("[%s] stale", toggleStaleKey),
-		fmt.Sprintf("[%s] details", detailsKey),
-		fmt.Sprintf("[%s] open", openKey),
-		fmt.Sprintf("[%s] push", pushKey),
-		fmt.Sprintf("[%s] close", closeKey),
-		fmt.Sprintf("[%s] quit", quitKey),
+	var shortcuts []string
+
+	if count := m.selectionCount(); count > 0 {
+		shortcuts = append(shortcuts, accentTextStyle.Render(fmt.Sprintf("%d selected", count)))
 	}
 
-	return subtleTextStyle.Render(strings.Join(shortcuts, "  •  "))
+	shortcuts = append(shortcuts,
+		subtleTextStyle.Render("[↑↓] navigate"),
+		subtleTextStyle.Render(fmt.Sprintf("[%s] search", searchKey)),
+		subtleTextStyle.Render(fmt.Sprintf("[%s] stale", toggleStaleKey)),
+		subtleTextStyle.Render(fmt.Sprintf("[%s] details", detailsKey)),
+		subtleTextStyle.Render(fmt.Sprintf("[%s] open", openKey)),
+		subtleTextStyle.Render(fmt.Sprintf("[%s] sync", syncKey)),
+		subtleTextStyle.Render(fmt.Sprintf("[%s] push", pushKey)),
+		subtleTextStyle.Render(fmt.Sprintf("[%s] close", closeKey)),
+		subtleTextStyle.Render(fmt.Sprintf("[%s] select", selectKey)),
+		subtleTextStyle.Render(fmt.Sprintf("[%s] all", selectAllKey)),
+		subtleTextStyle.Render(fmt.Sprintf("[%s] none", deselectAllKey)),
+		subtleTextStyle.Render(fmt.Sprintf("[%s] quit", quitKey)),
+	)
+
+	return strings.Join(shortcuts, "  •  ")
 }
 
 // renderDetailView renders the detailed workspace view.
