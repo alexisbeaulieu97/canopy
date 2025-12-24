@@ -1097,62 +1097,30 @@ func copyKeys(keys []string) []string {
 	return result
 }
 
+func applyDefaultKeys(keys *[]string, defaults []string) {
+	if len(*keys) == 0 {
+		*keys = copyKeys(defaults)
+	}
+}
+
 // WithDefaults returns a copy of Keybindings with defaults applied for empty fields.
 // Returned slices are copies to prevent mutation of global defaults.
 func (k Keybindings) WithDefaults() Keybindings {
 	result := k
 
-	if len(result.Quit) == 0 {
-		result.Quit = copyKeys(DefaultQuitKeys)
-	}
-
-	if len(result.Search) == 0 {
-		result.Search = copyKeys(DefaultSearchKeys)
-	}
-
-	if len(result.Sync) == 0 {
-		result.Sync = copyKeys(DefaultSyncKeys)
-	}
-
-	if len(result.Push) == 0 {
-		result.Push = copyKeys(DefaultPushKeys)
-	}
-
-	if len(result.Close) == 0 {
-		result.Close = copyKeys(DefaultCloseKeys)
-	}
-
-	if len(result.OpenEditor) == 0 {
-		result.OpenEditor = copyKeys(DefaultOpenEditorKeys)
-	}
-
-	if len(result.ToggleStale) == 0 {
-		result.ToggleStale = copyKeys(DefaultToggleStaleKeys)
-	}
-
-	if len(result.Details) == 0 {
-		result.Details = copyKeys(DefaultDetailsKeys)
-	}
-
-	if len(result.Select) == 0 {
-		result.Select = copyKeys(DefaultSelectKeys)
-	}
-
-	if len(result.SelectAll) == 0 {
-		result.SelectAll = copyKeys(DefaultSelectAllKeys)
-	}
-
-	if len(result.DeselectAll) == 0 {
-		result.DeselectAll = copyKeys(DefaultDeselectAllKeys)
-	}
-
-	if len(result.Confirm) == 0 {
-		result.Confirm = copyKeys(DefaultConfirmKeys)
-	}
-
-	if len(result.Cancel) == 0 {
-		result.Cancel = copyKeys(DefaultCancelKeys)
-	}
+	applyDefaultKeys(&result.Quit, DefaultQuitKeys)
+	applyDefaultKeys(&result.Search, DefaultSearchKeys)
+	applyDefaultKeys(&result.Sync, DefaultSyncKeys)
+	applyDefaultKeys(&result.Push, DefaultPushKeys)
+	applyDefaultKeys(&result.Close, DefaultCloseKeys)
+	applyDefaultKeys(&result.OpenEditor, DefaultOpenEditorKeys)
+	applyDefaultKeys(&result.ToggleStale, DefaultToggleStaleKeys)
+	applyDefaultKeys(&result.Details, DefaultDetailsKeys)
+	applyDefaultKeys(&result.Select, DefaultSelectKeys)
+	applyDefaultKeys(&result.SelectAll, DefaultSelectAllKeys)
+	applyDefaultKeys(&result.DeselectAll, DefaultDeselectAllKeys)
+	applyDefaultKeys(&result.Confirm, DefaultConfirmKeys)
+	applyDefaultKeys(&result.Cancel, DefaultCancelKeys)
 
 	return result
 }

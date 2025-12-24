@@ -125,6 +125,7 @@ func (d WorkspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 
 	selectionIndicator := "[ ]"
 	selectionStyle := SubtleTextStyle
+
 	if wsItem.Selected {
 		selectionIndicator = "[x]"
 		selectionStyle = AccentTextStyle

@@ -136,10 +136,6 @@ func (m Model) selectionCount() int {
 	return len(m.selectedIDs)
 }
 
-func (m Model) hasSelection() bool {
-	return len(m.selectedIDs) > 0
-}
-
 func (m *Model) updateSelectionMode() {
 	m.selectionMode = len(m.selectedIDs) > 0
 }
