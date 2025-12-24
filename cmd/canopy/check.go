@@ -68,8 +68,8 @@ var checkCmd = &cobra.Command{
 	},
 }
 
-func runOrphanCheck(_ *cobra.Command, appInstance *app.App, jsonOutput bool) error {
-	orphans, err := appInstance.Service.DetectOrphans()
+func runOrphanCheck(cmd *cobra.Command, appInstance *app.App, jsonOutput bool) error {
+	orphans, err := appInstance.Service.DetectOrphans(cmd.Context())
 	if err != nil {
 		if jsonOutput {
 			_ = output.PrintErrorJSON(err)

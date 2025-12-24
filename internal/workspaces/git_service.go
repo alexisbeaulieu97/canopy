@@ -26,7 +26,7 @@ type GitService interface {
 
 // WorkspaceFinder is the interface for finding workspaces (used to avoid circular dependencies).
 type WorkspaceFinder interface {
-	FindWorkspace(workspaceID string) (*domain.Workspace, string, error)
+	FindWorkspace(ctx context.Context, workspaceID string) (*domain.Workspace, string, error)
 }
 
 // WorkspaceGitService handles git operations for workspaces.
@@ -60,7 +60,7 @@ func NewGitService(
 
 // PushWorkspace pushes all repos for a workspace.
 func (s *WorkspaceGitService) PushWorkspace(ctx context.Context, workspaceID string) error {
-	targetWorkspace, dirName, err := s.workspaceFinder.FindWorkspace(workspaceID)
+	targetWorkspace, dirName, err := s.workspaceFinder.FindWorkspace(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func (s *WorkspaceGitService) PushWorkspace(ctx context.Context, workspaceID str
 
 // RunGitInWorkspace executes an arbitrary git command across all repos in a workspace.
 func (s *WorkspaceGitService) RunGitInWorkspace(ctx context.Context, workspaceID string, args []string, opts GitRunOptions) ([]RepoGitResult, error) {
-	targetWorkspace, dirName, err := s.workspaceFinder.FindWorkspace(workspaceID)
+	targetWorkspace, dirName, err := s.workspaceFinder.FindWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func (s *WorkspaceGitService) runGitParallel(ctx context.Context, workspace *dom
 
 // SwitchBranch switches the branch for all repos in a workspace.
 func (s *WorkspaceGitService) SwitchBranch(ctx context.Context, workspaceID, branchName string, create bool) error {
-	targetWorkspace, dirName, err := s.workspaceFinder.FindWorkspace(workspaceID)
+	targetWorkspace, dirName, err := s.workspaceFinder.FindWorkspace(ctx, workspaceID)
 	if err != nil {
 		return err
 	}

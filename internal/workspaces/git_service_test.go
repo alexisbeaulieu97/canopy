@@ -15,14 +15,51 @@ type mockWorkspaceFinder struct {
 	workspace *domain.Workspace
 	dirName   string
 	err       error
+	lastCtx   context.Context
 }
 
-func (m *mockWorkspaceFinder) FindWorkspace(_ string) (*domain.Workspace, string, error) {
+func (m *mockWorkspaceFinder) FindWorkspace(ctx context.Context, _ string) (*domain.Workspace, string, error) {
+	m.lastCtx = ctx
+	if ctx.Err() != nil {
+		return nil, "", ctx.Err()
+	}
+
 	if m.err != nil {
 		return nil, "", m.err
 	}
 
 	return m.workspace, m.dirName, nil
+}
+
+func TestWorkspaceGitService_PushWorkspace_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	mockConfig := &mocks.MockConfigProvider{
+		WorkspacesRoot: "/workspaces",
+	}
+
+	finder := &mockWorkspaceFinder{
+		workspace: &domain.Workspace{
+			ID:    "test-ws",
+			Repos: []domain.Repo{{Name: "repo1", URL: "https://example.com/repo1.git"}},
+		},
+		dirName: "test-ws",
+	}
+
+	svc := NewGitService(mockConfig, mocks.NewMockGitOperations(), nil, nil, nil, finder)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := svc.PushWorkspace(ctx, "test-ws")
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation error, got %v", err)
+	}
+
+	if finder.lastCtx == nil {
+		t.Fatal("expected workspace finder to receive context")
+	}
 }
 
 func TestWorkspaceGitService_PushWorkspace(t *testing.T) {
