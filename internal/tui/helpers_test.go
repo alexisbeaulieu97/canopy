@@ -41,6 +41,7 @@ func TestMatchesKey(t *testing.T) {
 		{name: "empty bindings", key: "q", bindings: []string{}, want: false},
 		{name: "ctrl key match", key: "ctrl+c", bindings: []string{"q", "ctrl+c"}, want: true},
 		{name: "case sensitive no match", key: "Q", bindings: []string{"q"}, want: false},
+		{name: "space maps to space key name", key: " ", bindings: []string{"space"}, want: true},
 	}
 
 	for _, tt := range tests {

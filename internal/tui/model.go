@@ -70,6 +70,10 @@ func (m Model) Init() tea.Cmd {
 
 // matchesKey checks if the pressed key matches any of the configured keybindings.
 func matchesKey(key string, bindings []string) bool {
+	if key == " " {
+		key = "space"
+	}
+
 	for _, b := range bindings {
 		if key == b {
 			return true
