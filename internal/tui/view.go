@@ -93,10 +93,12 @@ func (m Model) renderDetailViewWithConfirm(state *ConfirmViewState) string {
 }
 
 func (m Model) renderConfirmView(state *ConfirmViewState) string {
-	if state != nil {
-		if _, ok := state.Parent.(*DetailViewState); ok {
-			return m.renderDetailViewWithConfirm(state)
-		}
+	if state == nil {
+		return m.renderListView()
+	}
+
+	if _, ok := state.Parent.(*DetailViewState); ok {
+		return m.renderDetailViewWithConfirm(state)
 	}
 
 	return m.renderListViewWithConfirm(state)

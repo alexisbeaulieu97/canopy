@@ -126,28 +126,49 @@ func (m *Model) handleWorkspaceStatusMessage(msg tea.Msg) (tea.Cmd, bool) {
 func (m *Model) handleWorkspaceDetailsMessage(msg tea.Msg) (tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case workspaceDetailsMsg:
-		m.selectedWS = msg.workspace
-		m.wsStatus = msg.status
-		m.wsOrphans = msg.orphans
-
-		if ds := m.getDetailState(); ds != nil {
-			ds.Loading = false
-			if ds.WorkspaceID == "" && msg.workspace != nil {
-				ds.WorkspaceID = msg.workspace.ID
-			}
-		}
-
-		return nil, true
+		return m.handleWorkspaceDetailsLoaded(msg)
 	case workspaceDetailsErrMsg:
-		m.err = msg.err
-		if ds := m.getDetailState(); ds != nil {
-			ds.Loading = false
-		}
-
-		return nil, true
+		return m.handleWorkspaceDetailsError(msg)
 	}
 
 	return nil, false
+}
+
+func (m *Model) handleWorkspaceDetailsLoaded(msg workspaceDetailsMsg) (tea.Cmd, bool) {
+	m.selectedWS = msg.workspace
+	m.wsStatus = msg.status
+	m.wsOrphans = msg.orphans
+
+	m.updateDetailStateLoading(msg.workspace)
+
+	return nil, true
+}
+
+func (m *Model) handleWorkspaceDetailsError(msg workspaceDetailsErrMsg) (tea.Cmd, bool) {
+	m.err = msg.err
+	if ds := m.getDetailState(); ds != nil {
+		ds.Loading = false
+	}
+
+	return nil, true
+}
+
+func (m *Model) updateDetailStateLoading(ws *domain.Workspace) {
+	if ds := m.getDetailState(); ds != nil {
+		ds.Loading = false
+		if ds.WorkspaceID == "" && ws != nil {
+			ds.WorkspaceID = ws.ID
+		}
+	}
+
+	if cs := m.getConfirmState(); cs != nil {
+		if ds, ok := cs.Parent.(*DetailViewState); ok {
+			ds.Loading = false
+			if ds.WorkspaceID == "" && ws != nil {
+				ds.WorkspaceID = ws.ID
+			}
+		}
+	}
 }
 
 func (m *Model) handleOperationMessage(msg tea.Msg) (tea.Cmd, bool) {
@@ -446,6 +467,10 @@ func (m *Model) handleDetailKeyWithState(state *DetailViewState, key string) (Vi
 		m.wsOrphans = nil
 
 		return &ListViewState{}, nil, true
+	}
+
+	if state.Loading {
+		return state, nil, true
 	}
 
 	targetID := m.detailTargetID(state)

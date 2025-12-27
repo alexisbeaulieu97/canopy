@@ -35,6 +35,104 @@ func TestHandleDetailKeyWithState_PushShowsConfirm(t *testing.T) {
 	}
 }
 
+func TestHandleDetailKeyWithState_SyncShowsConfirm(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTUITestModel(t)
+	state := &DetailViewState{WorkspaceID: "ws-1"}
+
+	next, _, handled := model.handleDetailKeyWithState(state, firstKey(model.ui.Keybindings.Sync))
+	if !handled {
+		t.Fatal("expected sync key to be handled in detail view")
+	}
+
+	confirm, ok := next.(*ConfirmViewState)
+	if !ok {
+		t.Fatalf("expected ConfirmViewState, got %T", next)
+	}
+
+	if confirm.Action != components.ActionSync {
+		t.Fatalf("expected ActionSync, got %s", confirm.Action)
+	}
+
+	if len(confirm.TargetIDs) != 1 || confirm.TargetIDs[0] != "ws-1" {
+		t.Fatalf("expected target ws-1, got %v", confirm.TargetIDs)
+	}
+
+	if confirm.Parent != state {
+		t.Fatal("expected confirm state to preserve detail parent")
+	}
+}
+
+func TestHandleDetailKeyWithState_CloseShowsConfirm(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTUITestModel(t)
+	state := &DetailViewState{WorkspaceID: "ws-1"}
+
+	next, _, handled := model.handleDetailKeyWithState(state, firstKey(model.ui.Keybindings.Close))
+	if !handled {
+		t.Fatal("expected close key to be handled in detail view")
+	}
+
+	confirm, ok := next.(*ConfirmViewState)
+	if !ok {
+		t.Fatalf("expected ConfirmViewState, got %T", next)
+	}
+
+	if confirm.Action != components.ActionClose {
+		t.Fatalf("expected ActionClose, got %s", confirm.Action)
+	}
+
+	if len(confirm.TargetIDs) != 1 || confirm.TargetIDs[0] != "ws-1" {
+		t.Fatalf("expected target ws-1, got %v", confirm.TargetIDs)
+	}
+
+	if confirm.Parent != state {
+		t.Fatal("expected confirm state to preserve detail parent")
+	}
+}
+
+func TestHandleDetailKeyWithState_OpenEditorRunsCommand(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTUITestModel(t)
+	state := &DetailViewState{WorkspaceID: "ws-1"}
+
+	next, cmd, handled := model.handleDetailKeyWithState(state, firstKey(model.ui.Keybindings.OpenEditor))
+	if !handled {
+		t.Fatal("expected open editor key to be handled in detail view")
+	}
+
+	if next != state {
+		t.Fatalf("expected to stay in detail view, got %T", next)
+	}
+
+	if cmd == nil {
+		t.Fatal("expected open editor command to be returned")
+	}
+}
+
+func TestHandleDetailKeyWithState_LoadingIgnoresActions(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTUITestModel(t)
+	state := &DetailViewState{WorkspaceID: "ws-1", Loading: true}
+
+	next, cmd, handled := model.handleDetailKeyWithState(state, firstKey(model.ui.Keybindings.Push))
+	if !handled {
+		t.Fatal("expected key to be handled while loading")
+	}
+
+	if next != state {
+		t.Fatalf("expected to remain in detail view, got %T", next)
+	}
+
+	if cmd != nil {
+		t.Fatal("expected no command while loading")
+	}
+}
+
 func TestHandleConfirmKeyWithState_FromDetailReturnsDetail(t *testing.T) {
 	t.Parallel()
 
