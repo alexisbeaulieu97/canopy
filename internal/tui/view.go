@@ -77,6 +77,33 @@ func (m Model) renderListViewWithConfirm(state *ConfirmViewState) string {
 	return b.String()
 }
 
+func (m Model) renderDetailViewWithConfirm(state *ConfirmViewState) string {
+	var b strings.Builder
+
+	dialog := components.ConfirmDialog{
+		Active:      true,
+		Action:      state.Action,
+		TargetLabel: m.confirmTargetLabel(state),
+	}
+	b.WriteString(dialog.Render())
+	b.WriteString("\n\n")
+	b.WriteString(m.renderDetailView())
+
+	return b.String()
+}
+
+func (m Model) renderConfirmView(state *ConfirmViewState) string {
+	if state == nil {
+		return m.renderListView()
+	}
+
+	if _, ok := state.Parent.(*DetailViewState); ok {
+		return m.renderDetailViewWithConfirm(state)
+	}
+
+	return m.renderListViewWithConfirm(state)
+}
+
 func (m Model) confirmTargetLabel(state *ConfirmViewState) string {
 	if state == nil || len(state.TargetIDs) == 0 {
 		return ""
@@ -233,7 +260,21 @@ func (m Model) renderDetailView() string {
 	b.WriteString("\n\n")
 
 	// Footer with configured keys (cancel keys always exist via WithDefaults)
-	b.WriteString(helpTextStyle.Render(fmt.Sprintf("Press [%s] to return", firstKey(m.ui.Keybindings.Cancel))))
+	cancelKey := firstKey(m.ui.Keybindings.Cancel)
+	openKey := firstKey(m.ui.Keybindings.OpenEditor)
+	syncKey := firstKey(m.ui.Keybindings.Sync)
+	pushKey := firstKey(m.ui.Keybindings.Push)
+	closeKey := firstKey(m.ui.Keybindings.Close)
+
+	shortcuts := []string{
+		fmt.Sprintf("[%s] return", cancelKey),
+		fmt.Sprintf("[%s] open", openKey),
+		fmt.Sprintf("[%s] sync", syncKey),
+		fmt.Sprintf("[%s] push", pushKey),
+		fmt.Sprintf("[%s] close", closeKey),
+	}
+
+	b.WriteString(helpTextStyle.Render("Press " + strings.Join(shortcuts, "  •  ")))
 
 	return b.String()
 }
