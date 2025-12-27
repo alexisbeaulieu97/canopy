@@ -126,25 +126,49 @@ func (m *Model) handleWorkspaceStatusMessage(msg tea.Msg) (tea.Cmd, bool) {
 func (m *Model) handleWorkspaceDetailsMessage(msg tea.Msg) (tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case workspaceDetailsMsg:
-		m.selectedWS = msg.workspace
-		m.wsStatus = msg.status
-		m.wsOrphans = msg.orphans
-
-		if ds := m.getDetailState(); ds != nil {
-			ds.Loading = false
-		}
-
-		return nil, true
+		return m.handleWorkspaceDetailsLoaded(msg)
 	case workspaceDetailsErrMsg:
-		m.err = msg.err
-		if ds := m.getDetailState(); ds != nil {
-			ds.Loading = false
-		}
-
-		return nil, true
+		return m.handleWorkspaceDetailsError(msg)
 	}
 
 	return nil, false
+}
+
+func (m *Model) handleWorkspaceDetailsLoaded(msg workspaceDetailsMsg) (tea.Cmd, bool) {
+	m.selectedWS = msg.workspace
+	m.wsStatus = msg.status
+	m.wsOrphans = msg.orphans
+
+	m.updateDetailStateLoading(msg.workspace)
+
+	return nil, true
+}
+
+func (m *Model) handleWorkspaceDetailsError(msg workspaceDetailsErrMsg) (tea.Cmd, bool) {
+	m.err = msg.err
+	if ds := m.getDetailState(); ds != nil {
+		ds.Loading = false
+	}
+
+	return nil, true
+}
+
+func (m *Model) updateDetailStateLoading(ws *domain.Workspace) {
+	if ds := m.getDetailState(); ds != nil {
+		ds.Loading = false
+		if ds.WorkspaceID == "" && ws != nil {
+			ds.WorkspaceID = ws.ID
+		}
+	}
+
+	if cs := m.getConfirmState(); cs != nil {
+		if ds, ok := cs.Parent.(*DetailViewState); ok {
+			ds.Loading = false
+			if ds.WorkspaceID == "" && ws != nil {
+				ds.WorkspaceID = ws.ID
+			}
+		}
+	}
 }
 
 func (m *Model) handleOperationMessage(msg tea.Msg) (tea.Cmd, bool) {
@@ -445,6 +469,43 @@ func (m *Model) handleDetailKeyWithState(state *DetailViewState, key string) (Vi
 		return &ListViewState{}, nil, true
 	}
 
+	if state.Loading {
+		return state, nil, true
+	}
+
+	targetID := m.detailTargetID(state)
+	if targetID == "" {
+		return state, nil, false
+	}
+
+	if matchesKey(key, m.ui.Keybindings.OpenEditor) {
+		return state, m.openWorkspace(targetID), true
+	}
+
+	if matchesKey(key, m.ui.Keybindings.Push) {
+		return &ConfirmViewState{
+			Action:    components.ActionPush,
+			TargetIDs: []string{targetID},
+			Parent:    state,
+		}, nil, true
+	}
+
+	if matchesKey(key, m.ui.Keybindings.Sync) {
+		return &ConfirmViewState{
+			Action:    components.ActionSync,
+			TargetIDs: []string{targetID},
+			Parent:    state,
+		}, nil, true
+	}
+
+	if matchesKey(key, m.ui.Keybindings.Close) {
+		return &ConfirmViewState{
+			Action:    components.ActionClose,
+			TargetIDs: []string{targetID},
+			Parent:    state,
+		}, nil, true
+	}
+
 	return state, nil, false
 }
 
@@ -455,6 +516,10 @@ func (m *Model) handleConfirmKeyWithState(state *ConfirmViewState, key string) (
 	}
 
 	if matchesKey(key, m.ui.Keybindings.Cancel) {
+		if state.Parent != nil {
+			return state.Parent, nil, true
+		}
+
 		return &ListViewState{}, nil, true
 	}
 
@@ -486,17 +551,25 @@ func (m *Model) handleConfirmAction(state *ConfirmViewState) (ViewState, tea.Cmd
 		m.infoMessage = ""
 
 		if len(state.TargetIDs) == 1 {
-			return &ListViewState{}, m.pushWorkspace(state.TargetIDs[0]), true
+			return m.confirmReturnState(state), m.pushWorkspace(state.TargetIDs[0]), true
 		}
 
-		return &ListViewState{}, m.pushWorkspaces(state.TargetIDs), true
+		return m.confirmReturnState(state), m.pushWorkspaces(state.TargetIDs), true
 	case components.ActionSync:
 		m.infoMessage = ""
 
-		return &ListViewState{}, m.syncWorkspaces(state.TargetIDs), true
+		return m.confirmReturnState(state), m.syncWorkspaces(state.TargetIDs), true
 	}
 
 	return &ListViewState{}, nil, true
+}
+
+func (m *Model) confirmReturnState(state *ConfirmViewState) ViewState {
+	if state.Parent != nil {
+		return state.Parent
+	}
+
+	return &ListViewState{}
 }
 
 // handleEnterWithState handles the enter key to view workspace details.
@@ -522,7 +595,7 @@ func (m *Model) handleEnterWithState() (ViewState, tea.Cmd, bool) {
 	if cached, ok := m.workspaces.GetCachedStatus(selected.Workspace.ID); ok {
 		// Show cached status immediately, but still fetch full details (including orphans)
 		// in the background. The UI will update when the full details arrive.
-		detailState := &DetailViewState{Loading: false} // Not loading since we have cached data
+		detailState := &DetailViewState{Loading: false, WorkspaceID: selected.Workspace.ID} // Not loading since we have cached data
 		cachedMsg := func() tea.Msg {
 			return workspaceDetailsMsg{workspace: &wsCopy, status: cached}
 		}
@@ -530,7 +603,7 @@ func (m *Model) handleEnterWithState() (ViewState, tea.Cmd, bool) {
 		return detailState, tea.Batch(cachedMsg, m.loadWorkspaceDetails(selected.Workspace.ID)), true
 	}
 
-	detailState := &DetailViewState{Loading: true}
+	detailState := &DetailViewState{Loading: true, WorkspaceID: selected.Workspace.ID}
 
 	return detailState, m.loadWorkspaceDetails(selected.Workspace.ID), true
 }
@@ -586,4 +659,16 @@ func (m *Model) handleSyncConfirmWithState() (ViewState, tea.Cmd, bool) {
 		Action:    components.ActionSync,
 		TargetIDs: targets,
 	}, nil, true
+}
+
+func (m *Model) detailTargetID(state *DetailViewState) string {
+	if state != nil && state.WorkspaceID != "" {
+		return state.WorkspaceID
+	}
+
+	if m.selectedWS != nil {
+		return m.selectedWS.ID
+	}
+
+	return ""
 }

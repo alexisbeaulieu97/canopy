@@ -37,9 +37,13 @@ func TestDetailViewState_Loading(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			state := &DetailViewState{Loading: tt.loading}
+			state := &DetailViewState{Loading: tt.loading, WorkspaceID: "ws-1"}
 			if state.Loading != tt.loading {
 				t.Errorf("DetailViewState.Loading = %v, want %v", state.Loading, tt.loading)
+			}
+
+			if state.WorkspaceID == "" {
+				t.Error("DetailViewState.WorkspaceID should not be empty")
 			}
 		})
 	}
@@ -60,6 +64,7 @@ func TestConfirmViewState_Fields(t *testing.T) {
 			state := &ConfirmViewState{
 				Action:    tt.action,
 				TargetIDs: tt.targetIDs,
+				Parent:    &ListViewState{},
 			}
 
 			if state.Action != tt.action {
@@ -68,6 +73,10 @@ func TestConfirmViewState_Fields(t *testing.T) {
 
 			if !reflect.DeepEqual(state.TargetIDs, tt.targetIDs) {
 				t.Errorf("ConfirmViewState.TargetIDs = %v, want %v", state.TargetIDs, tt.targetIDs)
+			}
+
+			if state.Parent == nil {
+				t.Error("ConfirmViewState.Parent should not be nil")
 			}
 		})
 	}

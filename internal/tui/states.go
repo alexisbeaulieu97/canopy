@@ -21,13 +21,15 @@ type ListViewState struct{}
 
 // DetailViewState represents the workspace detail view.
 type DetailViewState struct {
-	Loading bool
+	Loading     bool
+	WorkspaceID string
 }
 
 // ConfirmViewState represents a confirmation dialog state.
 type ConfirmViewState struct {
 	Action    components.ConfirmAction
 	TargetIDs []string
+	Parent    ViewState
 }
 
 // Ensure states implement ViewState interface.
@@ -59,7 +61,7 @@ func (s *DetailViewState) HandleKey(m *Model, key string) (ViewState, tea.Cmd, b
 
 // View renders the confirmation dialog over the list view.
 func (s *ConfirmViewState) View(m *Model) string {
-	return m.renderListViewWithConfirm(s)
+	return m.renderConfirmView(s)
 }
 
 // HandleKey handles key events for the confirmation dialog.
