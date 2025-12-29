@@ -167,16 +167,20 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 				done++
 				orderedResults[res.index] = res
 
-				if showProgress && progress != nil && !cancelled {
+				// Always log errors for visibility
+				if res.err != nil {
+					output.Warnf("Workspace %s sync failed (%d/%d): %v", res.id, done, len(ids), res.err)
+				}
+
+				if showProgress && !cancelled {
 					if res.err != nil {
 						progress.Increment(fmt.Sprintf("%s (failed)", res.id))
 					} else {
 						progress.Increment(res.id)
 					}
-				} else if !showProgress {
-					if res.err != nil {
-						output.Warnf("Workspace %s sync failed (%d/%d): %v", res.id, done, len(ids), res.err)
-					} else {
+				} else if !showProgress || cancelled {
+					// Log non-error results when progress is off or after cancellation
+					if res.err == nil {
 						output.Infof("Synced workspace %s (%d/%d)", res.id, done, len(ids))
 					}
 				}
@@ -184,6 +188,12 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 
 			if progress != nil {
 				progress.Finish()
+			}
+
+			// Handle cancellation
+			if cancelled {
+				output.Warnf("Bulk sync cancelled")
+				return cerrors.NewOperationCancelled("bulk sync")
 			}
 
 			if jsonOutput {

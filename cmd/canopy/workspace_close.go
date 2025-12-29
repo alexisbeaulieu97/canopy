@@ -184,20 +184,20 @@ var workspaceCloseCmd = &cobra.Command{
 			cancelled := false
 			for i, id := range ids {
 				// Check for context cancellation
-				if cmd.Context().Err() != nil && !cancelled {
-					cancelled = true
-					if progress != nil {
-						progress.Cancel()
+				if cmd.Context().Err() != nil {
+					if !cancelled {
+						cancelled = true
+						if progress != nil {
+							progress.Cancel()
+						}
 					}
-				}
 
-				if cancelled {
 					break
 				}
 
-				if showProgress && progress != nil {
+				if showProgress {
 					progress.SetMessage(id)
-				} else if !showProgress {
+				} else {
 					output.Infof("Closing workspace %s (%d/%d)", id, i+1, len(ids))
 				}
 
@@ -213,23 +213,30 @@ var workspaceCloseCmd = &cobra.Command{
 					}
 					failedIDs = append(failedIDs, id)
 
-					if showProgress && progress != nil {
+					// Always log the error for visibility
+					output.Warnf("Failed to close workspace %s: %v", id, err)
+					if showProgress {
 						progress.Increment(fmt.Sprintf("%s (failed)", id))
-					} else if !showProgress {
-						output.Warnf("Failed to close workspace %s: %v", id, err)
 					}
 
 					continue
 				}
 
 				successIDs = append(successIDs, id)
-				if showProgress && progress != nil {
+				if showProgress {
 					progress.Increment(id)
 				}
 			}
 
 			if progress != nil {
 				progress.Finish()
+			}
+
+			// Handle cancellation
+			if cancelled {
+				skipped := len(ids) - len(successIDs) - len(failedIDs)
+				output.Warnf("Bulk close cancelled: %d succeeded, %d failed, %d skipped", len(successIDs), len(failedIDs), skipped)
+				return cerrors.NewOperationCancelled("bulk close")
 			}
 
 			output.Success("Bulk close completed", fmt.Sprintf("%d succeeded, %d failed", len(successIDs), len(failedIDs)))

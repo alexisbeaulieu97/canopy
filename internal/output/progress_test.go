@@ -139,7 +139,12 @@ func TestProgress_SetMessage(t *testing.T) {
 	}
 	p := NewProgress(opts)
 
+	// SetMessage stores the message but doesn't render in non-TTY mode
+	// (to avoid duplicate lines when Increment follows)
 	p.SetMessage("processing item")
+
+	// Message appears when we increment
+	p.Increment("")
 
 	output := buf.String()
 

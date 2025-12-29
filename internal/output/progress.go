@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/lipgloss"
@@ -40,14 +39,14 @@ func DefaultProgressOptions(total int) ProgressOptions {
 
 // Progress tracks and displays operation progress.
 type Progress struct {
-	mu       sync.Mutex
-	opts     ProgressOptions
-	current  int
-	message  string
-	bar      progress.Model
-	started  time.Time
-	finished bool
-	isTTY    bool
+	mu           sync.Mutex
+	opts         ProgressOptions
+	current      int
+	lastRendered int // track last rendered progress for non-TTY deduplication
+	message      string
+	bar          progress.Model
+	finished     bool
+	isTTY        bool
 }
 
 // NewProgress creates a progress tracker with the given options.
@@ -69,10 +68,9 @@ func NewProgress(opts ProgressOptions) *Progress {
 	isTTY := isWriterTTY(opts.Writer)
 
 	return &Progress{
-		opts:    opts,
-		bar:     bar,
-		started: time.Now(),
-		isTTY:   isTTY,
+		opts:  opts,
+		bar:   bar,
+		isTTY: isTTY,
 	}
 }
 
@@ -204,7 +202,13 @@ func (p *Progress) renderTTY(pct float64) {
 }
 
 func (p *Progress) renderNonTTY() {
-	// For non-TTY, print simple status messages (only on increment)
+	// For non-TTY, only print when progress actually changes (avoid duplicates from SetMessage)
+	if p.current == p.lastRendered {
+		return
+	}
+
+	p.lastRendered = p.current
+
 	if p.opts.Total > 0 {
 		_, _ = fmt.Fprintf(p.opts.Writer, "[%d/%d] %s\n", p.current, p.opts.Total, p.message) //nolint:forbidigo // progress bar output
 	} else {
