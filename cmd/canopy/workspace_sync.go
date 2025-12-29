@@ -50,6 +50,7 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 		jsonOutput, _ := cmd.Flags().GetBool("json")
 		pattern, _ := cmd.Flags().GetString("pattern")
 		all, _ := cmd.Flags().GetBool("all")
+		noProgress, _ := cmd.Flags().GetBool("no-progress")
 
 		var timeout time.Duration
 		if timeoutStr != "" {
@@ -143,16 +144,46 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 				close(results)
 			}()
 
+			// Set up progress tracking
+			showProgress := !noProgress && !jsonOutput
+			var progress *output.Progress
+			if showProgress {
+				progressOpts := output.DefaultProgressOptions(len(ids))
+				progress = output.NewProgress(progressOpts)
+			}
+
 			orderedResults := make([]syncResult, len(ids))
+			cancelled := false
 			done := 0
 			for res := range results {
+				// Check for context cancellation
+				if cmd.Context().Err() != nil && !cancelled {
+					cancelled = true
+					if progress != nil {
+						progress.Cancel()
+					}
+				}
+
 				done++
 				orderedResults[res.index] = res
-				if res.err != nil {
-					output.Warnf("Workspace %s sync failed (%d/%d): %v", res.id, done, len(ids), res.err)
-					continue
+
+				if showProgress && progress != nil && !cancelled {
+					if res.err != nil {
+						progress.Increment(fmt.Sprintf("%s (failed)", res.id))
+					} else {
+						progress.Increment(res.id)
+					}
+				} else if !showProgress {
+					if res.err != nil {
+						output.Warnf("Workspace %s sync failed (%d/%d): %v", res.id, done, len(ids), res.err)
+					} else {
+						output.Infof("Synced workspace %s (%d/%d)", res.id, done, len(ids))
+					}
 				}
-				output.Infof("Synced workspace %s (%d/%d)", res.id, done, len(ids))
+			}
+
+			if progress != nil {
+				progress.Finish()
 			}
 
 			if jsonOutput {
@@ -273,4 +304,5 @@ func init() {
 	workspaceSyncCmd.Flags().Bool("json", false, "Output in JSON format")
 	workspaceSyncCmd.Flags().String("pattern", "", "Sync workspaces matching a regex pattern")
 	workspaceSyncCmd.Flags().Bool("all", false, "Sync all workspaces (equivalent to --pattern \".*\")")
+	workspaceSyncCmd.Flags().Bool("no-progress", false, "Disable progress indicators")
 }
