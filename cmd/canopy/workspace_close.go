@@ -53,6 +53,7 @@ var workspaceCloseCmd = &cobra.Command{
 		dryRunHooks, _ := cmd.Flags().GetBool("dry-run-hooks")
 		pattern, _ := cmd.Flags().GetString("pattern")
 		all, _ := cmd.Flags().GetBool("all")
+		noProgress, _ := cmd.Flags().GetBool("no-progress")
 
 		if keepFlag && deleteFlag {
 			return cerrors.NewInvalidArgument("flags", "cannot use --keep and --delete together")
@@ -172,8 +173,34 @@ var workspaceCloseCmd = &cobra.Command{
 				firstErr   error
 			)
 
+			// Set up progress tracking
+			showProgress := !noProgress && !jsonOutput
+			var progress *output.Progress
+			if showProgress {
+				progressOpts := output.DefaultProgressOptions(len(ids))
+				progress = output.NewProgress(progressOpts)
+			}
+
+			cancelled := false
 			for i, id := range ids {
-				output.Infof("Closing workspace %s (%d/%d)", id, i+1, len(ids))
+				// Check for context cancellation
+				if cmd.Context().Err() != nil {
+					if !cancelled {
+						cancelled = true
+						if progress != nil {
+							progress.Cancel()
+						}
+					}
+
+					break
+				}
+
+				if showProgress {
+					progress.SetMessage(id)
+				} else {
+					output.Infof("Closing workspace %s (%d/%d)", id, i+1, len(ids))
+				}
+
 				if keepMetadata {
 					_, err = service.CloseWorkspaceKeepMetadataWithOptions(cmd.Context(), id, force, closeOpts)
 				} else {
@@ -185,11 +212,31 @@ var workspaceCloseCmd = &cobra.Command{
 						firstErr = err
 					}
 					failedIDs = append(failedIDs, id)
+
+					// Always log the error for visibility
 					output.Warnf("Failed to close workspace %s: %v", id, err)
+					if showProgress {
+						progress.Increment(fmt.Sprintf("%s (failed)", id))
+					}
+
 					continue
 				}
 
 				successIDs = append(successIDs, id)
+				if showProgress {
+					progress.Increment(id)
+				}
+			}
+
+			if progress != nil {
+				progress.Finish()
+			}
+
+			// Handle cancellation
+			if cancelled {
+				skipped := len(ids) - len(successIDs) - len(failedIDs)
+				output.Warnf("Bulk close cancelled: %d succeeded, %d failed, %d skipped", len(successIDs), len(failedIDs), skipped)
+				return cerrors.NewOperationCancelled("bulk close")
 			}
 
 			output.Success("Bulk close completed", fmt.Sprintf("%d succeeded, %d failed", len(successIDs), len(failedIDs)))
@@ -414,4 +461,5 @@ func init() {
 	workspaceCloseCmd.Flags().Bool("dry-run-hooks", false, "Preview pre_close hooks without executing them")
 	workspaceCloseCmd.Flags().String("pattern", "", "Close workspaces matching a regex pattern")
 	workspaceCloseCmd.Flags().Bool("all", false, "Close all workspaces (equivalent to --pattern \".*\")")
+	workspaceCloseCmd.Flags().Bool("no-progress", false, "Disable progress indicators")
 }
