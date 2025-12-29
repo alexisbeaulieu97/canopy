@@ -528,6 +528,53 @@ canopy doctor --json
 canopy doctor --fix
 ```
 
+### Workspace Health Checks
+
+The `doctor workspace` subcommand performs comprehensive health checks on workspaces:
+
+```bash
+# Check all active workspaces
+canopy doctor workspace
+
+# Check a specific workspace
+canopy doctor workspace PROJ-123
+
+# Attempt to auto-fix issues where possible
+canopy doctor workspace --fix
+
+# Output results as JSON for scripting
+canopy doctor workspace --json
+```
+
+#### Checks Performed
+
+| Check | Category | Description |
+|-------|----------|-------------|
+| Workspace directory | metadata | Verifies workspace directory exists |
+| Repository mapping | metadata | Validates repos in workspace.yaml match disk contents |
+| Worktree integrity | worktree | Validates .git file points to correct canonical repo |
+| Worktree back-reference | worktree | Verifies canonical repo points back to worktree |
+| Git config | git_config | Ensures git config is readable |
+| Remote URL | remote | Validates remote URL format |
+
+#### Health Status Levels
+
+| Status | Meaning |
+|--------|---------|
+| healthy | All checks passed |
+| warning | Non-critical issues found |
+| critical | Critical issues requiring attention |
+
+The `doctor workspace` command uses the same [exit codes](#exit-codes) as the main `doctor` command.
+
+#### Auto-Fix Capabilities
+
+When using `--fix`, the command can automatically repair:
+- **Missing worktrees**: Recreates worktrees from canonical repository
+- **Broken worktree references**: Recreates worktrees when gitdir is invalid
+
+Issues that cannot be auto-fixed will include suggestions for manual remediation.
+
 ### Exit Codes
 
 | Code | Meaning |

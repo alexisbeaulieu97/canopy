@@ -75,6 +75,7 @@ type Service struct {
 	gitService    *WorkspaceGitService
 	orphanService *WorkspaceOrphanService
 	exportService *WorkspaceExportService
+	healthService *WorkspaceHealthService
 }
 
 // ErrNoReposConfigured indicates no repos were specified and none matched configuration.
@@ -171,6 +172,7 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 	svc.gitService = NewGitService(cfg, gitEngine, wsEngine, logger, cache, svc)
 	svc.orphanService = NewOrphanService(cfg, gitEngine, wsEngine, logger, svc)
 	svc.exportService = NewExportService(cfg, svc, svc)
+	svc.healthService = NewHealthService(cfg, gitEngine, wsEngine, logger, svc)
 
 	return svc
 }
@@ -316,6 +318,18 @@ func (s *Service) DetectOrphansForWorkspace(ctx context.Context, workspaceID str
 // This removes worktree entries that point to non-existent directories.
 func (s *Service) PruneAllWorktrees(ctx context.Context) error {
 	return s.orphanService.PruneAllWorktrees(ctx)
+}
+
+// Health checks - delegated to WorkspaceHealthService
+
+// CheckWorkspaceHealth performs health checks on a specific workspace.
+func (s *Service) CheckWorkspaceHealth(ctx context.Context, workspaceID string, fix bool) (*domain.WorkspaceHealthReport, error) {
+	return s.healthService.CheckWorkspace(ctx, workspaceID, fix)
+}
+
+// CheckAllWorkspacesHealth performs health checks on all active workspaces.
+func (s *Service) CheckAllWorkspacesHealth(ctx context.Context, fix bool) ([]domain.WorkspaceHealthReport, error) {
+	return s.healthService.CheckAllWorkspaces(ctx, fix)
 }
 
 // Export/Import - delegated to WorkspaceExportService
