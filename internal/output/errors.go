@@ -9,13 +9,19 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// KeyValue represents an ordered key-value pair for deterministic output.
+type KeyValue struct {
+	Key   string
+	Value string
+}
+
 // ErrorBox renders styled error messages within a box.
 type ErrorBox struct {
 	title       string
 	message     string
 	description string
 	suggestions []string
-	context     map[string]string
+	context     []KeyValue // ordered slice for deterministic output
 	width       int
 }
 
@@ -40,14 +46,9 @@ func (e *ErrorBox) WithSuggestions(suggestions ...string) *ErrorBox {
 	return e
 }
 
-// WithContext adds key-value context to the error.
+// WithContext adds key-value context to the error in insertion order.
 func (e *ErrorBox) WithContext(key, value string) *ErrorBox {
-	if e.context == nil {
-		e.context = make(map[string]string)
-	}
-
-	e.context[key] = value
-
+	e.context = append(e.context, KeyValue{Key: key, Value: value})
 	return e
 }
 
@@ -82,12 +83,12 @@ func (e *ErrorBox) Render() {
 		lines = append(lines, wrapText(e.description, e.width-6)...)
 	}
 
-	// Context key-value pairs
+	// Context key-value pairs (in insertion order)
 	if len(e.context) > 0 {
 		lines = append(lines, "")
 
-		for key, value := range e.context {
-			contextLine := Colorize(MutedStyle, key+":") + " " + value
+		for _, kv := range e.context {
+			contextLine := Colorize(MutedStyle, kv.Key+":") + " " + kv.Value
 			lines = append(lines, contextLine)
 		}
 	}
@@ -116,21 +117,20 @@ func (e *ErrorBox) RenderString() string {
 // SuccessMessage renders a styled success message.
 type SuccessMessage struct {
 	title   string
-	details map[string]string
+	details []KeyValue // ordered slice for deterministic output
 	hints   []string
 }
 
 // NewSuccessMessage creates a new success message.
 func NewSuccessMessage(title string) *SuccessMessage {
 	return &SuccessMessage{
-		title:   title,
-		details: make(map[string]string),
+		title: title,
 	}
 }
 
-// WithDetail adds a detail key-value pair.
+// WithDetail adds a detail key-value pair in insertion order.
 func (s *SuccessMessage) WithDetail(key, value string) *SuccessMessage {
-	s.details[key] = value
+	s.details = append(s.details, KeyValue{Key: key, Value: value})
 	return s
 }
 
@@ -148,12 +148,12 @@ func (s *SuccessMessage) Render() {
 	successLine := Colorize(SuccessStyle, icons.Success()) + " " + s.title
 	fmt.Println(successLine) //nolint:forbidigo // user-facing CLI output
 
-	// Details
+	// Details (in insertion order)
 	if len(s.details) > 0 {
 		fmt.Println() //nolint:forbidigo // user-facing CLI output
 
-		for key, value := range s.details {
-			fmt.Printf("  %s  %s\n", Colorize(MutedStyle, key+":"), value) //nolint:forbidigo // user-facing CLI output
+		for _, kv := range s.details {
+			fmt.Printf("  %s  %s\n", Colorize(MutedStyle, kv.Key+":"), kv.Value) //nolint:forbidigo // user-facing CLI output
 		}
 	}
 

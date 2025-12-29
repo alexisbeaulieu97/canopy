@@ -59,11 +59,21 @@ func NewProgress(opts ProgressOptions) *Progress {
 		opts.Width = 40
 	}
 
-	bar := progress.New(
-		progress.WithDefaultGradient(),
-		progress.WithWidth(opts.Width),
-		progress.WithoutPercentage(),
-	)
+	var bar progress.Model
+	if ColorEnabled() {
+		bar = progress.New(
+			progress.WithDefaultGradient(),
+			progress.WithWidth(opts.Width),
+			progress.WithoutPercentage(),
+		)
+	} else {
+		// Use solid fill without colors when color is disabled
+		bar = progress.New(
+			progress.WithSolidFill("#"),
+			progress.WithWidth(opts.Width),
+			progress.WithoutPercentage(),
+		)
+	}
 
 	isTTY := isWriterTTY(opts.Writer)
 
@@ -257,7 +267,11 @@ func NewSpinner(message string) *Spinner {
 }
 
 // WithWriter sets a custom writer for the spinner.
+// Must be called before Start().
 func (s *Spinner) WithWriter(w io.Writer) *Spinner {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.writer = w
 	s.isTTY = isWriterTTY(w)
 
@@ -304,13 +318,14 @@ func (s *Spinner) Stop() {
 
 	s.finished = true
 	s.running = false
+	close(s.done) // close while holding lock to prevent double-close
+	isTTY := s.isTTY
+	writer := s.writer
 	s.mu.Unlock()
 
-	close(s.done)
-
-	if s.isTTY {
+	if isTTY {
 		// Clear the spinner line
-		_, _ = fmt.Fprint(s.writer, "\r\033[K") //nolint:forbidigo // spinner output
+		_, _ = fmt.Fprint(writer, "\r\033[K") //nolint:forbidigo // spinner output
 	}
 }
 
@@ -325,14 +340,15 @@ func (s *Spinner) StopWithMessage(icon, message string) {
 
 	s.finished = true
 	s.running = false
+	close(s.done) // close while holding lock to prevent double-close
+	isTTY := s.isTTY
+	writer := s.writer
 	s.mu.Unlock()
 
-	close(s.done)
-
-	if s.isTTY {
-		_, _ = fmt.Fprintf(s.writer, "\r\033[K%s %s\n", icon, message) //nolint:forbidigo // spinner output
+	if isTTY {
+		_, _ = fmt.Fprintf(writer, "\r\033[K%s %s\n", icon, message) //nolint:forbidigo // spinner output
 	} else {
-		_, _ = fmt.Fprintf(s.writer, "%s %s\n", icon, message) //nolint:forbidigo // spinner output
+		_, _ = fmt.Fprintf(writer, "%s %s\n", icon, message) //nolint:forbidigo // spinner output
 	}
 }
 
@@ -402,7 +418,11 @@ func NewMultiProgress(total int) *MultiProgress {
 }
 
 // WithWriter sets a custom writer.
+// Must be called before any Complete() or Fail() calls.
 func (m *MultiProgress) WithWriter(w io.Writer) *MultiProgress {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.writer = w
 	m.isTTY = isWriterTTY(w)
 

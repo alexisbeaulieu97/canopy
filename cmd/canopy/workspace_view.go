@@ -60,7 +60,7 @@ func renderWorkspaceView(status *domain.WorkspaceStatus) {
 	// Metadata section (no title since it's the first section)
 	var metadataLines []string
 
-	metadataLines = append(metadataLines, output.KeyValue("Branch", status.BranchName, 12))
+	metadataLines = append(metadataLines, output.FormatKeyValue("Branch", status.BranchName, 12))
 	// TODO: Add path, disk size, modified, created when available in the status
 
 	sections = append(sections, output.BoxSection{
@@ -120,7 +120,7 @@ func formatRepoViewStatus(r domain.RepoStatus, icons output.Icons) string {
 	var parts []string
 
 	if r.IsDirty {
-		parts = append(parts, output.Colorize(output.ErrorStyle, fmt.Sprintf("%s %d modified", icons.Dirty(), 1)))
+		parts = append(parts, output.Colorize(output.ErrorStyle, fmt.Sprintf("%s modified", icons.Dirty())))
 	}
 
 	if r.UnpushedCommits > 0 {

@@ -309,7 +309,7 @@ func init() {
 func renderSyncResult(workspaceID string, result *domain.SyncResult) {
 	icons := output.NewIcons()
 
-	output.Infof("Syncing %s...", workspaceID)
+	output.Infof("Workspace: %s", workspaceID)
 	output.Println("")
 
 	// Print per-repo results

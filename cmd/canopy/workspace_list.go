@@ -296,7 +296,8 @@ func formatWorkspaceRow(ws workspaceWithStatusData, showLocks bool, icons output
 
 	status := formatWorkspaceStatus(ws.RepoStatuses, icons)
 	if showLocks && ws.Locked {
-		status = output.Colorize(output.WarningStyle, icons.Warning()+" locked")
+		lockIndicator := output.Colorize(output.WarningStyle, " [locked]")
+		status += lockIndicator
 	}
 
 	for _, rs := range ws.RepoStatuses {

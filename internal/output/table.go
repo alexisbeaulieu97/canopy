@@ -130,7 +130,7 @@ func (b *Box) renderEmptyLine() {
 // renderTopBorder outputs the top border with title.
 func (b *Box) renderTopBorder() {
 	titlePart := b.chars.Horizontal + " " + Colorize(b.style.Title, b.title) + " "
-	titleLen := 3 + len(b.title) // "─ " + title + " "
+	titleLen := 3 + runeWidth(b.title) // "─ " + title + " " (use rune width for Unicode)
 
 	remaining := b.width - 2 - titleLen
 	if remaining < 0 {
@@ -160,7 +160,7 @@ func (b *Box) renderSectionDivider(title string) {
 	}
 
 	titlePart := b.chars.Horizontal + " " + Colorize(b.style.Title, title) + " "
-	titleLen := 3 + len(title)
+	titleLen := 3 + runeWidth(title) // use rune width for Unicode
 
 	remaining := b.width - 2 - titleLen
 	if remaining < 0 {
@@ -362,8 +362,8 @@ func runeWidth(s string) int {
 	return len([]rune(s))
 }
 
-// KeyValue formats a key-value pair for display.
-func KeyValue(key, value string, keyWidth int) string {
+// FormatKeyValue formats a key-value pair for display.
+func FormatKeyValue(key, value string, keyWidth int) string {
 	paddedKey := padString(key, keyWidth, AlignLeft)
 	return Colorize(MutedStyle, paddedKey) + "  " + value
 }
