@@ -15,6 +15,11 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
+const (
+	// DefaultBranchName is the fallback branch name when none is specified.
+	DefaultBranchName = "main"
+)
+
 // HealthService defines the interface for workspace health check operations.
 type HealthService interface {
 	// CheckWorkspace performs health checks on a specific workspace.
@@ -590,9 +595,9 @@ func (s *WorkspaceHealthService) fixMissingWorktree(ctx context.Context, repoNam
 		return err
 	}
 
-	// Use provided branch name, default to "main" only if empty
+	// Use provided branch name, default to DefaultBranchName only if empty
 	if branchName == "" {
-		branchName = "main"
+		branchName = DefaultBranchName
 	}
 
 	// Recreate the worktree using the git engine
