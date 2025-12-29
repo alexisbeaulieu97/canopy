@@ -178,11 +178,9 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 					} else {
 						progress.Increment(res.id)
 					}
-				} else if !showProgress || cancelled {
-					// Log non-error results when progress is off or after cancellation
-					if res.err == nil {
-						output.Infof("Synced workspace %s (%d/%d)", res.id, done, len(ids))
-					}
+				} else if res.err == nil {
+					// Log success when progress is off or after cancellation
+					output.Infof("Synced workspace %s (%d/%d)", res.id, done, len(ids))
 				}
 			}
 

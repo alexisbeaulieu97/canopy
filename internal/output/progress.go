@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/bubbles/progress"
-	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 )
 
@@ -68,9 +67,10 @@ func NewProgress(opts ProgressOptions) *Progress {
 	isTTY := isWriterTTY(opts.Writer)
 
 	return &Progress{
-		opts:  opts,
-		bar:   bar,
-		isTTY: isTTY,
+		opts:         opts,
+		bar:          bar,
+		isTTY:        isTTY,
+		lastRendered: -1, // sentinel so first update at 0 is rendered
 	}
 }
 
@@ -190,7 +190,7 @@ func (p *Progress) renderTTY(pct float64) {
 	// Percentage
 	if p.opts.ShowPercentage {
 		pctStr := fmt.Sprintf(" %3.0f%%", pct*100)
-		line += Colorize(lipgloss.NewStyle(), pctStr)
+		line += pctStr
 	}
 
 	// Message
