@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"time"
 
@@ -88,19 +89,14 @@ var workspaceListCmd = &cobra.Command{
 		})
 
 		// Collect status for each workspace if --status flag is set.
-		type workspaceWithStatus struct {
-			domain.Workspace
-			RepoStatuses []domain.RepoStatus `json:"repo_statuses,omitempty"`
-		}
-
-		workspacesWithStatus := make([]workspaceWithStatus, 0, len(list))
+		workspacesWithStatus := make([]workspaceWithStatusData, 0, len(list))
 
 		for _, w := range list {
-			workspacesWithStatus = append(workspacesWithStatus, workspaceWithStatus{Workspace: w})
+			workspacesWithStatus = append(workspacesWithStatus, workspaceWithStatusData{Workspace: w})
 		}
 
 		if showStatus {
-			setRepoStatusError := func(ws *workspaceWithStatus, statusErr error) {
+			setRepoStatusError := func(ws *workspaceWithStatusData, statusErr error) {
 				if statusErr == nil {
 					return
 				}
@@ -184,9 +180,19 @@ var workspaceListCmd = &cobra.Command{
 		}
 
 		if jsonOutput {
+			// For JSON output, convert to a simpler structure
+			type workspaceJSONOutput struct {
+				domain.Workspace
+				RepoStatuses []domain.RepoStatus `json:"repo_statuses,omitempty"`
+			}
+
 			if showStatus || showLocks {
+				jsonWorkspaces := make([]workspaceJSONOutput, len(workspacesWithStatus))
+				for i, ws := range workspacesWithStatus {
+					jsonWorkspaces[i] = workspaceJSONOutput(ws)
+				}
 				return output.PrintJSON(map[string]interface{}{
-					"workspaces": workspacesWithStatus,
+					"workspaces": jsonWorkspaces,
 				})
 			}
 
@@ -195,34 +201,16 @@ var workspaceListCmd = &cobra.Command{
 			})
 		}
 
-		for _, ws := range workspacesWithStatus {
-			statusByRepo := make(map[string]domain.RepoStatus, len(ws.RepoStatuses))
-			for _, status := range ws.RepoStatuses {
-				if status.Name == "" {
-					continue
-				}
-				statusByRepo[status.Name] = status
-			}
-
-			lockSuffix := ""
-			if showLocks && ws.Locked {
-				lockSuffix = " [locked]"
-			}
-
-			output.Infof("%s (Branch: %s)%s", ws.ID, ws.BranchName, lockSuffix)
-			for _, r := range ws.Repos {
-				if showStatus {
-					status, ok := statusByRepo[r.Name]
-					if ok {
-						statusStr := formatRepoStatusIndicator(status)
-						output.Infof("  - %s (%s) %s", r.Name, r.URL, statusStr)
-						continue
-					}
-				}
-
-				output.Infof("  - %s (%s)", r.Name, r.URL)
-			}
+		// Render workspaces in a formatted table
+		if len(workspacesWithStatus) == 0 {
+			output.Println("No workspaces found.")
+			output.Println("")
+			output.Println(output.Colorize(output.MutedStyle, "Create one with: canopy workspace new <name> --repos <repo1,repo2>"))
+			return nil
 		}
+
+		renderWorkspaceListTable(workspacesWithStatus, showStatus, showLocks)
+
 		return nil
 	},
 }
@@ -237,4 +225,184 @@ func init() {
 	workspaceListCmd.Flags().Bool("sequential-status", false, "Fetch workspace status sequentially")
 	workspaceListCmd.Flags().String("timeout", "5s", "Timeout for status check per workspace (e.g. 5s, 10s)")
 	workspaceListCmd.Flags().Bool("show-locks", false, "Show workspace lock status")
+}
+
+// workspaceWithStatus combines workspace with optional status info.
+type workspaceWithStatusData struct {
+	domain.Workspace
+	RepoStatuses []domain.RepoStatus `json:"repo_statuses,omitempty"`
+}
+
+//nolint:gocyclo // UI rendering function with multiple format paths
+func renderWorkspaceListTable(workspaces []workspaceWithStatusData, showStatus, showLocks bool) {
+	icons := output.NewIcons()
+
+	// Build the box
+	box := output.NewBox("Workspaces").WithWidth(70)
+
+	var lines []string
+
+	// Header row
+	header := fmt.Sprintf("  %-16s %-6s %-10s %-12s %s",
+		"WORKSPACE", "REPOS", "SIZE", "MODIFIED", "STATUS")
+	lines = append(lines, header)
+
+	// Separator
+	lines = append(lines, "  "+output.HorizontalRule(64))
+
+	// Calculate totals
+	var (
+		totalSize                  int64
+		dirtyCount, needsSyncCount int
+	)
+
+	for _, ws := range workspaces {
+		line, dirty, needsSync := formatWorkspaceRow(ws, showLocks, icons)
+		lines = append(lines, line)
+		totalSize += ws.DiskUsageBytes
+		dirtyCount += dirty
+		needsSyncCount += needsSync
+	}
+
+	box.Render(lines)
+
+	// Summary footer
+	summaryParts := []string{
+		fmt.Sprintf("%d workspaces", len(workspaces)),
+		output.FormatBytes(totalSize) + " total",
+	}
+
+	if showStatus && dirtyCount > 0 {
+		summaryParts = append(summaryParts, fmt.Sprintf("%d dirty", dirtyCount))
+	}
+
+	if showStatus && needsSyncCount > 0 {
+		summaryParts = append(summaryParts, fmt.Sprintf("%d needs sync", needsSyncCount))
+	}
+
+	_, _ = fmt.Fprintln(os.Stdout)                                  //nolint:forbidigo // user-facing CLI output
+	_, _ = fmt.Fprintln(os.Stdout, output.Summary(summaryParts...)) //nolint:forbidigo // user-facing CLI output
+}
+
+func formatWorkspaceRow(ws workspaceWithStatusData, showLocks bool, icons output.Icons) (line string, dirty, needsSync int) {
+	name := ws.ID
+	if len(name) > 14 {
+		name = name[:13] + "…"
+	}
+
+	repoCount := fmt.Sprintf("%d", len(ws.Repos))
+	size := output.FormatBytes(ws.DiskUsageBytes)
+	modified := formatRelativeTime(ws.LastModified)
+
+	status := formatWorkspaceStatus(ws.RepoStatuses, icons)
+	if showLocks && ws.Locked {
+		status = output.Colorize(output.WarningStyle, icons.Warning()+" locked")
+	}
+
+	for _, rs := range ws.RepoStatuses {
+		if rs.IsDirty {
+			dirty++
+		}
+
+		if rs.BehindRemote > 0 {
+			needsSync++
+		}
+	}
+
+	line = fmt.Sprintf("  %-16s %-6s %-10s %-12s %s",
+		name, repoCount, size, modified, status)
+
+	return line, dirty, needsSync
+}
+
+//nolint:gocyclo // UI formatting function with multiple status paths
+func formatWorkspaceStatus(statuses []domain.RepoStatus, icons output.Icons) string {
+	if len(statuses) == 0 {
+		return output.Colorize(output.MutedStyle, "-")
+	}
+
+	dirty, unpushed, behind, hasError := countStatusValues(statuses)
+	if hasError {
+		return output.Colorize(output.ErrorStyle, icons.Error()+" error")
+	}
+
+	if dirty == 0 && unpushed == 0 && behind == 0 {
+		return output.Colorize(output.SuccessStyle, icons.Success()+" clean")
+	}
+
+	return formatFirstStatusIssue(dirty, unpushed, behind, icons)
+}
+
+func countStatusValues(statuses []domain.RepoStatus) (dirty, unpushed, behind int, hasError bool) {
+	for _, s := range statuses {
+		if s.Error != "" {
+			return 0, 0, 0, true
+		}
+
+		if s.IsDirty {
+			dirty++
+		}
+
+		if s.UnpushedCommits > 0 {
+			unpushed += s.UnpushedCommits
+		}
+
+		if s.BehindRemote > 0 {
+			behind += s.BehindRemote
+		}
+	}
+
+	return dirty, unpushed, behind, false
+}
+
+func formatFirstStatusIssue(dirty, unpushed, behind int, icons output.Icons) string {
+	if dirty > 0 {
+		return output.Colorize(output.ErrorStyle, fmt.Sprintf("%s %d dirty", icons.Dirty(), dirty))
+	}
+
+	if unpushed > 0 {
+		return output.Colorize(output.ErrorStyle, fmt.Sprintf("%s %d unpushed", icons.Unpushed(), unpushed))
+	}
+
+	if behind > 0 {
+		return output.Colorize(output.WarningStyle, fmt.Sprintf("%s %d behind", icons.Behind(), behind))
+	}
+
+	return output.Colorize(output.SuccessStyle, icons.Success()+" clean")
+}
+
+func formatRelativeTime(t time.Time) string {
+	if t.IsZero() {
+		return "-"
+	}
+
+	duration := time.Since(t)
+
+	switch {
+	case duration < time.Minute:
+		return "just now"
+	case duration < time.Hour:
+		mins := int(duration.Minutes())
+		if mins == 1 {
+			return "1 min ago"
+		}
+
+		return fmt.Sprintf("%d mins ago", mins)
+	case duration < 24*time.Hour:
+		hours := int(duration.Hours())
+		if hours == 1 {
+			return "1 hour ago"
+		}
+
+		return fmt.Sprintf("%d hours ago", hours)
+	case duration < 7*24*time.Hour:
+		days := int(duration.Hours() / 24)
+		if days == 1 {
+			return "1 day ago"
+		}
+
+		return fmt.Sprintf("%d days ago", days)
+	default:
+		return t.Format("Jan 2, 2006")
+	}
 }

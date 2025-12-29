@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -210,48 +209,67 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 				return output.PrintJSON(payload)
 			}
 
+			// Render bulk sync results
 			output.Println("")
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
-			_, _ = fmt.Fprintln(w, "WORKSPACE\tSTATUS\tUPDATED\tERRORS\tDETAILS")
+			icons := output.NewIcons()
 
 			var failed int
 			var totalUpdated int
 			for _, res := range orderedResults {
-				status := "OK"
-				updated := 0
-				errorsCount := 0
-				details := ""
+				var icon string
+				style := output.SuccessStyle
+				statusText := ""
 
 				if res.err != nil {
-					status = "ERROR"
-					details = res.err.Error()
+					icon = icons.Error()
+					style = output.ErrorStyle
+					errDetail := sanitizeErrorForDisplay(res.err.Error())
+					statusText = "error: " + errDetail
 					failed++
 				} else if res.result != nil {
-					updated = res.result.TotalUpdated
-					errorsCount = res.result.TotalErrors
-					totalUpdated += updated
-					if errorsCount > 0 {
-						status = "PARTIAL"
-						details = fmt.Sprintf("%d repo errors", errorsCount)
+					totalUpdated += res.result.TotalUpdated
+					if res.result.TotalErrors > 0 {
+						icon = icons.Warning()
+						style = output.WarningStyle
+						statusText = fmt.Sprintf("partial: %d updated, %d errors", res.result.TotalUpdated, res.result.TotalErrors)
 						failed++
+					} else if res.result.TotalUpdated > 0 {
+						icon = icons.Success()
+						statusText = fmt.Sprintf("pulled %d commits", res.result.TotalUpdated)
+					} else {
+						icon = icons.Success()
+						statusText = "already up-to-date"
 					}
 				}
 
-				details = strings.ReplaceAll(details, "\n", " ")
-				details = strings.ReplaceAll(details, "\r", " ")
-				details = strings.ReplaceAll(details, "\t", " ")
-				runes := []rune(details)
-				if len(runes) > 100 {
-					details = string(runes[:97]) + "..."
-				}
-
-				_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\n", res.id, status, updated, errorsCount, details)
+				coloredIcon := output.Colorize(style, icon)
+				_, _ = fmt.Fprintf(os.Stdout, "%s %-20s %s\n", coloredIcon, res.id, statusText) //nolint:forbidigo // user-facing CLI output
 			}
-			_ = w.Flush()
 
-			output.Success("\nBulk sync completed", fmt.Sprintf("%d workspaces, %d total commits updated", len(ids), totalUpdated))
+			// Summary
+			output.Println("")
+			output.Println(output.HorizontalRule(48))
+
+			summaryParts := []string{
+				fmt.Sprintf("%d workspaces synced", len(ids)),
+			}
+
+			if totalUpdated > 0 {
+				summaryParts = append(summaryParts, fmt.Sprintf("%d commits pulled", totalUpdated))
+			}
+
 			if failed > 0 {
-				output.Warnf("Bulk sync finished with %d failed workspaces", failed)
+				summaryParts = append(summaryParts, output.Colorize(output.ErrorStyle, fmt.Sprintf("%d failed", failed)))
+			}
+
+			successIcon := output.Colorize(output.SuccessStyle, icons.Success())
+			if failed > 0 {
+				successIcon = output.Colorize(output.WarningStyle, icons.Warning())
+			}
+
+			_, _ = fmt.Fprintf(os.Stdout, "%s Bulk sync complete: %s\n", successIcon, strings.Join(summaryParts, ", ")) //nolint:forbidigo // user-facing CLI output
+
+			if failed > 0 {
 				return cerrors.NewCommandFailed("sync", fmt.Errorf("%d workspaces failed", failed))
 			}
 
@@ -268,39 +286,12 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 			return output.PrintJSON(result)
 		}
 
-		output.Infof("Syncing workspace: %s", id)
-		output.Println("")
-
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
-		_, _ = fmt.Fprintln(w, "REPOSITORY\tSTATUS\tUPDATED\tDETAILS")
-
-		for _, r := range result.Repos {
-			status := strings.ToUpper(string(r.Status))
-			updatedStr := fmt.Sprintf("%d commits", r.Updated)
-			if r.Updated == 0 {
-				updatedStr = "-"
-			}
-
-			// Sanitize error message to prevent breaking tabwriter layout.
-			errDetail := r.Error
-			errDetail = strings.ReplaceAll(errDetail, "\n", " ")
-			errDetail = strings.ReplaceAll(errDetail, "\r", " ")
-			errDetail = strings.ReplaceAll(errDetail, "\t", " ")
-			runes := []rune(errDetail)
-			if len(runes) > 100 {
-				errDetail = string(runes[:97]) + "..."
-			}
-
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Name, status, updatedStr, errDetail)
-		}
-		_ = w.Flush()
+		renderSyncResult(id, result)
 
 		if result.TotalErrors > 0 {
-			output.Warnf("\nPartial failure: %d repositories failed to sync", result.TotalErrors)
 			return cerrors.NewCommandFailed("sync", fmt.Errorf("%d repos failed", result.TotalErrors))
 		}
 
-		output.Success("\nWorkspace sync completed", fmt.Sprintf("%d total commits updated", result.TotalUpdated))
 		return nil
 	},
 }
@@ -313,4 +304,83 @@ func init() {
 	workspaceSyncCmd.Flags().String("pattern", "", "Sync workspaces matching a regex pattern")
 	workspaceSyncCmd.Flags().Bool("all", false, "Sync all workspaces (equivalent to --pattern \".*\")")
 	workspaceSyncCmd.Flags().Bool("no-progress", false, "Disable progress indicators")
+}
+
+func renderSyncResult(workspaceID string, result *domain.SyncResult) {
+	icons := output.NewIcons()
+
+	output.Infof("Syncing %s...", workspaceID)
+	output.Println("")
+
+	// Print per-repo results
+	for _, r := range result.Repos {
+		var (
+			icon, statusText string
+			style            = output.SuccessStyle
+		)
+
+		switch r.Status {
+		case domain.SyncStatusUpdated:
+			icon = icons.Success()
+			statusText = fmt.Sprintf("pulled %d commits", r.Updated)
+		case domain.SyncStatusUpToDate:
+			icon = icons.Success()
+			statusText = "already up-to-date"
+		case domain.SyncStatusConflict:
+			icon = icons.Error()
+			statusText = "merge conflict"
+			style = output.ErrorStyle
+		case domain.SyncStatusTimeout:
+			icon = icons.Error()
+			statusText = "timeout"
+			style = output.ErrorStyle
+		case domain.SyncStatusError:
+			icon = icons.Error()
+			errDetail := sanitizeErrorForDisplay(r.Error)
+			statusText = "error: " + errDetail
+			style = output.ErrorStyle
+		default:
+			icon = icons.Info()
+			statusText = string(r.Status)
+		}
+
+		coloredIcon := output.Colorize(style, icon)
+		_, _ = fmt.Fprintf(os.Stdout, "%s %-20s %s\n", coloredIcon, r.Name, statusText) //nolint:forbidigo // user-facing CLI output
+	}
+
+	// Print summary
+	output.Println("")
+	output.Println(output.HorizontalRule(48))
+
+	summaryParts := []string{
+		fmt.Sprintf("%d repos synced", len(result.Repos)),
+	}
+
+	if result.TotalUpdated > 0 {
+		summaryParts = append(summaryParts, fmt.Sprintf("%d commits pulled", result.TotalUpdated))
+	}
+
+	if result.TotalErrors > 0 {
+		summaryParts = append(summaryParts, output.Colorize(output.ErrorStyle, fmt.Sprintf("%d failed", result.TotalErrors)))
+	}
+
+	successIcon := output.Colorize(output.SuccessStyle, icons.Success())
+	if result.TotalErrors > 0 {
+		successIcon = output.Colorize(output.WarningStyle, icons.Warning())
+	}
+
+	_, _ = fmt.Fprintf(os.Stdout, "%s Sync complete: %s\n", successIcon, strings.Join(summaryParts, ", ")) //nolint:forbidigo // user-facing CLI output
+}
+
+func sanitizeErrorForDisplay(errText string) string {
+	errText = strings.ReplaceAll(errText, "\n", " ")
+	errText = strings.ReplaceAll(errText, "\r", " ")
+	errText = strings.ReplaceAll(errText, "\t", " ")
+
+	runes := []rune(errText)
+	if len(runes) > 50 {
+		errText = string(runes[:47]) + "..."
+	}
+
+	return errText
 }

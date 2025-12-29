@@ -28,6 +28,7 @@ var (
 )
 
 // ColorEnabled returns true when color output should be used.
+// Precedence: NO_COLOR > CANOPY_COLOR > TTY detection > TERM=dumb.
 func ColorEnabled() bool {
 	if val, ok := os.LookupEnv("NO_COLOR"); ok && strings.TrimSpace(val) != "" {
 		return false
@@ -35,14 +36,29 @@ func ColorEnabled() bool {
 
 	if val, ok := os.LookupEnv(colorEnv); ok {
 		switch strings.ToLower(strings.TrimSpace(val)) {
-		case "0", "false", "no":
+		case "0", "false", "no", "never":
 			return false
-		default:
+		case "1", "true", "yes", "always":
 			return true
 		}
 	}
 
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		return false
+	}
+
+	if val, ok := os.LookupEnv("TERM"); ok && val == "dumb" {
+		return false
+	}
+
+	return true
+}
+
+// UnicodeEnabled returns true when Unicode output should be used.
+// This follows the same rules as ColorEnabled since non-color terminals
+// often also have limited Unicode support.
+func UnicodeEnabled() bool {
+	return ColorEnabled()
 }
 
 // Colorize renders text with the provided style when color is enabled.

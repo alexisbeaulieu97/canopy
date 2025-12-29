@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"golang.org/x/term"
@@ -227,4 +228,240 @@ func isWriterTTY(w io.Writer) bool {
 	}
 
 	return false
+}
+
+// Spinner provides an animated loading indicator for long-running operations.
+type Spinner struct {
+	mu       sync.Mutex
+	message  string
+	writer   io.Writer
+	icons    Icons
+	frame    int
+	running  bool
+	done     chan struct{}
+	finished bool
+	isTTY    bool
+}
+
+// NewSpinner creates a new spinner with the given initial message.
+func NewSpinner(message string) *Spinner {
+	writer := os.Stderr
+
+	return &Spinner{
+		message: message,
+		writer:  writer,
+		icons:   NewIcons(),
+		done:    make(chan struct{}),
+		isTTY:   isWriterTTY(writer),
+	}
+}
+
+// WithWriter sets a custom writer for the spinner.
+func (s *Spinner) WithWriter(w io.Writer) *Spinner {
+	s.writer = w
+	s.isTTY = isWriterTTY(w)
+
+	return s
+}
+
+// Start begins the spinner animation.
+func (s *Spinner) Start() {
+	s.mu.Lock()
+
+	if s.running {
+		s.mu.Unlock()
+		return
+	}
+
+	s.running = true
+	s.mu.Unlock()
+
+	if !s.isTTY {
+		// For non-TTY, just print the initial message
+		_, _ = fmt.Fprintf(s.writer, "%s\n", s.message) //nolint:forbidigo // spinner output
+		return
+	}
+
+	go s.animate()
+}
+
+// SetMessage updates the spinner message.
+func (s *Spinner) SetMessage(msg string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.message = msg
+}
+
+// Stop stops the spinner and clears the line.
+func (s *Spinner) Stop() {
+	s.mu.Lock()
+
+	if !s.running || s.finished {
+		s.mu.Unlock()
+		return
+	}
+
+	s.finished = true
+	s.running = false
+	s.mu.Unlock()
+
+	close(s.done)
+
+	if s.isTTY {
+		// Clear the spinner line
+		_, _ = fmt.Fprint(s.writer, "\r\033[K") //nolint:forbidigo // spinner output
+	}
+}
+
+// StopWithMessage stops the spinner and displays a final message.
+func (s *Spinner) StopWithMessage(icon, message string) {
+	s.mu.Lock()
+
+	if !s.running || s.finished {
+		s.mu.Unlock()
+		return
+	}
+
+	s.finished = true
+	s.running = false
+	s.mu.Unlock()
+
+	close(s.done)
+
+	if s.isTTY {
+		_, _ = fmt.Fprintf(s.writer, "\r\033[K%s %s\n", icon, message) //nolint:forbidigo // spinner output
+	} else {
+		_, _ = fmt.Fprintf(s.writer, "%s %s\n", icon, message) //nolint:forbidigo // spinner output
+	}
+}
+
+// StopWithSuccess stops the spinner with a success message.
+func (s *Spinner) StopWithSuccess(message string) {
+	icon := Colorize(SuccessStyle, s.icons.Success())
+	s.StopWithMessage(icon, message)
+}
+
+// StopWithError stops the spinner with an error message.
+func (s *Spinner) StopWithError(message string) {
+	icon := Colorize(ErrorStyle, s.icons.Error())
+	s.StopWithMessage(icon, message)
+}
+
+func (s *Spinner) animate() {
+	frames := s.icons.SpinnerFrames()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.done:
+			return
+		case <-ticker.C:
+			s.mu.Lock()
+			frame := frames[s.frame%len(frames)]
+			msg := s.message
+			s.frame++
+			s.mu.Unlock()
+
+			spinnerIcon := Colorize(InfoStyle, frame)
+			_, _ = fmt.Fprintf(s.writer, "\r\033[K%s %s", spinnerIcon, msg) //nolint:forbidigo // spinner output
+		}
+	}
+}
+
+// MultiProgress tracks progress for multiple concurrent operations.
+type MultiProgress struct {
+	mu      sync.Mutex
+	results []ProgressResult
+	writer  io.Writer
+	total   int
+	icons   Icons
+	isTTY   bool
+}
+
+// ProgressResult represents the result of a single operation.
+type ProgressResult struct {
+	Name    string
+	Success bool
+	Message string
+}
+
+// NewMultiProgress creates a new multi-operation progress tracker.
+func NewMultiProgress(total int) *MultiProgress {
+	writer := os.Stderr
+
+	return &MultiProgress{
+		results: make([]ProgressResult, 0, total),
+		writer:  writer,
+		total:   total,
+		icons:   NewIcons(),
+		isTTY:   isWriterTTY(writer),
+	}
+}
+
+// WithWriter sets a custom writer.
+func (m *MultiProgress) WithWriter(w io.Writer) *MultiProgress {
+	m.writer = w
+	m.isTTY = isWriterTTY(w)
+
+	return m
+}
+
+// Complete marks an operation as complete with success.
+func (m *MultiProgress) Complete(name, message string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := ProgressResult{
+		Name:    name,
+		Success: true,
+		Message: message,
+	}
+	m.results = append(m.results, result)
+	m.render(result)
+}
+
+// Fail marks an operation as failed.
+func (m *MultiProgress) Fail(name, message string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := ProgressResult{
+		Name:    name,
+		Success: false,
+		Message: message,
+	}
+	m.results = append(m.results, result)
+	m.render(result)
+}
+
+func (m *MultiProgress) render(result ProgressResult) {
+	icon := m.icons.Success()
+	style := SuccessStyle
+
+	if !result.Success {
+		icon = m.icons.Error()
+		style = ErrorStyle
+	}
+
+	coloredIcon := Colorize(style, icon)
+	_, _ = fmt.Fprintf(m.writer, "%s %-20s %s\n", coloredIcon, result.Name, result.Message) //nolint:forbidigo // progress output
+}
+
+// Summary returns counts of successful and failed operations.
+func (m *MultiProgress) Summary() (success, failed int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, r := range m.results {
+		if r.Success {
+			success++
+		} else {
+			failed++
+		}
+	}
+
+	return success, failed
 }

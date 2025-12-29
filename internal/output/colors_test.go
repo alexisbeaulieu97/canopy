@@ -21,8 +21,10 @@ func TestColorEnabledInvalidValue(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("CANOPY_COLOR", "invalid")
 
-	if !ColorEnabled() {
-		t.Fatal("expected invalid CANOPY_COLOR to default to true")
+	// Invalid values should fall through to TTY detection.
+	// In tests, stdout is not a TTY, so color should be disabled.
+	if ColorEnabled() {
+		t.Fatal("expected invalid CANOPY_COLOR to fall through to TTY detection (false in tests)")
 	}
 }
 

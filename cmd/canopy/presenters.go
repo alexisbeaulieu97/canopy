@@ -82,36 +82,3 @@ func printClosed(id string, closedAt *time.Time) {
 
 	output.Success("Closed workspace", id)
 }
-
-// formatRepoStatusIndicator creates a human-readable status indicator for a repo.
-func formatRepoStatusIndicator(status domain.RepoStatus) string {
-	if status.Error != "" {
-		if status.Error == domain.StatusErrorTimeout {
-			return "[timeout]"
-		}
-
-		errText := strings.ReplaceAll(string(status.Error), "\n", " ")
-
-		return fmt.Sprintf("[error: %s]", errText)
-	}
-
-	var parts []string
-
-	if status.IsDirty {
-		parts = append(parts, "dirty")
-	}
-
-	if status.UnpushedCommits > 0 {
-		parts = append(parts, fmt.Sprintf("%d ahead", status.UnpushedCommits))
-	}
-
-	if status.BehindRemote > 0 {
-		parts = append(parts, fmt.Sprintf("%d behind", status.BehindRemote))
-	}
-
-	if len(parts) == 0 {
-		return "[clean]"
-	}
-
-	return "[" + strings.Join(parts, ", ") + "]"
-}
