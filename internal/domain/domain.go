@@ -246,3 +246,48 @@ type HookCommandPreview struct {
 	RepoName      string `json:"repo_name,omitempty"`
 	RepoPath      string `json:"repo_path,omitempty"`
 }
+
+// HealthStatus represents the overall health level of a workspace.
+type HealthStatus string
+
+const (
+	// HealthStatusHealthy indicates all checks passed.
+	HealthStatusHealthy HealthStatus = "healthy"
+	// HealthStatusWarning indicates non-critical issues were found.
+	HealthStatusWarning HealthStatus = "warning"
+	// HealthStatusCritical indicates critical issues that need attention.
+	HealthStatusCritical HealthStatus = "critical"
+)
+
+// HealthCheckCategory identifies the type of health check.
+type HealthCheckCategory string
+
+const (
+	// HealthCategoryWorktree checks worktree integrity.
+	HealthCategoryWorktree HealthCheckCategory = "worktree"
+	// HealthCategoryMetadata checks workspace.yaml consistency.
+	HealthCategoryMetadata HealthCheckCategory = "metadata"
+	// HealthCategoryGitConfig checks git configuration validity.
+	HealthCategoryGitConfig HealthCheckCategory = "git_config"
+	// HealthCategoryRemote checks remote connectivity (optional).
+	HealthCategoryRemote HealthCheckCategory = "remote"
+)
+
+// HealthCheck represents a single health check result.
+type HealthCheck struct {
+	Name        string              `json:"name"`
+	Category    HealthCheckCategory `json:"category"`
+	Status      HealthStatus        `json:"status"`
+	Description string              `json:"description"`
+	Fixable     bool                `json:"fixable"`
+	FixAction   string              `json:"fix_action,omitempty"`
+	Details     string              `json:"details,omitempty"`
+}
+
+// WorkspaceHealthReport contains health check results for a single workspace.
+type WorkspaceHealthReport struct {
+	WorkspaceID   string        `json:"workspace_id"`
+	OverallStatus HealthStatus  `json:"overall_status"`
+	Checks        []HealthCheck `json:"checks"`
+	FixesApplied  []string      `json:"fixes_applied,omitempty"`
+}
