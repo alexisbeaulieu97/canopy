@@ -257,7 +257,7 @@ func TestWorkspaceHealthService_CheckWorktreeIntegrity(t *testing.T) {
 			t.Parallel()
 
 			report := &domain.WorkspaceHealthReport{}
-			checks := svc.checkWorktreeIntegrity(context.Background(), "ws1", tt.repoName, tt.worktreePath, false, report)
+			checks := svc.checkWorktreeIntegrity(context.Background(), tt.repoName, tt.worktreePath, "main", false, report)
 
 			if len(checks) == 0 {
 				t.Fatalf("checkWorktreeIntegrity() returned no checks")
@@ -482,6 +482,47 @@ func TestParseRemoteURL(t *testing.T) {
 
 	if url != "https://github.com/example/repo.git" {
 		t.Errorf("parseRemoteURL() = %v, want %v", url, "https://github.com/example/repo.git")
+	}
+}
+
+func TestResolveGitdirPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		gitdirPath   string
+		worktreePath string
+		want         string
+	}{
+		{
+			name:         "absolute path unchanged",
+			gitdirPath:   "/absolute/path/to/gitdir",
+			worktreePath: "/worktree/path",
+			want:         "/absolute/path/to/gitdir",
+		},
+		{
+			name:         "relative path resolved from worktree",
+			gitdirPath:   "../.git/worktrees/repo1",
+			worktreePath: "/home/user/workspaces/ws1/repo1",
+			want:         "/home/user/workspaces/ws1/.git/worktrees/repo1",
+		},
+		{
+			name:         "simple relative path",
+			gitdirPath:   ".git/worktrees/test",
+			worktreePath: "/worktree",
+			want:         "/worktree/.git/worktrees/test",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := resolveGitdirPath(tt.gitdirPath, tt.worktreePath)
+			if got != tt.want {
+				t.Errorf("resolveGitdirPath() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

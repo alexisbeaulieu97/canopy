@@ -78,6 +78,19 @@ func (s *WorkspaceHealthService) CheckAllWorkspaces(ctx context.Context, fix boo
 		if dirName == "" {
 			dirName, err = s.config.ComputeWorkspaceDir(ws.ID)
 			if err != nil {
+				// Include error report for workspaces we couldn't check
+				reports = append(reports, domain.WorkspaceHealthReport{
+					WorkspaceID:   ws.ID,
+					OverallStatus: domain.HealthStatusCritical,
+					Checks: []domain.HealthCheck{{
+						Name:        "workspace_access",
+						Category:    domain.HealthCategoryMetadata,
+						Status:      domain.HealthStatusCritical,
+						Description: "Cannot determine workspace directory",
+						Details:     err.Error(),
+					}},
+				})
+
 				continue
 			}
 		}
@@ -87,6 +100,19 @@ func (s *WorkspaceHealthService) CheckAllWorkspaces(ctx context.Context, fix boo
 			if s.logger != nil {
 				s.logger.Warn("health check failed for workspace", "workspace", ws.ID, "error", err)
 			}
+
+			// Include error report for workspaces that failed health check
+			reports = append(reports, domain.WorkspaceHealthReport{
+				WorkspaceID:   ws.ID,
+				OverallStatus: domain.HealthStatusCritical,
+				Checks: []domain.HealthCheck{{
+					Name:        "health_check_error",
+					Category:    domain.HealthCategoryMetadata,
+					Status:      domain.HealthStatusCritical,
+					Description: "Health check failed",
+					Details:     err.Error(),
+				}},
+			})
 
 			continue
 		}
@@ -117,7 +143,7 @@ func (s *WorkspaceHealthService) checkWorkspaceHealth(ctx context.Context, ws *d
 	// 2. Worktree integrity checks for each repo
 	for _, repo := range ws.Repos {
 		worktreePath := filepath.Join(workspacePath, repo.Name)
-		worktreeChecks := s.checkWorktreeIntegrity(ctx, ws.ID, repo.Name, worktreePath, fix, report)
+		worktreeChecks := s.checkWorktreeIntegrity(ctx, repo.Name, worktreePath, ws.BranchName, fix, report)
 		checks = append(checks, worktreeChecks...)
 	}
 
@@ -226,7 +252,7 @@ func (s *WorkspaceHealthService) checkMetadataConsistency(ws *domain.Workspace, 
 // checkWorktreeIntegrity validates that a worktree's .git file points back to the canonical repo.
 //
 //nolint:gocyclo // Health check functions are inherently complex due to multiple validation conditions
-func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, _, repoName, worktreePath string, fix bool, report *domain.WorkspaceHealthReport) []domain.HealthCheck {
+func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, repoName, worktreePath, branchName string, fix bool, report *domain.WorkspaceHealthReport) []domain.HealthCheck {
 	var checks []domain.HealthCheck
 
 	gitPath := filepath.Join(worktreePath, ".git")
@@ -245,7 +271,7 @@ func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, _, 
 		}
 
 		if fix {
-			if fixErr := s.fixMissingWorktree(ctx, repoName, worktreePath); fixErr == nil {
+			if fixErr := s.fixMissingWorktree(ctx, repoName, worktreePath, branchName); fixErr == nil {
 				check.Status = domain.HealthStatusHealthy
 				check.Description = "Worktree recreated successfully"
 
@@ -319,6 +345,8 @@ func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, _, 
 	}
 
 	gitdirPath := strings.TrimSpace(strings.TrimPrefix(gitdirLine, "gitdir:"))
+	// Resolve relative paths from the worktree directory
+	gitdirPath = resolveGitdirPath(gitdirPath, worktreePath)
 
 	// Verify the gitdir path exists
 	if _, err := os.Stat(gitdirPath); os.IsNotExist(err) {
@@ -333,7 +361,7 @@ func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, _, 
 		}
 
 		if fix {
-			if fixErr := s.fixMissingWorktree(ctx, repoName, worktreePath); fixErr == nil {
+			if fixErr := s.fixMissingWorktree(ctx, repoName, worktreePath, branchName); fixErr == nil {
 				check.Status = domain.HealthStatusHealthy
 				check.Description = "Worktree recreated successfully"
 
@@ -413,6 +441,8 @@ func (s *WorkspaceHealthService) checkGitConfig(repoName, worktreePath string) [
 		}
 
 		gitdirPath := strings.TrimSpace(strings.TrimPrefix(gitdirLine, "gitdir:"))
+		// Resolve relative paths from the worktree directory
+		gitdirPath = resolveGitdirPath(gitdirPath, worktreePath)
 		// Config is in the worktree-specific directory and in the parent canonical repo
 		// For now, just verify the worktree gitdir exists
 		if _, err := os.Stat(gitdirPath); err != nil {
@@ -488,6 +518,8 @@ func (s *WorkspaceHealthService) checkRemoteURLValidity(repoName, worktreePath s
 		}
 
 		gitdirPath := strings.TrimSpace(strings.TrimPrefix(gitdirLine, "gitdir:"))
+		// Resolve relative paths from the worktree directory
+		gitdirPath = resolveGitdirPath(gitdirPath, worktreePath)
 
 		// Navigate from worktree gitdir to canonical repo config
 		// Worktree gitdir is typically: <canonical>/.git/worktrees/<name>
@@ -546,14 +578,22 @@ func (s *WorkspaceHealthService) checkRemoteURLValidity(repoName, worktreePath s
 }
 
 // fixMissingWorktree attempts to recreate a missing worktree.
-func (s *WorkspaceHealthService) fixMissingWorktree(ctx context.Context, repoName, worktreePath string) error {
+func (s *WorkspaceHealthService) fixMissingWorktree(ctx context.Context, repoName, worktreePath, branchName string) error {
+	// Verify canonical repo exists before attempting fix
+	canonicalPath := filepath.Join(s.config.GetProjectsRoot(), repoName)
+	if _, err := os.Stat(canonicalPath); os.IsNotExist(err) {
+		return cerrors.NewRepoNotFound(repoName)
+	}
+
 	// Remove any leftover directory
 	if err := os.RemoveAll(worktreePath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
-	// Get the default branch name from config
-	branchName := "main" // Default fallback
+	// Use provided branch name, default to "main" only if empty
+	if branchName == "" {
+		branchName = "main"
+	}
 
 	// Recreate the worktree using the git engine
 	if err := s.gitEngine.CreateWorktree(ctx, repoName, worktreePath, branchName); err != nil {
@@ -595,6 +635,10 @@ func parseRemoteURL(configPath string) (string, error) {
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
 	return "", nil
 }
 
@@ -629,6 +673,16 @@ func isValidRemoteURL(rawURL string) bool {
 	}
 
 	return true
+}
+
+// resolveGitdirPath resolves a gitdir path, handling both absolute and relative paths.
+// Relative paths are resolved from the worktree directory.
+func resolveGitdirPath(gitdirPath, worktreePath string) string {
+	if filepath.IsAbs(gitdirPath) {
+		return gitdirPath
+	}
+	// Relative path - resolve from worktree directory
+	return filepath.Join(worktreePath, gitdirPath)
 }
 
 // calculateOverallStatus determines the worst status from a set of checks.

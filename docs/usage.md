@@ -565,13 +565,7 @@ canopy doctor workspace --json
 | warning | Non-critical issues found |
 | critical | Critical issues requiring attention |
 
-#### Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | All workspaces healthy |
-| 1 | Warnings present |
-| 2 | Critical issues present |
+The `doctor workspace` command uses the same [exit codes](#exit-codes) as the main `doctor` command.
 
 #### Auto-Fix Capabilities
 
