@@ -5,17 +5,80 @@ package components
 
 import "github.com/charmbracelet/lipgloss"
 
-// Color palette - using a modern, accessible color scheme
+// Semantic color palette - colors defined by meaning, not visual preference
 var (
-	// Primary colors
-	ColorPrimary   = lipgloss.Color("#7C3AED") // Violet
-	ColorSecondary = lipgloss.Color("#A78BFA") // Light violet
+	// Core semantic colors
+	ColorAccent  = lipgloss.Color("#8B5CF6") // Selection, primary actions
+	ColorSuccess = lipgloss.Color("#22C55E") // Clean status, confirmations
+	ColorWarning = lipgloss.Color("#F59E0B") // Stale, behind, needs sync
+	ColorDanger  = lipgloss.Color("#EF4444") // Dirty, errors, destructive
+	ColorMuted   = lipgloss.Color("#6B7280") // Secondary text, disabled
+	ColorSubtle  = lipgloss.Color("#374151") // Borders, dividers
+	ColorSurface = lipgloss.Color("#1F2937") // Panel backgrounds
+	ColorText    = lipgloss.Color("#F9FAFB") // Primary text
 
-	// Status colors - softer, more modern tones
-	ColorSuccess = lipgloss.Color("#10B981") // Emerald green
-	ColorWarning = lipgloss.Color("#F59E0B") // Amber
-	ColorDanger  = lipgloss.Color("#EF4444") // Red
-	ColorMuted   = lipgloss.Color("#6B7280") // Gray
+	// Legacy aliases for backwards compatibility
+	ColorPrimary   = ColorAccent
+	ColorSecondary = lipgloss.Color("#A78BFA") // Light violet
+)
+
+// Spacing constants for consistent layout
+const (
+	SpacingXS = 1 // Minimal padding
+	SpacingSM = 2 // Small padding
+	SpacingMD = 3 // Medium padding
+	SpacingLG = 4 // Large padding
+)
+
+// Panel/box styles for layout sections
+var (
+	// HeaderPanelStyle is used for the top header bar
+	HeaderPanelStyle = lipgloss.NewStyle().
+				BorderStyle(lipgloss.RoundedBorder()).
+				BorderForeground(ColorSubtle).
+				Padding(0, SpacingSM).
+				MarginBottom(1)
+
+	// ContentPanelStyle is used for the main content area
+	ContentPanelStyle = lipgloss.NewStyle().
+				BorderStyle(lipgloss.RoundedBorder()).
+				BorderForeground(ColorSubtle).
+				Padding(SpacingXS, SpacingSM)
+
+	// FooterPanelStyle is used for the footer help bar
+	FooterPanelStyle = lipgloss.NewStyle().
+				BorderStyle(lipgloss.RoundedBorder()).
+				BorderForeground(ColorSubtle).
+				Padding(0, SpacingSM).
+				MarginTop(1)
+
+	// ModalPanelStyle is used for confirmation dialogs and overlays
+	ModalPanelStyle = lipgloss.NewStyle().
+			BorderStyle(lipgloss.DoubleBorder()).
+			BorderForeground(ColorWarning).
+			Padding(SpacingXS, SpacingMD).
+			Background(ColorSurface)
+
+	// CardStyle is used for detail view sections
+	CardStyle = lipgloss.NewStyle().
+			BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(ColorSubtle).
+			Padding(SpacingXS, SpacingSM).
+			MarginBottom(1)
+
+	// SelectedRowStyle is used for highlighted/selected rows
+	SelectedRowStyle = lipgloss.NewStyle().
+				BorderStyle(lipgloss.NormalBorder()).
+				BorderForeground(ColorAccent).
+				BorderLeft(true).
+				BorderRight(false).
+				BorderTop(false).
+				BorderBottom(false).
+				PaddingLeft(1)
+
+	// AlternateRowStyle is used for alternating row backgrounds
+	AlternateRowStyle = lipgloss.NewStyle().
+				Background(ColorSurface)
 )
 
 // Status indicator styles
@@ -116,6 +179,8 @@ const (
 	IconWarning  = "⚠" // Warning triangle for stale/behind
 	IconLoading  = "○" // Empty circle for loading
 	IconError    = "✗" // X mark for errors
+	IconUnpushed = "↑" // Up arrow for unpushed commits
+	IconBehind   = "↓" // Down arrow for behind remote
 	IconCursor   = "❯" // Arrow for selection cursor
 	IconNoCursor = " "
 )

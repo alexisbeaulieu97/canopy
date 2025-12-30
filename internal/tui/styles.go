@@ -27,10 +27,9 @@ var (
 
 // Layout styles - aliased from components
 var (
-	titleStyle        = components.TitleStyle
-	detailHeaderStyle = components.DetailHeaderStyle
-	detailLabelStyle  = components.DetailLabelStyle
-	detailValueStyle  = components.DetailValueStyle
+	titleStyle       = components.TitleStyle
+	detailLabelStyle = components.DetailLabelStyle
+	detailValueStyle = components.DetailValueStyle
 )
 
 // Interactive element styles - aliased from components
