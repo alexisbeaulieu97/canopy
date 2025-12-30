@@ -149,7 +149,10 @@ func (d WorkspaceDelegate) buildLoadedStatusPills(wsItem WorkspaceItem) []string
 		pills = append(pills, StatusDirtyStyle.Render(fmt.Sprintf("%s%d", IconError, wsItem.Summary.ErrorRepos)))
 	}
 
-	if wsItem.OrphanCount > 0 {
+	// Show orphan check failure warning
+	if wsItem.OrphanCheckFailed {
+		pills = append(pills, StatusWarnStyle.Render(fmt.Sprintf("%s?", IconWarning)))
+	} else if wsItem.OrphanCount > 0 {
 		pills = append(pills, StatusWarnStyle.Render(fmt.Sprintf("%s%d", IconWarning, wsItem.OrphanCount)))
 	}
 

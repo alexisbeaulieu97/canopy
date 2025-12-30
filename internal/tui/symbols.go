@@ -14,145 +14,145 @@ func NewSymbols(useNerdFont bool) Symbols {
 	return Symbols{useNerdFont: useNerdFont}
 }
 
-// Workspaces returns the workspaces header symbol ( or [W]).
+// Workspaces returns the workspaces header symbol.
 func (s Symbols) Workspaces() string {
 	if s.useNerdFont {
-		return "" // nf-oct-stack
+		return "\uf0c9" // nf-fa-bars (stack icon)
 	}
 
 	return "[W]"
 }
 
-// Disk returns the disk usage symbol ( or [D]).
+// Disk returns the disk usage symbol.
 func (s Symbols) Disk() string {
 	if s.useNerdFont {
-		return "" // nf-fa-database
+		return "\uf1c0" // nf-fa-database
 	}
 
 	return "[D]"
 }
 
-// Folder returns the folder/workspace detail symbol ( or [>]).
+// Folder returns the folder/workspace detail symbol.
 func (s Symbols) Folder() string {
 	if s.useNerdFont {
-		return "" // nf-oct-file_directory
+		return "\uf07b" // nf-fa-folder
 	}
 
 	return "[>]"
 }
 
-// Warning returns the warning symbol ( or !).
+// Warning returns the warning symbol.
 func (s Symbols) Warning() string {
 	if s.useNerdFont {
-		return "" // nf-fa-exclamation_triangle
+		return "\uf071" // nf-fa-exclamation_triangle
 	}
 
 	return "!"
 }
 
-// Check returns the success/check symbol ( or ok).
+// Check returns the success/check symbol.
 func (s Symbols) Check() string {
 	if s.useNerdFont {
-		return "" // nf-fa-check
+		return "\uf00c" // nf-fa-check
 	}
 
 	return "ok"
 }
 
-// Search returns the search symbol ( or [?]).
+// Search returns the search symbol.
 func (s Symbols) Search() string {
 	if s.useNerdFont {
-		return "" // nf-fa-search
+		return "\uf002" // nf-fa-search
 	}
 
 	return "[?]"
 }
 
-// Loading returns the loading symbol ( or ~).
+// Loading returns the loading symbol.
 func (s Symbols) Loading() string {
 	if s.useNerdFont {
-		return "" // nf-fa-clock_o
+		return "\uf110" // nf-fa-spinner
 	}
 
-	return "~"
+	return "..."
 }
 
-// Repo returns the repository symbol ( or [R]).
+// Repo returns the repository symbol.
 func (s Symbols) Repo() string {
 	if s.useNerdFont {
-		return "" // nf-oct-repo
+		return "\uf1d3" // nf-fa-git-square
 	}
 
 	return "[R]"
 }
 
-// Branch returns the branch symbol ( or [B]).
+// Branch returns the branch symbol.
 func (s Symbols) Branch() string {
 	if s.useNerdFont {
-		return "" // nf-oct-git_branch
+		return "\ue725" // nf-dev-git_branch
 	}
 
 	return "[B]"
 }
 
-// Dirty returns the dirty/modified symbol ( or *).
+// Dirty returns the dirty/modified symbol.
 func (s Symbols) Dirty() string {
 	if s.useNerdFont {
-		return "" // nf-fa-pencil
+		return "\uf040" // nf-fa-pencil
 	}
 
 	return "*"
 }
 
-// Error returns the error symbol ( or X).
+// Error returns the error symbol.
 func (s Symbols) Error() string {
 	if s.useNerdFont {
-		return "" // nf-fa-times_circle
+		return "\uf057" // nf-fa-times_circle
 	}
 
 	return "X"
 }
 
-// Unpushed returns the unpushed commits symbol ( or ^).
+// Unpushed returns the unpushed commits symbol.
 func (s Symbols) Unpushed() string {
 	if s.useNerdFont {
-		return "" // nf-fa-arrow_up
+		return "\uf062" // nf-fa-arrow_up
 	}
 
 	return "^"
 }
 
-// Behind returns the behind remote symbol ( or v).
+// Behind returns the behind remote symbol.
 func (s Symbols) Behind() string {
 	if s.useNerdFont {
-		return "" // nf-fa-arrow_down
+		return "\uf063" // nf-fa-arrow_down
 	}
 
 	return "v"
 }
 
-// Stale returns the stale/outdated symbol ( or ~).
+// Stale returns the stale/outdated symbol.
 func (s Symbols) Stale() string {
 	if s.useNerdFont {
-		return "" // nf-fa-clock_o
+		return "\uf017" // nf-fa-clock_o
 	}
 
-	return "~"
+	return "o" // distinct from Loading ("...")
 }
 
-// Time returns the time/clock symbol ( or @).
+// Time returns the time/clock symbol.
 func (s Symbols) Time() string {
 	if s.useNerdFont {
-		return "" // nf-fa-clock_o
+		return "\uf017" // nf-fa-clock_o
 	}
 
 	return "@"
 }
 
-// Cursor returns the cursor/selection indicator ( or >).
+// Cursor returns the cursor/selection indicator.
 func (s Symbols) Cursor() string {
 	if s.useNerdFont {
-		return "" // nf-fa-chevron_right
+		return "\uf054" // nf-fa-chevron_right
 	}
 
 	return ">"

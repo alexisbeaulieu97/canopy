@@ -9,6 +9,16 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
+// Layout constants for consistent rendering.
+const (
+	separatorWidth = 40 // Width of horizontal dividers
+)
+
+// formatKeyAction formats a keyboard shortcut as key:action.
+func formatKeyAction(key, action string) string {
+	return subtleTextStyle.Render(fmt.Sprintf("%s:%s", accentTextStyle.Render(key), action))
+}
+
 // View renders the UI by delegating to the current view state.
 func (m Model) View() string {
 	return m.viewState.View(&m)
@@ -207,26 +217,21 @@ func (m Model) renderFooter() string {
 	deselectAllKey := firstKey(m.ui.Keybindings.DeselectAll)
 	quitKey := firstKey(m.ui.Keybindings.Quit)
 
-	// Format key:action pairs
-	formatKey := func(key, action string) string {
-		return subtleTextStyle.Render(fmt.Sprintf("%s:%s", accentTextStyle.Render(key), action))
-	}
-
 	var shortcuts []string
 
 	shortcuts = append(shortcuts,
-		formatKey("↑↓", "nav"),
-		formatKey(searchKey, "search"),
-		formatKey(toggleStaleKey, "stale"),
-		formatKey(detailsKey, "details"),
-		formatKey(openKey, "open"),
-		formatKey(syncKey, "sync"),
-		formatKey(pushKey, "push"),
-		formatKey(closeKey, "close"),
-		formatKey(selectKey, "sel"),
-		formatKey(selectAllKey, "all"),
-		formatKey(deselectAllKey, "none"),
-		formatKey(quitKey, "quit"),
+		formatKeyAction("↑↓", "nav"),
+		formatKeyAction(searchKey, "search"),
+		formatKeyAction(toggleStaleKey, "stale"),
+		formatKeyAction(detailsKey, "details"),
+		formatKeyAction(openKey, "open"),
+		formatKeyAction(syncKey, "sync"),
+		formatKeyAction(pushKey, "push"),
+		formatKeyAction(closeKey, "close"),
+		formatKeyAction(selectKey, "sel"),
+		formatKeyAction(selectAllKey, "all"),
+		formatKeyAction(deselectAllKey, "none"),
+		formatKeyAction(quitKey, "quit"),
 	)
 
 	return strings.Join(shortcuts, "  ")
@@ -283,17 +288,12 @@ func (m Model) renderDetailView() string {
 	pushKey := firstKey(m.ui.Keybindings.Push)
 	closeKey := firstKey(m.ui.Keybindings.Close)
 
-	// Format key:action pairs
-	formatKey := func(key, action string) string {
-		return subtleTextStyle.Render(fmt.Sprintf("%s:%s", accentTextStyle.Render(key), action))
-	}
-
 	shortcuts := []string{
-		formatKey(cancelKey, "back"),
-		formatKey(openKey, "open"),
-		formatKey(syncKey, "sync"),
-		formatKey(pushKey, "push"),
-		formatKey(closeKey, "close"),
+		formatKeyAction(cancelKey, "back"),
+		formatKeyAction(openKey, "open"),
+		formatKeyAction(syncKey, "sync"),
+		formatKeyAction(pushKey, "push"),
+		formatKeyAction(closeKey, "close"),
 	}
 
 	b.WriteString(strings.Join(shortcuts, "  "))
@@ -307,7 +307,7 @@ func (m Model) renderDetailMetadata() string {
 
 	// Section header
 	rows = append(rows, boldTextStyle.Render("Workspace Info"))
-	rows = append(rows, strings.Repeat("─", 40))
+	rows = append(rows, strings.Repeat("─", separatorWidth))
 
 	// Branch
 	row := fmt.Sprintf("  %s %-12s %s",
@@ -349,7 +349,7 @@ func (m Model) renderDetailRepos() string {
 
 	b.WriteString(boldTextStyle.Render("Repositories"))
 	b.WriteString("\n")
-	b.WriteString(strings.Repeat("─", 40))
+	b.WriteString(strings.Repeat("─", separatorWidth))
 	b.WriteString("\n")
 
 	if m.wsStatus == nil || len(m.wsStatus.Repos) == 0 {
@@ -417,7 +417,7 @@ func (m Model) renderDetailOrphans() string {
 	// Warning banner header
 	b.WriteString(statusWarnStyle.Render(fmt.Sprintf("%s Orphaned Worktrees (%d)", m.symbols.Warning(), len(m.wsOrphans))))
 	b.WriteString("\n")
-	b.WriteString(strings.Repeat("─", 40))
+	b.WriteString(strings.Repeat("─", separatorWidth))
 	b.WriteString("\n")
 
 	for _, orphan := range m.wsOrphans {
