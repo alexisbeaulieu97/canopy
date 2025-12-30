@@ -3,6 +3,7 @@ package components
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -84,10 +85,10 @@ func NewWorkspaceDelegate(staleThreshold int) WorkspaceDelegate {
 	styles := list.NewDefaultItemStyles()
 	styles.NormalTitle = styles.NormalTitle.
 		Bold(true).
-		Foreground(lipgloss.Color("#F9FAFB"))
+		Foreground(ColorText)
 	styles.SelectedTitle = styles.SelectedTitle.
 		Bold(true).
-		Foreground(ColorPrimary)
+		Foreground(ColorAccent)
 	styles.NormalDesc = styles.NormalDesc.
 		Foreground(ColorMuted)
 	styles.SelectedDesc = styles.SelectedDesc.
@@ -99,16 +100,83 @@ func NewWorkspaceDelegate(staleThreshold int) WorkspaceDelegate {
 	}
 }
 
-// Height returns the height of each list item.
-func (d WorkspaceDelegate) Height() int { return 3 }
+// Height returns the height of each list item (2 lines for compact layout).
+func (d WorkspaceDelegate) Height() int { return 2 }
 
 // Spacing returns the spacing between list items.
-func (d WorkspaceDelegate) Spacing() int { return 1 }
+func (d WorkspaceDelegate) Spacing() int { return 0 }
 
 // Update handles messages for the delegate (no-op for this delegate).
 func (d WorkspaceDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
-// Render renders a workspace item in the list.
+// buildStatusPills creates inline status indicators for a workspace item.
+func (d WorkspaceDelegate) buildStatusPills(wsItem WorkspaceItem) string {
+	var statusPills []string
+
+	switch {
+	case wsItem.Err != nil:
+		statusPills = append(statusPills, StatusDirtyStyle.Render(IconError))
+	case !wsItem.Loaded:
+		statusPills = append(statusPills, StatusLoadingStyle.Render(IconLoading))
+	default:
+		statusPills = d.buildLoadedStatusPills(wsItem)
+	}
+
+	if len(statusPills) > 0 {
+		return " " + strings.Join(statusPills, " ")
+	}
+
+	return ""
+}
+
+// buildLoadedStatusPills creates status pills for a successfully loaded workspace.
+func (d WorkspaceDelegate) buildLoadedStatusPills(wsItem WorkspaceItem) []string {
+	var pills []string
+
+	if wsItem.Summary.DirtyRepos > 0 {
+		pills = append(pills, StatusDirtyStyle.Render(fmt.Sprintf("%s%d", IconDirty, wsItem.Summary.DirtyRepos)))
+	}
+
+	if wsItem.Summary.UnpushedRepos > 0 {
+		pills = append(pills, StatusDirtyStyle.Render(fmt.Sprintf("↑%d", wsItem.Summary.UnpushedRepos)))
+	}
+
+	if wsItem.Summary.BehindRepos > 0 {
+		pills = append(pills, StatusWarnStyle.Render(fmt.Sprintf("↓%d", wsItem.Summary.BehindRepos)))
+	}
+
+	if wsItem.Summary.ErrorRepos > 0 {
+		pills = append(pills, StatusDirtyStyle.Render(fmt.Sprintf("%s%d", IconError, wsItem.Summary.ErrorRepos)))
+	}
+
+	if wsItem.OrphanCount > 0 {
+		pills = append(pills, StatusWarnStyle.Render(fmt.Sprintf("%s%d", IconWarning, wsItem.OrphanCount)))
+	}
+
+	if wsItem.Workspace.IsStale(d.staleThreshold) {
+		pills = append(pills, StatusWarnStyle.Render("stale"))
+	}
+
+	return pills
+}
+
+// buildSecondaryLine creates the description line for a workspace item.
+func buildSecondaryLine(wsItem WorkspaceItem) string {
+	switch {
+	case wsItem.Err != nil:
+		return StatusDirtyStyle.Render("Error loading status")
+	case !wsItem.Loaded:
+		return StatusLoadingStyle.Render("Loading...")
+	default:
+		repoText := FormatCount(wsItem.Summary.RepoCount, "repo", "repos")
+		diskSize := HumanizeBytes(wsItem.Workspace.DiskUsageBytes)
+		lastUpdated := RelativeTime(wsItem.Workspace.LastModified)
+
+		return fmt.Sprintf("%s • %s • %s", repoText, diskSize, lastUpdated)
+	}
+}
+
+// Render renders a workspace item in the list using a two-line compact layout.
 func (d WorkspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
 	wsItem, ok := listItem.(WorkspaceItem)
 	if !ok {
@@ -123,6 +191,7 @@ func (d WorkspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 		cursor = CursorStyle.Render(IconCursor)
 	}
 
+	// Selection checkbox
 	selectionIndicator := "[ ]"
 	selectionStyle := SubtleTextStyle
 
@@ -131,79 +200,30 @@ func (d WorkspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 		selectionStyle = AccentTextStyle
 	}
 
-	// Get health status badge
-	badge := NewStatusBadge(StatusBadgeInput{
-		HasError:      wsItem.Err != nil,
-		IsLoaded:      wsItem.Loaded,
-		OrphanCount:   wsItem.OrphanCount,
-		DirtyRepos:    wsItem.Summary.DirtyRepos,
-		UnpushedRepos: wsItem.Summary.UnpushedRepos,
-		BehindRepos:   wsItem.Summary.BehindRepos,
-		ErrorRepos:    wsItem.Summary.ErrorRepos,
-		IsStale:       wsItem.Workspace.IsStale(d.staleThreshold),
-	})
-
 	// Choose title style based on selection
 	titleStyle := d.styles.NormalTitle
 	if isSelected {
 		titleStyle = d.styles.SelectedTitle
 	}
 
-	// Build the title line with status indicator
-	statusIndicator := badge.Render()
+	// Title with inline status pills
 	title := titleStyle.Render(wsItem.Workspace.ID)
-	badges := NewBadgeSet(BadgeSetInput{
-		HasError:          wsItem.Err != nil,
-		IsLoaded:          wsItem.Loaded,
-		OrphanCount:       wsItem.OrphanCount,
-		OrphanCheckFailed: wsItem.OrphanCheckFailed,
-		DirtyRepos:        wsItem.Summary.DirtyRepos,
-		UnpushedRepos:     wsItem.Summary.UnpushedRepos,
-		BehindRepos:       wsItem.Summary.BehindRepos,
-		ErrorRepos:        wsItem.Summary.ErrorRepos,
-		IsStale:           wsItem.Workspace.IsStale(d.staleThreshold),
-	}).Render()
+	pillsStr := d.buildStatusPills(wsItem)
 
-	// First line: cursor + selection + status + title + badges
-	line1 := fmt.Sprintf("%s %s %s %s %s", cursor, selectionStyle.Render(selectionIndicator), statusIndicator, title, badges)
+	// First line: cursor + selection + title + inline status pills
+	line1 := fmt.Sprintf("%s %s %s%s", cursor, selectionStyle.Render(selectionIndicator), title, pillsStr)
 
-	// Build description line
+	// Build description line (second line)
 	descStyle := d.styles.NormalDesc
 	if isSelected {
 		descStyle = d.styles.SelectedDesc
 	}
 
-	var secondary string
+	secondary := buildSecondaryLine(wsItem)
 
-	switch {
-	case wsItem.Err != nil:
-		secondary = StatusDirtyStyle.Render("⚠ Error loading status")
-	case !wsItem.Loaded:
-		secondary = StatusLoadingStyle.Render("⋯ Loading status...")
-	default:
-		lastUpdated := RelativeTime(wsItem.Workspace.LastModified)
-		repoText := FormatCount(wsItem.Summary.RepoCount, "repo", "repos")
-		diskSize := HumanizeBytes(wsItem.Workspace.DiskUsageBytes)
-		secondary = fmt.Sprintf("%s  •  %s  •  %s", repoText, diskSize, lastUpdated)
-	}
-
-	// Third line: status summary (always render for consistent height)
-	var statusLine string
-
-	if wsItem.Loaded && wsItem.Err == nil {
-		statusLine = NewStatusLine(StatusLineInput{
-			DirtyRepos:    wsItem.Summary.DirtyRepos,
-			UnpushedRepos: wsItem.Summary.UnpushedRepos,
-			BehindRepos:   wsItem.Summary.BehindRepos,
-			ErrorRepos:    wsItem.Summary.ErrorRepos,
-		}).Render()
-	}
-
-	// Output with proper indentation (always 3 lines to match Height())
+	// Output with proper indentation (2 lines for compact layout)
 	_, _ = fmt.Fprintf(w, "%s\n", line1)
-
-	_, _ = fmt.Fprintf(w, "    %s\n", descStyle.Render(secondary))
-	_, _ = fmt.Fprintf(w, "    %s\n", statusLine)
+	_, _ = fmt.Fprintf(w, "      %s\n", descStyle.Render(secondary))
 }
 
 // HumanizeBytes formats a byte count into a human-readable string.

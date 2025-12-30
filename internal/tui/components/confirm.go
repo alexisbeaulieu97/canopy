@@ -2,6 +2,7 @@ package components
 
 import (
 	"fmt"
+	"strings"
 )
 
 // ConfirmAction represents the type of action being confirmed.
@@ -25,6 +26,30 @@ func (a ConfirmAction) ActionDescription() string {
 		return "sync"
 	default:
 		return string(a)
+	}
+}
+
+// ActionIcon returns an icon for the action type.
+func (a ConfirmAction) ActionIcon() string {
+	switch a {
+	case ActionClose:
+		return IconError // destructive action
+	case ActionPush:
+		return "↑" // push up
+	case ActionSync:
+		return "⟳" // sync/refresh
+	default:
+		return IconWarning
+	}
+}
+
+// ActionStyle returns the appropriate style for the action type.
+func (a ConfirmAction) ActionStyle() func(...string) string {
+	switch a {
+	case ActionClose:
+		return StatusDirtyStyle.Render // destructive = danger
+	default:
+		return StatusWarnStyle.Render // default = warning
 	}
 }
 
@@ -56,19 +81,33 @@ func (d *ConfirmDialog) Hide() {
 	d.TargetLabel = ""
 }
 
-// Render renders the confirmation dialog prompt.
+// Render renders the confirmation dialog prompt with modal styling.
 func (d ConfirmDialog) Render() string {
 	if !d.Active {
 		return ""
 	}
 
-	prompt := fmt.Sprintf("⚠️  Confirm %s %s?",
-		d.Action.ActionDescription(),
-		d.TargetLabel)
+	var b strings.Builder
 
-	hint := SubtleTextStyle.Render("Press [y] to confirm, [n] or [esc] to cancel")
+	// Icon based on action type
+	icon := d.Action.ActionIcon()
+	styleRender := d.Action.ActionStyle()
 
-	return ConfirmPromptStyle.Render(prompt) + "\n" + hint
+	// Header line with icon
+	header := styleRender(fmt.Sprintf("%s Confirm %s", icon, d.Action.ActionDescription()))
+	b.WriteString(header)
+	b.WriteString("\n")
+
+	// Target
+	b.WriteString(fmt.Sprintf("  Target: %s", d.TargetLabel))
+	b.WriteString("\n\n")
+
+	// Action buttons
+	confirmBtn := AccentTextStyle.Render("[y] Confirm")
+	cancelBtn := SubtleTextStyle.Render("[n/esc] Cancel")
+	b.WriteString(fmt.Sprintf("  %s  %s", confirmBtn, cancelBtn))
+
+	return b.String()
 }
 
 // HandleKey processes a key press in the confirmation dialog.
