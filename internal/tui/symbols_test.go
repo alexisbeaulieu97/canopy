@@ -23,7 +23,7 @@ func TestSymbols_NerdFontMode(t *testing.T) {
 		{name: "Error", method: symbols.Error, want: "\uf057"},
 		{name: "Unpushed", method: symbols.Unpushed, want: "\uf062"},
 		{name: "Behind", method: symbols.Behind, want: "\uf063"},
-		{name: "Stale", method: symbols.Stale, want: "\uf017"},
+		{name: "Stale", method: symbols.Stale, want: "\uf252"},
 		{name: "Time", method: symbols.Time, want: "\uf017"},
 		{name: "Cursor", method: symbols.Cursor, want: "\uf054"},
 		{name: "NoCursor", method: symbols.NoCursor, want: " "},

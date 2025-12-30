@@ -132,15 +132,16 @@ func (s Symbols) Behind() string {
 }
 
 // Stale returns the stale/outdated symbol.
+// Uses hourglass to indicate "waiting too long" (distinct from Time's clock).
 func (s Symbols) Stale() string {
 	if s.useNerdFont {
-		return "\uf017" // nf-fa-clock_o
+		return "\uf252" // nf-fa-hourglass_start
 	}
 
 	return "o" // distinct from Loading ("...")
 }
 
-// Time returns the time/clock symbol.
+// Time returns the time/clock symbol for timestamps.
 func (s Symbols) Time() string {
 	if s.useNerdFont {
 		return "\uf017" // nf-fa-clock_o

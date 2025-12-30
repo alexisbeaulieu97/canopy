@@ -179,6 +179,8 @@ const (
 	IconWarning  = "⚠" // Warning triangle for stale/behind
 	IconLoading  = "○" // Empty circle for loading
 	IconError    = "✗" // X mark for errors
+	IconUnpushed = "↑" // Up arrow for unpushed commits
+	IconBehind   = "↓" // Down arrow for behind remote
 	IconCursor   = "❯" // Arrow for selection cursor
 	IconNoCursor = " "
 )

@@ -74,6 +74,10 @@ func SummarizeStatus(status *domain.WorkspaceStatus) WorkspaceSummary {
 	return summary
 }
 
+// secondaryLineIndent aligns the secondary line with the title.
+// Layout: cursor(1) + space(1) + selection(3) + space(1) = 6 chars
+const secondaryLineIndent = "      "
+
 // WorkspaceDelegate handles rendering of workspace items in the list.
 type WorkspaceDelegate struct {
 	styles         list.DefaultItemStyles
@@ -138,11 +142,11 @@ func (d WorkspaceDelegate) buildLoadedStatusPills(wsItem WorkspaceItem) []string
 	}
 
 	if wsItem.Summary.UnpushedRepos > 0 {
-		pills = append(pills, StatusDirtyStyle.Render(fmt.Sprintf("↑%d", wsItem.Summary.UnpushedRepos)))
+		pills = append(pills, StatusDirtyStyle.Render(fmt.Sprintf("%s%d", IconUnpushed, wsItem.Summary.UnpushedRepos)))
 	}
 
 	if wsItem.Summary.BehindRepos > 0 {
-		pills = append(pills, StatusWarnStyle.Render(fmt.Sprintf("↓%d", wsItem.Summary.BehindRepos)))
+		pills = append(pills, StatusWarnStyle.Render(fmt.Sprintf("%s%d", IconBehind, wsItem.Summary.BehindRepos)))
 	}
 
 	if wsItem.Summary.ErrorRepos > 0 {
@@ -226,7 +230,7 @@ func (d WorkspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 
 	// Output with proper indentation (2 lines for compact layout)
 	_, _ = fmt.Fprintf(w, "%s\n", line1)
-	_, _ = fmt.Fprintf(w, "      %s\n", descStyle.Render(secondary))
+	_, _ = fmt.Fprintf(w, "%s%s\n", secondaryLineIndent, descStyle.Render(secondary))
 }
 
 // HumanizeBytes formats a byte count into a human-readable string.
