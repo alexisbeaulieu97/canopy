@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
 func TestSelectedWorkspaceItem(t *testing.T) {
@@ -14,7 +15,7 @@ func TestSelectedWorkspaceItem(t *testing.T) {
 	model, _ := newTUITestModel(t)
 
 	ws := domain.Workspace{ID: "ws-1"}
-	items := []list.Item{workspaceItem{Workspace: ws}}
+	items := []list.Item{components.WorkspaceItem{Workspace: ws}}
 	model.ui.List.SetItems(items)
 
 	selected, ok := model.selectedWorkspaceItem()
@@ -31,7 +32,7 @@ func TestWorkspaceItemByID(t *testing.T) {
 	t.Parallel()
 
 	model, _ := newTUITestModel(t)
-	model.workspaces.SetItems([]workspaceItem{
+	model.workspaces.SetItems([]components.WorkspaceItem{
 		{Workspace: domain.Workspace{ID: "ws-1"}},
 		{Workspace: domain.Workspace{ID: "ws-2"}},
 	}, 0)

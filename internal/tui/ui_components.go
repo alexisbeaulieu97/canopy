@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
@@ -17,12 +17,12 @@ type UIComponents struct {
 	// Spinner is the loading spinner component.
 	Spinner spinner.Model
 	// Keybindings holds the configured keybindings.
-	Keybindings config.Keybindings
+	Keybindings ports.Keybindings
 }
 
 // NewUIComponents creates a new UIComponents with configured components.
-func NewUIComponents(keybindings config.Keybindings, staleThreshold int) UIComponents {
-	delegate := newWorkspaceDelegate(staleThreshold)
+func NewUIComponents(keybindings ports.Keybindings, staleThreshold int) UIComponents {
+	delegate := components.NewWorkspaceDelegate(staleThreshold)
 	l := list.New([]list.Item{}, delegate, 0, 0)
 	l.Title = ""
 	l.SetShowTitle(false)

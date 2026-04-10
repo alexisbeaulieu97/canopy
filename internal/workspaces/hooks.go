@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
@@ -32,7 +31,7 @@ func (s *Service) RunHooks(ctx context.Context, workspaceID string, phase HookPh
 
 	hooksConfig := s.config.GetHooks()
 
-	var selected []config.Hook
+	var selected []ports.HookSpec
 
 	switch phase {
 	case HookPhasePostCreate:
@@ -56,6 +55,7 @@ func (s *Service) RunHooks(ctx context.Context, workspaceID string, phase HookPh
 
 	if _, err := s.hookExecutor.ExecuteHooks(selected, hookCtx, ports.HookExecuteOptions{
 		ContinueOnError: continueOnError,
+		BaseContext:     ctx,
 	}); err != nil {
 		if s.logger != nil {
 			s.logger.Error(fmt.Sprintf("%s hooks failed", phase), "error", err)
@@ -80,7 +80,7 @@ func (s *Service) PreviewHooks(ctx context.Context, workspaceID string, phase Ho
 
 	hooksConfig := s.config.GetHooks()
 
-	var selected []config.Hook
+	var selected []ports.HookSpec
 
 	switch phase {
 	case HookPhasePostCreate:
@@ -103,7 +103,8 @@ func (s *Service) PreviewHooks(ctx context.Context, workspaceID string, phase Ho
 	}
 
 	previews, err := s.hookExecutor.ExecuteHooks(selected, hookCtx, ports.HookExecuteOptions{
-		DryRun: true,
+		DryRun:      true,
+		BaseContext: ctx,
 	})
 	if err != nil {
 		if s.logger != nil {

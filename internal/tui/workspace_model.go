@@ -6,12 +6,13 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
 // workspaceModel manages workspace data and caches.
 type workspaceModel struct {
 	// allItems contains all loaded workspace items (unfiltered).
-	allItems []workspaceItem
+	allItems []components.WorkspaceItem
 	// statusCache maps workspace ID to its status.
 	statusCache map[string]*domain.WorkspaceStatus
 	// totalDiskUsage is the sum of disk usage across all workspaces.
@@ -31,13 +32,13 @@ func newWorkspaceModel(staleThresholdDays int) *workspaceModel {
 }
 
 // SetItems sets all workspace items and total disk usage.
-func (wm *workspaceModel) SetItems(items []workspaceItem, totalUsage int64) {
+func (wm *workspaceModel) SetItems(items []components.WorkspaceItem, totalUsage int64) {
 	wm.allItems = items
 	wm.totalDiskUsage = totalUsage
 }
 
 // Items returns all workspace items.
-func (wm *workspaceModel) Items() []workspaceItem {
+func (wm *workspaceModel) Items() []components.WorkspaceItem {
 	return wm.allItems
 }
 
@@ -88,7 +89,7 @@ func (wm *workspaceModel) UpdateItemSummary(id string, status *domain.WorkspaceS
 		} else if status != nil {
 			it.Loaded = true
 			it.Err = nil
-			it.Summary = summarizeStatus(status)
+			it.Summary = components.SummarizeStatus(status)
 		}
 
 		wm.allItems[idx] = it
@@ -98,14 +99,14 @@ func (wm *workspaceModel) UpdateItemSummary(id string, status *domain.WorkspaceS
 }
 
 // FindItemByID finds a workspace item by its ID.
-func (wm *workspaceModel) FindItemByID(id string) (workspaceItem, bool) {
+func (wm *workspaceModel) FindItemByID(id string) (components.WorkspaceItem, bool) {
 	for _, it := range wm.allItems {
 		if it.Workspace.ID == id {
 			return it, true
 		}
 	}
 
-	return workspaceItem{}, false
+	return components.WorkspaceItem{}, false
 }
 
 // ApplyFilters returns filtered list items based on current filters and search value.

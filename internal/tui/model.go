@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
@@ -93,16 +94,16 @@ func firstKey(bindings []string) string {
 }
 
 // selectedWorkspaceItem returns the currently selected workspace item.
-func (m Model) selectedWorkspaceItem() (workspaceItem, bool) {
-	if selected, ok := m.ui.List.SelectedItem().(workspaceItem); ok {
+func (m Model) selectedWorkspaceItem() (components.WorkspaceItem, bool) {
+	if selected, ok := m.ui.List.SelectedItem().(components.WorkspaceItem); ok {
 		return selected, true
 	}
 
-	return workspaceItem{}, false
+	return components.WorkspaceItem{}, false
 }
 
 // workspaceItemByID finds a workspace item by its ID.
-func (m Model) workspaceItemByID(id string) (workspaceItem, bool) {
+func (m Model) workspaceItemByID(id string) (components.WorkspaceItem, bool) {
 	return m.workspaces.FindItemByID(id)
 }
 
@@ -169,7 +170,7 @@ func (m *Model) toggleWorkspaceSelection(id string) {
 
 func (m *Model) selectAllVisible() {
 	for _, item := range m.ui.List.Items() {
-		wsItem, ok := item.(workspaceItem)
+		wsItem, ok := item.(components.WorkspaceItem)
 		if !ok {
 			continue
 		}
@@ -191,7 +192,7 @@ func (m *Model) clearSelection() {
 	m.syncSelectionState()
 }
 
-func (m *Model) pruneSelectionIDs(items []workspaceItem) {
+func (m *Model) pruneSelectionIDs(items []components.WorkspaceItem) {
 	if len(m.selectedIDs) == 0 {
 		return
 	}

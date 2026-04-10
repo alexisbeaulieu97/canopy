@@ -12,6 +12,7 @@ import (
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/formatting"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
@@ -292,7 +293,10 @@ func formatWorkspaceRow(ws workspaceWithStatusData, showLocks bool, icons output
 
 	repoCount := fmt.Sprintf("%d", len(ws.Repos))
 	size := output.FormatBytes(ws.DiskUsageBytes)
-	modified := formatRelativeTime(ws.LastModified)
+	modified := formatting.RelativeTime(ws.LastModified, formatting.RelativeTimeOptions{
+		Zero:          "-",
+		AbsoluteAfter: 7 * 24 * time.Hour,
+	})
 
 	status := formatWorkspaceStatus(ws.RepoStatuses, icons)
 	if showLocks && ws.Locked {
@@ -370,40 +374,4 @@ func formatFirstStatusIssue(dirty, unpushed, behind int, icons output.Icons) str
 	}
 
 	return output.Colorize(output.SuccessStyle, icons.Success()+" clean")
-}
-
-func formatRelativeTime(t time.Time) string {
-	if t.IsZero() {
-		return "-"
-	}
-
-	duration := time.Since(t)
-
-	switch {
-	case duration < time.Minute:
-		return "just now"
-	case duration < time.Hour:
-		mins := int(duration.Minutes())
-		if mins == 1 {
-			return "1 min ago"
-		}
-
-		return fmt.Sprintf("%d mins ago", mins)
-	case duration < 24*time.Hour:
-		hours := int(duration.Hours())
-		if hours == 1 {
-			return "1 hour ago"
-		}
-
-		return fmt.Sprintf("%d hours ago", hours)
-	case duration < 7*24*time.Hour:
-		days := int(duration.Hours() / 24)
-		if days == 1 {
-			return "1 day ago"
-		}
-
-		return fmt.Sprintf("%d days ago", days)
-	default:
-		return t.Format("Jan 2, 2006")
-	}
 }

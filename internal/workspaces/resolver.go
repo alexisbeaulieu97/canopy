@@ -4,9 +4,9 @@ package workspaces
 import (
 	"strings"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
 // RepoResolver handles resolution of repository identifiers to domain.Repo objects.
@@ -17,7 +17,7 @@ type RepoResolver struct {
 
 // NewRepoResolver creates a new RepoResolver with the default strategy chain.
 // The default order is: URL → Registry → GitHub Shorthand.
-func NewRepoResolver(registry *config.RepoRegistry) *RepoResolver {
+func NewRepoResolver(registry ports.RepoRegistry) *RepoResolver {
 	return NewRepoResolverWithStrategies(DefaultStrategies(registry))
 }
 
@@ -31,7 +31,7 @@ func NewRepoResolverWithStrategies(strategies []ResolutionStrategy) *RepoResolve
 
 // DefaultStrategies returns the default resolution strategy chain.
 // Order: URL → Registry → GitHub Shorthand.
-func DefaultStrategies(registry *config.RepoRegistry) []ResolutionStrategy {
+func DefaultStrategies(registry ports.RepoRegistry) []ResolutionStrategy {
 	var urlLookup URLRegistryLookup
 
 	var registryLookup RegistryLookup

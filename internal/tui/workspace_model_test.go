@@ -5,12 +5,13 @@ import (
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
 func TestWorkspaceModel_SetAndGetItems(t *testing.T) {
 	wm := newWorkspaceModel(30)
 
-	items := []workspaceItem{
+	items := []components.WorkspaceItem{
 		{Workspace: domain.Workspace{ID: "ws1"}},
 		{Workspace: domain.Workspace{ID: "ws2"}},
 	}
@@ -81,7 +82,7 @@ func TestWorkspaceModel_StaleThreshold(t *testing.T) {
 func TestWorkspaceModel_FindItemByID(t *testing.T) {
 	wm := newWorkspaceModel(30)
 
-	items := []workspaceItem{
+	items := []components.WorkspaceItem{
 		{Workspace: domain.Workspace{ID: "ws1"}},
 		{Workspace: domain.Workspace{ID: "ws2"}},
 	}
@@ -106,7 +107,7 @@ func TestWorkspaceModel_FindItemByID(t *testing.T) {
 func TestWorkspaceModel_UpdateItemSummary(t *testing.T) {
 	wm := newWorkspaceModel(30)
 
-	items := []workspaceItem{
+	items := []components.WorkspaceItem{
 		{Workspace: domain.Workspace{ID: "ws1"}},
 		{Workspace: domain.Workspace{ID: "ws2"}},
 	}
@@ -130,7 +131,7 @@ func TestWorkspaceModel_UpdateItemSummary(t *testing.T) {
 func TestWorkspaceModel_ApplyFilters_Search(t *testing.T) {
 	wm := newWorkspaceModel(30)
 
-	items := []workspaceItem{
+	items := []components.WorkspaceItem{
 		{Workspace: domain.Workspace{ID: "project-alpha"}},
 		{Workspace: domain.Workspace{ID: "project-beta"}},
 		{Workspace: domain.Workspace{ID: "something-else"}},
@@ -163,7 +164,7 @@ func TestWorkspaceModel_ApplyFilters_Stale(t *testing.T) {
 	recentTime := time.Now()
 	staleTime := time.Now().AddDate(0, 0, -60) // 60 days ago
 
-	items := []workspaceItem{
+	items := []components.WorkspaceItem{
 		{Workspace: domain.Workspace{ID: "recent", LastModified: recentTime}},
 		{Workspace: domain.Workspace{ID: "stale", LastModified: staleTime}},
 	}
@@ -185,7 +186,7 @@ func TestWorkspaceModel_ApplyFilters_Stale(t *testing.T) {
 	}
 
 	// Verify it's the stale workspace
-	if result[0].(workspaceItem).Workspace.ID != "stale" {
+	if result[0].(components.WorkspaceItem).Workspace.ID != "stale" {
 		t.Error("ApplyFilters() with stale filter returned wrong item")
 	}
 }

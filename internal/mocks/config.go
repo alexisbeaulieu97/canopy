@@ -3,6 +3,7 @@ package mocks
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
@@ -27,10 +28,10 @@ type MockConfigProvider struct {
 	GetParallelWorkersFunc    func() int
 	GetLockTimeoutFunc        func() time.Duration
 	GetLockStaleThresholdFunc func() time.Duration
-	GetRegistryFunc           func() *config.RepoRegistry
-	GetHooksFunc              func() config.Hooks
-	GetTemplatesFunc          func() map[string]config.Template
-	ResolveTemplateFunc       func(name string) (config.Template, error)
+	GetRegistryFunc           func() ports.RepoRegistry
+	GetHooksFunc              func() ports.HooksConfig
+	GetTemplatesFunc          func() map[string]ports.WorkspaceTemplate
+	ResolveTemplateFunc       func(name string) (ports.WorkspaceTemplate, error)
 	ValidateTemplatesFunc     func() error
 
 	// Default values for simple getters.
@@ -43,9 +44,9 @@ type MockConfigProvider struct {
 	ParallelWorkers    int
 	LockTimeout        time.Duration
 	LockStaleThreshold time.Duration
-	Registry           *config.RepoRegistry
-	Hooks              config.Hooks
-	Templates          map[string]config.Template
+	Registry           ports.RepoRegistry
+	Hooks              ports.HooksConfig
+	Templates          map[string]ports.WorkspaceTemplate
 	RepoNames          []string
 }
 
@@ -62,7 +63,7 @@ func NewMockConfigProvider() *MockConfigProvider {
 		LockTimeout:        0,
 		LockStaleThreshold: 0,
 		Registry:           &config.RepoRegistry{},
-		Templates:          map[string]config.Template{},
+		Templates:          map[string]ports.WorkspaceTemplate{},
 		RepoNames:          []string{},
 	}
 }
@@ -176,16 +177,25 @@ func (m *MockConfigProvider) GetLockStaleThreshold() time.Duration {
 }
 
 // GetRegistry calls the mock function if set, otherwise returns Registry.
-func (m *MockConfigProvider) GetRegistry() *config.RepoRegistry {
+func (m *MockConfigProvider) GetRegistry() ports.RepoRegistry {
 	if m.GetRegistryFunc != nil {
 		return m.GetRegistryFunc()
+	}
+
+	if m.Registry == nil {
+		return nil
+	}
+
+	registryValue := reflect.ValueOf(m.Registry)
+	if registryValue.Kind() == reflect.Ptr && registryValue.IsNil() {
+		return nil
 	}
 
 	return m.Registry
 }
 
 // GetHooks calls the mock function if set, otherwise returns Hooks.
-func (m *MockConfigProvider) GetHooks() config.Hooks {
+func (m *MockConfigProvider) GetHooks() ports.HooksConfig {
 	if m.GetHooksFunc != nil {
 		return m.GetHooksFunc()
 	}
@@ -194,7 +204,7 @@ func (m *MockConfigProvider) GetHooks() config.Hooks {
 }
 
 // GetTemplates calls the mock function if set, otherwise returns Templates.
-func (m *MockConfigProvider) GetTemplates() map[string]config.Template {
+func (m *MockConfigProvider) GetTemplates() map[string]ports.WorkspaceTemplate {
 	if m.GetTemplatesFunc != nil {
 		return m.GetTemplatesFunc()
 	}
@@ -203,7 +213,7 @@ func (m *MockConfigProvider) GetTemplates() map[string]config.Template {
 }
 
 // ResolveTemplate calls the mock function if set, otherwise resolves from Templates.
-func (m *MockConfigProvider) ResolveTemplate(name string) (config.Template, error) {
+func (m *MockConfigProvider) ResolveTemplate(name string) (ports.WorkspaceTemplate, error) {
 	if m.ResolveTemplateFunc != nil {
 		return m.ResolveTemplateFunc(name)
 	}
@@ -213,7 +223,7 @@ func (m *MockConfigProvider) ResolveTemplate(name string) (config.Template, erro
 		return tmpl, nil
 	}
 
-	return config.Template{}, fmt.Errorf("template %q not found", name)
+	return ports.WorkspaceTemplate{}, fmt.Errorf("template %q not found", name)
 }
 
 // ValidateTemplates calls the mock function if set, otherwise returns nil.
@@ -226,8 +236,22 @@ func (m *MockConfigProvider) ValidateTemplates() error {
 }
 
 // GetKeybindings returns the TUI keybindings with defaults applied.
-func (m *MockConfigProvider) GetKeybindings() config.Keybindings {
-	return config.Keybindings{}.WithDefaults()
+func (m *MockConfigProvider) GetKeybindings() ports.Keybindings {
+	return ports.Keybindings{
+		Quit:        []string{"q", "ctrl+c"},
+		Search:      []string{"/"},
+		Sync:        []string{"s"},
+		Push:        []string{"p"},
+		Close:       []string{"c"},
+		OpenEditor:  []string{"o"},
+		ToggleStale: []string{"t"},
+		Details:     []string{"enter"},
+		Select:      []string{"space"},
+		SelectAll:   []string{"a"},
+		DeselectAll: []string{"A"},
+		Confirm:     []string{"y", "Y"},
+		Cancel:      []string{"n", "N", "esc"},
+	}
 }
 
 // GetUseEmoji returns whether emoji should be used in the TUI (defaults to true).
@@ -236,8 +260,8 @@ func (m *MockConfigProvider) GetUseEmoji() bool {
 }
 
 // GetGitRetryConfig returns default git retry configuration.
-func (m *MockConfigProvider) GetGitRetryConfig() config.ParsedRetryConfig {
-	return config.ParsedRetryConfig{
+func (m *MockConfigProvider) GetGitRetryConfig() ports.GitRetryConfig {
+	return ports.GitRetryConfig{
 		MaxAttempts:  3,
 		InitialDelay: 1 * time.Second,
 		MaxDelay:     30 * time.Second,

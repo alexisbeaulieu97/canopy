@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/formatting"
 )
 
 // WorkspaceItem represents a workspace in the list.
@@ -176,8 +177,17 @@ func buildSecondaryLine(wsItem WorkspaceItem) string {
 		return StatusLoadingStyle.Render("Loading...")
 	default:
 		repoText := FormatCount(wsItem.Summary.RepoCount, "repo", "repos")
-		diskSize := HumanizeBytes(wsItem.Workspace.DiskUsageBytes)
-		lastUpdated := RelativeTime(wsItem.Workspace.LastModified)
+		diskSize := formatting.Bytes(wsItem.Workspace.DiskUsageBytes, formatting.ByteSizeOptions{
+			Zero:      "0 B",
+			Precision: 1,
+		})
+		lastUpdated := formatting.RelativeTime(wsItem.Workspace.LastModified, formatting.RelativeTimeOptions{
+			Zero:          "unknown",
+			Compact:       true,
+			Yesterday:     true,
+			UseWeeks:      true,
+			AbsoluteAfter: 30 * 24 * time.Hour,
+		})
 
 		return fmt.Sprintf("%s • %s • %s", repoText, diskSize, lastUpdated)
 	}
@@ -231,73 +241,6 @@ func (d WorkspaceDelegate) Render(w io.Writer, m list.Model, index int, listItem
 	// Output with proper indentation (2 lines for compact layout)
 	_, _ = fmt.Fprintf(w, "%s\n", line1)
 	_, _ = fmt.Fprintf(w, "%s%s\n", secondaryLineIndent, descStyle.Render(secondary))
-}
-
-// HumanizeBytes formats a byte count into a human-readable string.
-func HumanizeBytes(size int64) string {
-	const unit = 1024
-	if size < unit {
-		return fmt.Sprintf("%d B", size)
-	}
-
-	div, exp := int64(unit), 0
-	for n := size / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-
-	value := float64(size) / float64(div)
-
-	units := []string{"KB", "MB", "GB", "TB"}
-	if exp >= len(units) {
-		exp = len(units) - 1
-	}
-
-	return fmt.Sprintf("%.1f %s", value, units[exp])
-}
-
-// RelativeTime formats a time.Time into a human-friendly relative string.
-func RelativeTime(t time.Time) string { //nolint:gocyclo // time formatting has many cases
-	if t.IsZero() {
-		return "unknown"
-	}
-
-	diff := time.Since(t)
-
-	switch {
-	case diff < time.Minute:
-		return "just now"
-	case diff < time.Hour:
-		mins := int(diff.Minutes())
-		if mins == 1 {
-			return "1 min ago"
-		}
-
-		return fmt.Sprintf("%dm ago", mins)
-	case diff < 24*time.Hour:
-		hours := int(diff.Hours())
-		if hours == 1 {
-			return "1 hour ago"
-		}
-
-		return fmt.Sprintf("%dh ago", hours)
-	case diff < 7*24*time.Hour:
-		days := int(diff.Hours()) / 24
-		if days == 1 {
-			return "yesterday"
-		}
-
-		return fmt.Sprintf("%dd ago", days)
-	case diff < 30*24*time.Hour:
-		weeks := int(diff.Hours()) / (24 * 7)
-		if weeks == 1 {
-			return "1 week ago"
-		}
-
-		return fmt.Sprintf("%d weeks ago", weeks)
-	default:
-		return t.Format("Jan 2, 2006")
-	}
 }
 
 // Pluralize returns the singular or plural form based on count.

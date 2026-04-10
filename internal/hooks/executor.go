@@ -16,10 +16,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"text/template"
 	"time"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
@@ -45,14 +46,14 @@ func NewExecutor(logger *logging.Logger) *Executor {
 // ExecuteHooks runs a list of hooks with the given context.
 // If continueOnError is true at the executor level, it continues even if a hook fails.
 func (e *Executor) ExecuteHooks(
-	hks []config.Hook,
+	hks []ports.HookSpec,
 	ctx domain.HookContext,
 	opts ports.HookExecuteOptions,
 ) ([]domain.HookCommandPreview, error) {
 	var previews []domain.HookCommandPreview
 
 	for i, hook := range hks {
-		hookPreviews, err := e.executeHook(hook, ctx, i, opts.DryRun)
+		hookPreviews, err := e.executeHook(hook, ctx, i, opts)
 		if opts.DryRun {
 			previews = append(previews, hookPreviews...)
 		}
@@ -72,10 +73,10 @@ func (e *Executor) ExecuteHooks(
 
 // executeHook runs a single hook command.
 func (e *Executor) executeHook(
-	hook config.Hook,
+	hook ports.HookSpec,
 	ctx domain.HookContext,
 	index int,
-	dryRun bool,
+	opts ports.HookExecuteOptions,
 ) ([]domain.HookCommandPreview, error) {
 	var previews []domain.HookCommandPreview
 
@@ -95,12 +96,12 @@ func (e *Executor) executeHook(
 				return previews, err
 			}
 
-			if dryRun {
+			if opts.DryRun {
 				previews = append(previews, e.previewCommand(index, resolvedCommand, hook.Description, repoPath, ctx, &repo))
 				continue
 			}
 
-			if err := e.runCommand(hook, ctx, repoPath, &repo, index, resolvedCommand); err != nil {
+			if err := e.runCommand(hook, ctx, repoPath, &repo, index, resolvedCommand, opts.BaseContext); err != nil {
 				return previews, err
 			}
 		}
@@ -114,27 +115,32 @@ func (e *Executor) executeHook(
 		return previews, err
 	}
 
-	if dryRun {
+	if opts.DryRun {
 		previews = append(previews, e.previewCommand(index, resolvedCommand, hook.Description, ctx.WorkspacePath, ctx, nil))
 		return previews, nil
 	}
 
-	return previews, e.runCommand(hook, ctx, ctx.WorkspacePath, nil, index, resolvedCommand)
+	return previews, e.runCommand(hook, ctx, ctx.WorkspacePath, nil, index, resolvedCommand, opts.BaseContext)
 }
 
 // runCommand executes the hook command in the specified directory.
 func (e *Executor) runCommand(
-	hook config.Hook,
+	hook ports.HookSpec,
 	ctx domain.HookContext,
 	workDir string,
 	repo *domain.Repo,
 	index int,
 	resolvedCommand string,
+	baseCtx context.Context,
 ) error {
 	shell := resolveShell(hook.Shell)
 	timeout := resolveTimeout(hook.Timeout)
 
-	execCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+
+	execCtx, cancel := context.WithTimeout(baseCtx, timeout)
 	defer cancel()
 
 	cmd := e.buildCommand(execCtx, shell, resolvedCommand, workDir, ctx, repo)
@@ -174,6 +180,10 @@ func resolveShell(hookShell string) string {
 		return envShell
 	}
 
+	if runtime.GOOS == "windows" {
+		return "cmd.exe"
+	}
+
 	return "/bin/sh"
 }
 
@@ -195,11 +205,20 @@ func (e *Executor) buildCommand(
 ) *exec.Cmd {
 	// The hook command comes from user-controlled config, which is the trust boundary.
 	// See design.md threat model for security considerations.
-	cmd := exec.CommandContext(ctx, shell, "-c", command) //nolint:gosec // user-controlled config is trusted
+	cmd := exec.CommandContext(ctx, shell, shellCommandArg(shell), command) //nolint:gosec // user-controlled config is trusted
 	cmd.Dir = workDir
 	cmd.Env = e.buildEnvVars(hookCtx, repo)
 
 	return cmd
+}
+
+func shellCommandArg(shell string) string {
+	base := strings.ToLower(filepath.Base(shell))
+	if base == "cmd" || base == "cmd.exe" {
+		return "/c"
+	}
+
+	return "-c"
 }
 
 // buildEnvVars creates the environment variables for the hook command.
@@ -220,7 +239,7 @@ func (e *Executor) buildEnvVars(ctx domain.HookContext, repo *domain.Repo) []str
 	return env
 }
 
-func (e *Executor) resolveCommand(hook config.Hook, ctx domain.HookContext, repo *domain.Repo) (string, error) {
+func (e *Executor) resolveCommand(hook ports.HookSpec, ctx domain.HookContext, repo *domain.Repo) (string, error) {
 	tmpl, err := template.New("hook").Option("missingkey=error").Parse(hook.Command)
 	if err != nil {
 		return "", err

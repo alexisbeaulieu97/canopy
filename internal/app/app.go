@@ -4,6 +4,7 @@ package app
 import (
 	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/gitx"
+	"github.com/alexisbeaulieu97/canopy/internal/hooks"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 	"github.com/alexisbeaulieu97/canopy/internal/storage"
@@ -119,7 +120,7 @@ func New(debug bool, opts ...Option) (*App, error) {
 	return &App{
 		Config:  cfg,
 		Logger:  logger,
-		Service: workspaces.NewService(cfg, gitEngine, wsEngine, logger),
+		Service: workspaces.NewService(cfg, gitEngine, wsEngine, logger, workspaces.WithHookExecutor(hooks.NewExecutor(logger))),
 	}, nil
 }
 

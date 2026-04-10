@@ -45,7 +45,7 @@ func (s *Service) closeWorkspaceWithOptionsUnlocked(ctx context.Context, workspa
 	}
 
 	// Run pre_close hooks before deletion
-	if err := s.executePreCloseHooks(targetWorkspace, workspaceID, dirName, opts); err != nil {
+	if err := s.executePreCloseHooks(ctx, targetWorkspace, workspaceID, dirName, opts); err != nil {
 		return err
 	}
 
@@ -101,7 +101,7 @@ func (s *Service) closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx context.Cont
 	}
 
 	// Run pre_close hooks before archiving
-	if err := s.executePreCloseHooks(targetWorkspace, workspaceID, dirName, opts); err != nil {
+	if err := s.executePreCloseHooks(ctx, targetWorkspace, workspaceID, dirName, opts); err != nil {
 		return nil, err
 	}
 
@@ -138,7 +138,7 @@ func (s *Service) closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx context.Cont
 // Returns nil if hooks are skipped, succeed, or ContinueOnHookErr is set.
 //
 //nolint:contextcheck // Hooks manage their own timeout context per-hook
-func (s *Service) executePreCloseHooks(workspace *domain.Workspace, workspaceID, dirName string, opts CloseOptions) error {
+func (s *Service) executePreCloseHooks(ctx context.Context, workspace *domain.Workspace, workspaceID, dirName string, opts CloseOptions) error {
 	if opts.SkipHooks {
 		return nil
 	}
@@ -157,6 +157,7 @@ func (s *Service) executePreCloseHooks(workspace *domain.Workspace, workspaceID,
 
 	if _, err := s.hookExecutor.ExecuteHooks(hooksConfig.PreClose, hookCtx, ports.HookExecuteOptions{
 		ContinueOnError: opts.ContinueOnHookErr,
+		BaseContext:     ctx,
 	}); err != nil {
 		s.logger.Error("pre_close hooks failed", "error", err)
 		// Per design.md: pre_close failure aborts close operation

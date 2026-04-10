@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
@@ -22,7 +21,7 @@ func TestExecuteHooks_Success(t *testing.T) {
 	logger := logging.New(false)
 	executor := NewExecutor(logger)
 
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{Command: "echo hello"},
 	}
 
@@ -46,7 +45,7 @@ func TestExecuteHooks_CommandFailed(t *testing.T) {
 	logger := logging.New(false)
 	executor := NewExecutor(logger)
 
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{Command: "exit 1"},
 	}
 
@@ -82,7 +81,7 @@ func TestExecuteHooks_ContinueOnError(t *testing.T) {
 	// Create a marker file to verify second hook ran
 	markerFile := filepath.Join(tmpDir, "marker")
 
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{Command: "exit 1"},
 		{Command: "touch " + markerFile},
 	}
@@ -116,7 +115,7 @@ func TestExecuteHooks_HookContinueOnError(t *testing.T) {
 	// Create a marker file to verify second hook ran
 	markerFile := filepath.Join(tmpDir, "marker")
 
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{Command: "exit 1", ContinueOnError: true},
 		{Command: "touch " + markerFile},
 	}
@@ -146,7 +145,7 @@ func TestExecuteHooks_Timeout(t *testing.T) {
 	logger := logging.New(false)
 	executor := NewExecutor(logger)
 
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{Command: "sleep 10", Timeout: 1}, // 1 second timeout
 	}
 
@@ -189,7 +188,7 @@ func TestExecuteHooks_EnvironmentVariables(t *testing.T) {
 
 	outputFile := filepath.Join(tmpDir, "env_output")
 
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{Command: "echo $CANOPY_WORKSPACE_ID,$CANOPY_BRANCH > " + outputFile},
 	}
 
@@ -238,7 +237,7 @@ func TestExecuteHooks_RepoFilter(t *testing.T) {
 	frontendMarker := filepath.Join(frontendDir, "marker")
 	backendMarker := filepath.Join(backendDir, "marker")
 
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{
 			Command: "touch marker",
 			Repos:   []string{"frontend"}, // Only run in frontend
@@ -286,7 +285,7 @@ func TestExecuteHooks_RepoEnvironmentVariables(t *testing.T) {
 
 	outputFile := filepath.Join(repoDir, "env_output")
 
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{
 			Command: "echo $CANOPY_REPO_NAME > " + outputFile,
 			Repos:   []string{"myrepo"},
@@ -327,7 +326,7 @@ func TestExecuteHooks_WorkingDirectory(t *testing.T) {
 
 	outputFile := filepath.Join(tmpDir, "pwd_output")
 
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{Command: "pwd > " + outputFile},
 	}
 
@@ -404,7 +403,7 @@ func TestExecuteHooks_DryRunPreview(t *testing.T) {
 	executor := NewExecutor(logger)
 
 	markerFile := filepath.Join(tmpDir, "marker")
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{Command: "touch " + markerFile},
 	}
 
@@ -440,7 +439,7 @@ func TestExecuteHooks_DryRunResolvesTemplate(t *testing.T) {
 	logger := logging.New(false)
 	executor := NewExecutor(logger)
 
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{Command: "echo {{.WorkspaceID}} {{.BranchName}} {{.WorkspacePath}}"},
 	}
 
@@ -473,7 +472,7 @@ func TestExecuteHooks_DryRunIncludesRepoInfo(t *testing.T) {
 	logger := logging.New(false)
 	executor := NewExecutor(logger)
 
-	hooks := []config.Hook{
+	hooks := []ports.HookSpec{
 		{Command: "echo repo", Repos: []string{"frontend"}},
 	}
 
@@ -520,7 +519,7 @@ func TestExecuteHooks_EmptyHooks(t *testing.T) {
 	}
 
 	// Empty hooks should succeed
-	_, err := executor.ExecuteHooks([]config.Hook{}, ctx, ports.HookExecuteOptions{})
+	_, err := executor.ExecuteHooks([]ports.HookSpec{}, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("Empty hooks should succeed: %v", err)
 	}

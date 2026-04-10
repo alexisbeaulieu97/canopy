@@ -13,8 +13,10 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/gitx"
+	"github.com/alexisbeaulieu97/canopy/internal/hooks"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/mocks"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 	"github.com/alexisbeaulieu97/canopy/internal/storage"
 	"github.com/alexisbeaulieu97/canopy/internal/testutil"
 )
@@ -159,37 +161,6 @@ func TestListWorkspacesMatchingInvalidPattern(t *testing.T) {
 
 	if !errors.Is(err, cerrors.InvalidArgument) {
 		t.Fatalf("expected invalid argument error, got %v", err)
-	}
-}
-
-func TestCloseWorkspacesMatching(t *testing.T) {
-	deps := newTestService(t)
-
-	if _, err := deps.svc.CreateWorkspace(context.Background(), "BULK-1", "", []domain.Repo{}); err != nil {
-		t.Fatalf("failed to create workspace: %v", err)
-	}
-
-	if _, err := deps.svc.CreateWorkspace(context.Background(), "BULK-2", "", []domain.Repo{}); err != nil {
-		t.Fatalf("failed to create workspace: %v", err)
-	}
-
-	result, err := deps.svc.CloseWorkspacesMatching(context.Background(), "^BULK-", true, false, CloseOptions{})
-	if err != nil {
-		t.Fatalf("CloseWorkspacesMatching failed: %v", err)
-	}
-
-	if len(result.Results) != 2 {
-		t.Fatalf("expected 2 results, got %d", len(result.Results))
-	}
-
-	for _, res := range result.Results {
-		if res.Err != nil {
-			t.Fatalf("unexpected close error for %s: %v", res.WorkspaceID, res.Err)
-		}
-
-		if _, loadErr := deps.wsEngine.Load(context.Background(), res.WorkspaceID); loadErr == nil {
-			t.Fatalf("expected workspace %s to be removed", res.WorkspaceID)
-		}
 	}
 }
 
@@ -936,58 +907,6 @@ func TestSyncWorkspace(t *testing.T) {
 	}
 }
 
-func TestSyncWorkspacesMatching(t *testing.T) {
-	deps := newTestService(t)
-
-	sourceRepo := filepath.Join(deps.projectsRoot, "source-bulk-sync")
-	testutil.CreateRepoWithCommit(t, sourceRepo)
-
-	repoURL := "file://" + sourceRepo
-
-	if _, err := deps.svc.CreateWorkspace(context.Background(), "SYNC-ONE", "", []domain.Repo{{Name: "sync-repo", URL: repoURL}}); err != nil {
-		t.Fatalf("failed to create workspace: %v", err)
-	}
-
-	if _, err := deps.svc.CreateWorkspace(context.Background(), "SYNC-TWO", "", []domain.Repo{{Name: "sync-repo", URL: repoURL}}); err != nil {
-		t.Fatalf("failed to create workspace: %v", err)
-	}
-
-	configureSyncRemote := func(workspaceID string) {
-		worktreePath := filepath.Join(deps.workspacesRoot, workspaceID, "sync-repo")
-		canonicalPath := filepath.Join(deps.projectsRoot, "sync-repo")
-		_ = testutil.RunGitOutput(t, canonicalPath, "remote", "set-url", "origin", repoURL)
-		_ = testutil.RunGitOutput(t, worktreePath, "remote", "remove", "origin")
-		testutil.RunGit(t, worktreePath, "remote", "add", "origin", repoURL)
-		testutil.RunGit(t, worktreePath, "fetch", "origin")
-		testutil.RunGit(t, worktreePath, "branch", "--set-upstream-to=origin/main", workspaceID)
-	}
-
-	configureSyncRemote("SYNC-ONE")
-	configureSyncRemote("SYNC-TWO")
-
-	result, err := deps.svc.SyncWorkspacesMatching(context.Background(), "^SYNC-", SyncOptions{})
-	if err != nil {
-		t.Fatalf("SyncWorkspacesMatching failed: %v", err)
-	}
-
-	if len(result.Results) != 2 {
-		t.Fatalf("expected 2 results, got %d", len(result.Results))
-	}
-
-	seen := map[string]bool{}
-
-	for _, res := range result.Results {
-		if res.Err != nil {
-			t.Fatalf("unexpected sync error for %s: %v", res.WorkspaceID, res.Err)
-		}
-
-		seen[res.WorkspaceID] = true
-	}
-
-	if !seen["SYNC-ONE"] || !seen["SYNC-TWO"] {
-		t.Fatalf("expected results for SYNC-ONE and SYNC-TWO, got %v", seen)
-	}
-}
 
 func TestAggregateSyncResultsCountsOnlySuccessfulUpdates(t *testing.T) {
 	deps := newTestService(t)
@@ -1288,17 +1207,17 @@ func TestService_RunHooksHooksOnly(t *testing.T) {
 
 	mockConfig := mocks.NewMockConfigProvider()
 	mockConfig.WorkspacesRoot = workspacesRoot
-	mockConfig.Hooks = config.Hooks{
-		PostCreate: []config.Hook{
+	mockConfig.Hooks = ports.HooksConfig{
+		PostCreate: []ports.HookSpec{
 			{Command: "echo post-hook > hooks.out"},
 		},
-		PreClose: []config.Hook{
+		PreClose: []ports.HookSpec{
 			{Command: "echo pre-hook > pre.out"},
 		},
 	}
 
 	logger := logging.New(false)
-	svc := NewService(mockConfig, mocks.NewMockGitOperations(), mockStorage, logger)
+	svc := NewService(mockConfig, mocks.NewMockGitOperations(), mockStorage, logger, WithHookExecutor(hooks.NewExecutor(logger)))
 
 	if err := svc.RunHooks(context.Background(), "HOOKS-1", HookPhasePostCreate, false); err != nil {
 		t.Fatalf("RunHooks post_create failed: %v", err)

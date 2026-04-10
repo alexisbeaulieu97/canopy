@@ -2,7 +2,6 @@
 package mocks
 
 import (
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
@@ -13,7 +12,7 @@ var _ ports.HookExecutor = (*MockHookExecutor)(nil)
 // MockHookExecutor is a mock implementation of ports.HookExecutor for testing.
 type MockHookExecutor struct {
 	// ExecuteHooksFunc is called when ExecuteHooks is invoked.
-	ExecuteHooksFunc func(hks []config.Hook, ctx domain.HookContext, opts ports.HookExecuteOptions) ([]domain.HookCommandPreview, error)
+	ExecuteHooksFunc func(hks []ports.HookSpec, ctx domain.HookContext, opts ports.HookExecuteOptions) ([]domain.HookCommandPreview, error)
 
 	// ExecuteHooksCalls records all calls to ExecuteHooks for verification.
 	ExecuteHooksCalls []ExecuteHooksCall
@@ -27,7 +26,7 @@ type MockHookExecutor struct {
 
 // ExecuteHooksCall records a single call to ExecuteHooks.
 type ExecuteHooksCall struct {
-	Hooks   []config.Hook
+	Hooks   []ports.HookSpec
 	Ctx     domain.HookContext
 	Options ports.HookExecuteOptions
 }
@@ -41,7 +40,7 @@ func NewMockHookExecutor() *MockHookExecutor {
 
 // ExecuteHooks calls the mock function if set, otherwise returns ExecuteHooksErr.
 func (m *MockHookExecutor) ExecuteHooks(
-	hks []config.Hook,
+	hks []ports.HookSpec,
 	ctx domain.HookContext,
 	opts ports.HookExecuteOptions,
 ) ([]domain.HookCommandPreview, error) {

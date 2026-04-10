@@ -1,11 +1,14 @@
 // Package tui provides the terminal UI for canopy.
 package tui
 
-import "github.com/alexisbeaulieu97/canopy/internal/domain"
+import (
+	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
+)
 
 // workspaceListMsg is sent when the list of workspaces is loaded.
 type workspaceListMsg struct {
-	items      []workspaceItem
+	items      []components.WorkspaceItem
 	totalUsage int64
 }
 

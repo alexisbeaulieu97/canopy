@@ -13,12 +13,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/giturl"
 	"github.com/alexisbeaulieu97/canopy/internal/gitx"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
 var repoCmd = &cobra.Command{
@@ -100,7 +100,7 @@ var repoAddCmd = &cobra.Command{
 				alias = name
 			}
 
-			entry := config.RegistryEntry{URL: url}
+			entry := ports.RegistryEntry{URL: url}
 			realAlias, err := registerWithPrompt(cmd, app.Config.GetRegistry(), alias, entry, app.Logger)
 			if err != nil {
 				// Use a detached context for cleanup to ensure it runs even if cmd.Context() is cancelled
@@ -206,7 +206,7 @@ var repoRegisterCmd = &cobra.Command{
 		tagsRaw, _ := cmd.Flags().GetString("tags")
 		force, _ := cmd.Flags().GetBool("force")
 
-		entry := config.RegistryEntry{
+		entry := ports.RegistryEntry{
 			URL:           url,
 			DefaultBranch: branch,
 			Description:   description,
@@ -423,7 +423,7 @@ func parseTags(raw string) []string {
 	return tags
 }
 
-func registerWithPrompt(cmd *cobra.Command, registry *config.RepoRegistry, alias string, entry config.RegistryEntry, logger rollbackLogger) (string, error) {
+func registerWithPrompt(cmd *cobra.Command, registry ports.RepoRegistry, alias string, entry ports.RegistryEntry, logger rollbackLogger) (string, error) {
 	if registry == nil {
 		return alias, cerrors.NewConfigInvalid("registry not configured")
 	}
@@ -449,7 +449,7 @@ func registerWithPrompt(cmd *cobra.Command, registry *config.RepoRegistry, alias
 	}
 }
 
-func nextAvailableAlias(registry *config.RepoRegistry, base string) string {
+func nextAvailableAlias(registry ports.RepoRegistry, base string) string {
 	target := base
 	for idx := 2; ; idx++ {
 		if _, exists := registry.Resolve(target); !exists {
@@ -460,7 +460,7 @@ func nextAvailableAlias(registry *config.RepoRegistry, base string) string {
 	}
 }
 
-func registerAlias(registry *config.RepoRegistry, alias string, entry config.RegistryEntry, logger rollbackLogger) (string, error) {
+func registerAlias(registry ports.RepoRegistry, alias string, entry ports.RegistryEntry, logger rollbackLogger) (string, error) {
 	if err := registry.Register(alias, entry, false); err != nil {
 		return "", err
 	}
@@ -484,7 +484,7 @@ type rollbackLogger interface {
 // It logs any errors that occur during rollback and returns the save error if present.
 // If logger is nil, rollback errors are silently discarded.
 func saveRegistryWithRollback(
-	registry *config.RepoRegistry,
+	registry ports.RepoRegistry,
 	rollbackFn func() error,
 	rollbackDesc string,
 	logger rollbackLogger,

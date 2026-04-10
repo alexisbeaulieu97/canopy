@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
@@ -118,7 +118,7 @@ func parseHookPhase(event string) (workspaces.HookPhase, error) {
 	}
 }
 
-func printHookList(name string, hooks []config.Hook) {
+func printHookList(name string, hooks []ports.HookSpec) {
 	if len(hooks) == 0 {
 		output.Infof("%s: (none)", name)
 		return

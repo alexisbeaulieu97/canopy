@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
 func TestUpdate_WorkspaceListMessage(t *testing.T) {
@@ -14,7 +15,7 @@ func TestUpdate_WorkspaceListMessage(t *testing.T) {
 
 	model, _ := newTUITestModel(t)
 
-	items := []workspaceItem{
+	items := []components.WorkspaceItem{
 		{Workspace: domain.Workspace{ID: "ws-1"}},
 		{Workspace: domain.Workspace{ID: "ws-2"}},
 	}
@@ -37,8 +38,8 @@ func TestUpdate_WorkspaceStatusMessage(t *testing.T) {
 	model, _ := newTUITestModel(t)
 
 	ws := domain.Workspace{ID: "ws-1"}
-	model.workspaces.SetItems([]workspaceItem{{Workspace: ws}}, 0)
-	model.ui.List.SetItems([]list.Item{workspaceItem{Workspace: ws}})
+	model.workspaces.SetItems([]components.WorkspaceItem{{Workspace: ws}}, 0)
+	model.ui.List.SetItems([]list.Item{components.WorkspaceItem{Workspace: ws}})
 
 	status := &domain.WorkspaceStatus{ID: "ws-1"}
 
@@ -54,7 +55,7 @@ func TestUpdate_WorkspaceStatusMessage(t *testing.T) {
 		t.Error("expected item to be marked as loaded")
 	}
 
-	listItem := updated.ui.List.Items()[0].(workspaceItem)
+	listItem := updated.ui.List.Items()[0].(components.WorkspaceItem)
 	if !listItem.Loaded {
 		t.Error("expected list item to be marked as loaded")
 	}

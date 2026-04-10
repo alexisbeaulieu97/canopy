@@ -216,123 +216,7 @@ type BoxSection struct {
 	Lines []string
 }
 
-// Table represents a formatted table with columns.
-type Table struct {
-	columns []TableColumn
-	rows    [][]string
-	icons   Icons
-}
-
-// TableColumn defines a column in a table.
-type TableColumn struct {
-	Header string
-	Width  int
-	Style  lipgloss.Style
-	Align  Alignment
-}
-
-// Alignment specifies text alignment within a column.
-type Alignment int
-
-const (
-	// AlignLeft aligns text to the left.
-	AlignLeft Alignment = iota
-	// AlignRight aligns text to the right.
-	AlignRight
-	// AlignCenter centers the text.
-	AlignCenter
-)
-
-// NewTable creates a new table with the given columns.
-func NewTable(columns ...TableColumn) *Table {
-	return &Table{
-		columns: columns,
-		rows:    make([][]string, 0),
-		icons:   NewIcons(),
-	}
-}
-
-// AddRow adds a row to the table.
-func (t *Table) AddRow(values ...string) {
-	t.rows = append(t.rows, values)
-}
-
-// Render outputs the table.
-func (t *Table) Render(w io.Writer) {
-	if len(t.columns) == 0 {
-		return
-	}
-
-	// Render header
-	header := t.renderRow(t.columnHeaders())
-	_, _ = fmt.Fprintln(w, header)
-
-	// Render separator
-	sep := t.renderSeparator()
-	_, _ = fmt.Fprintln(w, sep)
-
-	// Render rows
-	for _, row := range t.rows {
-		line := t.renderRow(row)
-		_, _ = fmt.Fprintln(w, line)
-	}
-}
-
-func (t *Table) columnHeaders() []string {
-	headers := make([]string, len(t.columns))
-	for i, col := range t.columns {
-		headers[i] = col.Header
-	}
-
-	return headers
-}
-
-func (t *Table) renderRow(values []string) string {
-	var parts []string
-
-	for i, col := range t.columns {
-		val := ""
-		if i < len(values) {
-			val = values[i]
-		}
-
-		formatted := t.formatCell(val, col)
-		parts = append(parts, formatted)
-	}
-
-	return strings.Join(parts, "  ")
-}
-
-func (t *Table) formatCell(value string, col TableColumn) string {
-	// Truncate if necessary
-	runes := []rune(value)
-	if len(runes) > col.Width && col.Width > 0 {
-		value = string(runes[:col.Width-1]) + "…"
-	}
-
-	if !ColorEnabled() {
-		return padString(value, col.Width, col.Align)
-	}
-
-	return col.Style.Inline(true).Width(col.Width).Render(value)
-}
-
-func (t *Table) renderSeparator() string {
-	chars := UnicodeBox
-	if !t.icons.UseUnicode() {
-		chars = ASCIIBox
-	}
-
-	var parts []string
-	for _, col := range t.columns {
-		parts = append(parts, strings.Repeat(chars.Horizontal, col.Width))
-	}
-
-	return Colorize(MutedStyle, strings.Join(parts, "  "))
-}
-
-// padString pads a string to the given width with specified alignment.
-func padString(s string, width int, align Alignment) string {
+func padRight(s string, width int) string {
 	if width <= 0 {
 		return s
 	}
@@ -342,19 +226,7 @@ func padString(s string, width int, align Alignment) string {
 		return s
 	}
 
-	padding := width - len(runes)
-
-	switch align {
-	case AlignRight:
-		return strings.Repeat(" ", padding) + s
-	case AlignCenter:
-		left := padding / 2
-		right := padding - left
-
-		return strings.Repeat(" ", left) + s + strings.Repeat(" ", right)
-	default: // AlignLeft
-		return s + strings.Repeat(" ", padding)
-	}
+	return s + strings.Repeat(" ", width-len(runes))
 }
 
 // runeWidth returns the display width of a string (treating each rune as width 1).
@@ -364,7 +236,7 @@ func runeWidth(s string) int {
 
 // FormatKeyValue formats a key-value pair for display.
 func FormatKeyValue(key, value string, keyWidth int) string {
-	paddedKey := padString(key, keyWidth, AlignLeft)
+	paddedKey := padRight(key, keyWidth)
 	return Colorize(MutedStyle, paddedKey) + "  " + value
 }
 

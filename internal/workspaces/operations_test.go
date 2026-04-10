@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
 func TestCreateWorkspace_UsesTemplateDefaultBranch(t *testing.T) {
@@ -16,7 +16,7 @@ func TestCreateWorkspace_UsesTemplateDefaultBranch(t *testing.T) {
 
 	deps := newMockService(t)
 
-	template := &config.Template{DefaultBranch: "main"}
+	template := &ports.WorkspaceTemplate{DefaultBranch: "main"}
 
 	_, err := deps.svc.CreateWorkspaceWithOptions(context.Background(), "ws-1", "", nil, CreateOptions{
 		Template: template,

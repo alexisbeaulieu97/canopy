@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
@@ -77,7 +77,7 @@ var workspaceNewCmd = &cobra.Command{
 		}
 
 		var templateRepos []string
-		var templatePtr *config.Template
+		var templatePtr *ports.WorkspaceTemplate
 
 		if templateName != "" {
 			template, err := cfg.ResolveTemplate(templateName)

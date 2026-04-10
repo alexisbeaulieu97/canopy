@@ -60,27 +60,6 @@ type ConfirmDialog struct {
 	TargetLabel string
 }
 
-// NewConfirmDialog creates a new inactive confirmation dialog.
-func NewConfirmDialog() ConfirmDialog {
-	return ConfirmDialog{
-		Active: false,
-	}
-}
-
-// Show activates the confirmation dialog with the specified action and target.
-func (d *ConfirmDialog) Show(action ConfirmAction, targetLabel string) {
-	d.Active = true
-	d.Action = action
-	d.TargetLabel = targetLabel
-}
-
-// Hide deactivates the confirmation dialog and clears its state.
-func (d *ConfirmDialog) Hide() {
-	d.Active = false
-	d.Action = ""
-	d.TargetLabel = ""
-}
-
 // Render renders the confirmation dialog prompt with modal styling.
 func (d ConfirmDialog) Render() string {
 	if !d.Active {
@@ -108,31 +87,4 @@ func (d ConfirmDialog) Render() string {
 	b.WriteString(fmt.Sprintf("  %s  %s", confirmBtn, cancelBtn))
 
 	return b.String()
-}
-
-// HandleKey processes a key press in the confirmation dialog.
-// Returns: confirmed (bool), handled (bool)
-// - confirmed: true if user pressed y/Y to confirm
-// - handled: true if the key was processed by the dialog
-//
-// Note: Callers should read Action and TargetLabel before calling HandleKey
-// if they need those values, as Hide() clears them.
-func (d *ConfirmDialog) HandleKey(key string) (confirmed, handled bool) {
-	if !d.Active {
-		return false, false
-	}
-
-	switch key {
-	case "y", "Y":
-		d.Hide()
-
-		return true, true
-	case "n", "N", "esc":
-		d.Hide()
-
-		return false, true
-	default:
-		// Dialog is active but key not recognized - still consumed
-		return false, true
-	}
 }

@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	"github.com/alexisbeaulieu97/canopy/internal/mocks"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
@@ -19,7 +18,7 @@ func TestMockHookExecutor(t *testing.T) {
 
 		mock := mocks.NewMockHookExecutor()
 
-		hooks := []config.Hook{{Command: "echo test"}}
+		hooks := []ports.HookSpec{{Command: "echo test"}}
 		ctx := domain.HookContext{WorkspaceID: "test-ws"}
 
 		_, err := mock.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
@@ -53,7 +52,7 @@ func TestMockHookExecutor(t *testing.T) {
 
 		called := false
 		mock := mocks.NewMockHookExecutor()
-		mock.ExecuteHooksFunc = func(_ []config.Hook, _ domain.HookContext, _ ports.HookExecuteOptions) ([]domain.HookCommandPreview, error) {
+		mock.ExecuteHooksFunc = func(_ []ports.HookSpec, _ domain.HookContext, _ ports.HookExecuteOptions) ([]domain.HookCommandPreview, error) {
 			called = true
 			return nil, nil
 		}
