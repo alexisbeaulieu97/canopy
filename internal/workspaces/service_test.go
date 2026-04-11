@@ -907,7 +907,6 @@ func TestSyncWorkspace(t *testing.T) {
 	}
 }
 
-
 func TestAggregateSyncResultsCountsOnlySuccessfulUpdates(t *testing.T) {
 	deps := newTestService(t)
 

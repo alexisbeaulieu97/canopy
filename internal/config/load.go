@@ -22,13 +22,16 @@ func Load(configPath string) (*Config, error) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	explicitConfigPath := false
+	var explicitConfigPath bool
+
 	if configPath != "" {
+		explicitConfigPath = true
+
 		v.SetConfigFile(expandPath(configPath, home))
-		explicitConfigPath = true
 	} else if envPath := os.Getenv("CANOPY_CONFIG"); envPath != "" {
-		v.SetConfigFile(expandPath(envPath, home))
 		explicitConfigPath = true
+
+		v.SetConfigFile(expandPath(envPath, home))
 	} else {
 		v.SetConfigName("config")
 		v.AddConfigPath(".")

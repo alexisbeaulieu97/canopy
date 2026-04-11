@@ -71,17 +71,27 @@ func RelativeTimeAt(now, t time.Time, opts RelativeTimeOptions) string {
 		diff = 0
 	}
 
-	switch {
-	case diff < time.Minute:
-		return "just now"
-	case diff < time.Hour:
-		minutes := int(diff.Minutes())
-		return formatCount(minutes, "min", "mins", opts.Compact)
-	case diff < 24*time.Hour:
-		hours := int(diff.Hours())
-		return formatCount(hours, "hour", "hours", opts.Compact)
+	if formatted, ok := formatSubdayRelativeTime(diff, opts); ok {
+		return formatted
 	}
 
+	return formatCalendarRelativeTime(now, t, opts)
+}
+
+func formatSubdayRelativeTime(diff time.Duration, opts RelativeTimeOptions) (string, bool) {
+	switch {
+	case diff < time.Minute:
+		return "just now", true
+	case diff < time.Hour:
+		return formatCount(int(diff.Minutes()), "min", "mins", opts.Compact), true
+	case diff < 24*time.Hour:
+		return formatCount(int(diff.Hours()), "hour", "hours", opts.Compact), true
+	default:
+		return "", false
+	}
+}
+
+func formatCalendarRelativeTime(now, t time.Time, opts RelativeTimeOptions) string {
 	days := calendarDaysBetween(now, t)
 	switch {
 	case days < 7:
@@ -145,6 +155,7 @@ func calendarDaysBetween(now, then time.Time) int {
 
 	location := now.Location()
 	nowDay := calendarDayNumber(now.In(location))
+
 	thenDay := calendarDayNumber(then.In(location))
 	if nowDay <= thenDay {
 		return 0
@@ -159,9 +170,16 @@ func calendarDayNumber(t time.Time) int64 {
 }
 
 func absInt64(v int64) uint64 {
+	const minInt64 = -1 << 63
+	const minInt64Magnitude = uint64(1) << 63
+
 	if v >= 0 {
 		return uint64(v)
 	}
 
-	return uint64(^v) + 1
+	if v == minInt64 {
+		return minInt64Magnitude
+	}
+
+	return uint64(-v)
 }

@@ -86,6 +86,7 @@ func (m *MultiProgress) appendAndRender(result ProgressResult) {
 func (m *MultiProgress) render(result ProgressResult) {
 	icon := m.icons.Success()
 	style := SuccessStyle
+
 	if !result.Success {
 		icon = m.icons.Error()
 		style = ErrorStyle

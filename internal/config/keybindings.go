@@ -166,11 +166,13 @@ func (k Keybindings) ValidateKeybindings() error {
 	addKeys(k.Cancel, "cancel")
 
 	var conflictKeys []string
+
 	for key, actions := range keyUsage {
 		if len(actions) > 1 {
 			conflictKeys = append(conflictKeys, key)
 		}
 	}
+
 	sort.Strings(conflictKeys)
 
 	for _, key := range conflictKeys {

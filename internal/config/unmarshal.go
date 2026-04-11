@@ -99,6 +99,7 @@ func levenshteinDistance(a, b string) int {
 		matrix[i] = make([]int, len(b)+1)
 		matrix[i][0] = i
 	}
+
 	for j := range matrix[0] {
 		matrix[0][j] = j
 	}
@@ -146,6 +147,7 @@ func extractUnknownFields(errMsg string) []string {
 	keysStr := strings.TrimSpace(errMsg[idx+len("invalid keys:"):])
 
 	var fields []string
+
 	for _, field := range strings.Split(keysStr, ",") {
 		field = strings.TrimSpace(field)
 		if field != "" {

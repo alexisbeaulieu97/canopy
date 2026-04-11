@@ -101,6 +101,7 @@ func (c *Config) GetUseEmoji() bool {
 // GetGitRetryConfig returns the parsed git retry configuration.
 func (c *Config) GetGitRetryConfig() ports.GitRetryConfig {
 	parsed, _ := c.Git.Retry.Parse()
+
 	return ports.GitRetryConfig{
 		MaxAttempts:  parsed.MaxAttempts,
 		InitialDelay: parsed.InitialDelay,

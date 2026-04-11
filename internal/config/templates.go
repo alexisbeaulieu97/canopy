@@ -56,6 +56,7 @@ func (c *Config) ResolveTemplate(name string) (ports.WorkspaceTemplate, error) {
 	for tmplName := range templates {
 		names = append(names, tmplName)
 	}
+
 	sort.Strings(names)
 
 	return ports.WorkspaceTemplate{}, cerrors.NewInvalidArgument("template", fmt.Sprintf("unknown template %q (available: %s)", name, strings.Join(names, ", ")))

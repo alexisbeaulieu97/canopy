@@ -96,6 +96,7 @@ func (s *Spinner) Stop() {
 
 	if isTTY {
 		<-stopped
+
 		_, _ = fmt.Fprint(writer, "\r\033[K") //nolint:forbidigo // spinner output
 	}
 }
@@ -116,13 +117,13 @@ func (s *Spinner) StopWithMessage(icon, message string) {
 	writer := s.writer
 	s.mu.Unlock()
 
-	if isTTY {
-		<-stopped
-		_, _ = fmt.Fprintf(writer, "\r\033[K%s %s\n", icon, message) //nolint:forbidigo // spinner output
+	if !isTTY {
+		_, _ = fmt.Fprintf(writer, "%s %s\n", icon, message) //nolint:forbidigo // spinner output
 		return
 	}
 
-	_, _ = fmt.Fprintf(writer, "%s %s\n", icon, message) //nolint:forbidigo // spinner output
+	<-stopped
+	_, _ = fmt.Fprintf(writer, "\r\033[K%s %s\n", icon, message) //nolint:forbidigo // spinner output
 }
 
 // StopWithSuccess stops the spinner with a success message.
@@ -139,6 +140,7 @@ func (s *Spinner) animate() {
 	defer close(s.stopped)
 
 	frames := s.icons.SpinnerFrames()
+
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 

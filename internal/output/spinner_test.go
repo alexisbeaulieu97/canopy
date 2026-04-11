@@ -18,6 +18,7 @@ func TestSpinnerStopWaitsForAnimateExit(t *testing.T) {
 	}
 
 	stopped := make(chan struct{})
+
 	go func() {
 		spinner.Stop()
 		close(stopped)
@@ -50,6 +51,7 @@ func TestSpinnerStopWithMessageWaitsForAnimateExit(t *testing.T) {
 	}
 
 	stopped := make(chan struct{})
+
 	go func() {
 		spinner.StopWithMessage("ok", "done")
 		close(stopped)

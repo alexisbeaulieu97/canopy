@@ -62,6 +62,7 @@ func resolveBulkWorkspaceIDs(ctx context.Context, service *workspaces.Service, p
 
 func printMatchedWorkspaceIDs(ids []string) {
 	output.Infof("Matched %d workspaces:", len(ids))
+
 	for _, id := range ids {
 		output.Infof("  - %s", id)
 	}
@@ -78,6 +79,7 @@ func confirmBulkWorkspaceAction(force, interactive bool, count int, operation st
 
 	reader := bufio.NewReader(os.Stdin)
 	output.Printf("%s %d workspaces? [y/N]: ", operation, count)
+
 	answer, err := reader.ReadString('\n')
 	if err != nil {
 		return cerrors.NewOperationCancelled(strings.ToLower(operation))
@@ -139,6 +141,7 @@ func (r bulkWorkspaceRecorder[T]) record(index, current int, id string, value T,
 		if r.report.FirstErr == nil {
 			r.report.FirstErr = err
 		}
+
 		r.report.FailedIDs = append(r.report.FailedIDs, id)
 		if r.opts.OnFailure != nil {
 			r.opts.OnFailure(id, current, r.total, err)
@@ -214,6 +217,7 @@ func runBulkWorkspaceConcurrent[T any](
 		index int
 		id    string
 	}
+
 	type result struct {
 		index int
 		id    string
@@ -227,13 +231,16 @@ func runBulkWorkspaceConcurrent[T any](
 	for i, id := range ids {
 		jobs <- job{index: i, id: id}
 	}
+
 	close(jobs)
 
 	var wg sync.WaitGroup
 	for i := 0; i < parallelism; i++ {
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
+
 			for job := range jobs {
 				value, err := execute(ctx, job.id)
 				results <- result{index: job.index, id: job.id, value: value, err: err}
@@ -249,6 +256,7 @@ func runBulkWorkspaceConcurrent[T any](
 	completed := 0
 	for res := range results {
 		completed++
+
 		if ctx.Err() != nil {
 			recorder.cancel()
 		}

@@ -101,7 +101,7 @@ func (e *Executor) executeHook(
 				continue
 			}
 
-			if err := e.runCommand(hook, ctx, repoPath, &repo, index, resolvedCommand, opts.BaseContext); err != nil {
+			if err := e.runCommand(opts.BaseContext, hook, ctx, repoPath, &repo, index, resolvedCommand); err != nil {
 				return previews, err
 			}
 		}
@@ -120,18 +120,18 @@ func (e *Executor) executeHook(
 		return previews, nil
 	}
 
-	return previews, e.runCommand(hook, ctx, ctx.WorkspacePath, nil, index, resolvedCommand, opts.BaseContext)
+	return previews, e.runCommand(opts.BaseContext, hook, ctx, ctx.WorkspacePath, nil, index, resolvedCommand)
 }
 
 // runCommand executes the hook command in the specified directory.
 func (e *Executor) runCommand(
+	baseCtx context.Context,
 	hook ports.HookSpec,
 	ctx domain.HookContext,
 	workDir string,
 	repo *domain.Repo,
 	index int,
 	resolvedCommand string,
-	baseCtx context.Context,
 ) error {
 	shell := resolveShell(hook.Shell)
 	timeout, hasTimeout := resolveTimeout(hook.Timeout)

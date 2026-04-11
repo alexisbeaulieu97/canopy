@@ -58,6 +58,7 @@ func (c *Config) validateCloseDefault() error {
 	if c.CloseDefault == "" {
 		c.CloseDefault = CloseDefaultDelete
 	}
+
 	if c.CloseDefault != CloseDefaultDelete && c.CloseDefault != CloseDefaultArchive {
 		return cerrors.NewConfigValidation("workspace_close_default", fmt.Sprintf("must be either '%s' or '%s', got %q", CloseDefaultDelete, CloseDefaultArchive, c.CloseDefault))
 	}
@@ -86,12 +87,15 @@ func (c *Config) validateRuntimeSettings() error {
 	if err := c.validateStaleThreshold(); err != nil {
 		return err
 	}
+
 	if err := c.validateHooks(); err != nil {
 		return err
 	}
+
 	if err := c.validateGitRetry(); err != nil {
 		return err
 	}
+
 	if err := c.validateParallelWorkers(); err != nil {
 		return err
 	}
@@ -133,22 +137,27 @@ func validateTemplate(name string, tmpl Template) error {
 	if trimmedName == "" {
 		return cerrors.NewConfigValidation("templates", "template name cannot be empty")
 	}
+
 	if trimmedName != name {
 		return cerrors.NewConfigValidation("templates", fmt.Sprintf("template name %q must not contain leading or trailing whitespace", name))
 	}
+
 	if len(tmpl.Repos) == 0 {
 		return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.repos", name), "must define at least one repo")
 	}
+
 	for i, repo := range tmpl.Repos {
 		if strings.TrimSpace(repo) == "" {
 			return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.repos", name), fmt.Sprintf("repo at index %d is empty", i))
 		}
 	}
+
 	if tmpl.DefaultBranch != "" {
 		if err := validation.ValidateBranchName(tmpl.DefaultBranch); err != nil {
 			return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.default_branch", name), err.Error())
 		}
 	}
+
 	for i, cmd := range tmpl.SetupCommands {
 		if strings.TrimSpace(cmd) == "" {
 			return cerrors.NewConfigValidation(fmt.Sprintf("templates.%s.setup_commands", name), fmt.Sprintf("command at index %d is empty", i))
@@ -219,36 +228,67 @@ const maxRetryAttempts = 10
 
 func (c *Config) validateGitRetry() error {
 	retry := c.Git.Retry
-	if retry.MaxAttempts < 1 {
-		return cerrors.NewConfigValidation("git.retry.max_attempts", fmt.Sprintf("must be at least 1, got %d", retry.MaxAttempts))
-	}
-	if retry.MaxAttempts > maxRetryAttempts {
-		return cerrors.NewConfigValidation("git.retry.max_attempts", fmt.Sprintf("must not exceed %d, got %d", maxRetryAttempts, retry.MaxAttempts))
+	if err := validateRetryAttempts(retry.MaxAttempts); err != nil {
+		return err
 	}
 
-	initialDelay, err := time.ParseDuration(retry.InitialDelay)
+	initialDelay, err := validatePositiveDuration("git.retry.initial_delay", retry.InitialDelay)
 	if err != nil {
-		return cerrors.NewConfigValidation("git.retry.initial_delay", fmt.Sprintf("invalid: %v", err))
-	}
-	if initialDelay <= 0 {
-		return cerrors.NewConfigValidation("git.retry.initial_delay", fmt.Sprintf("must be positive, got %s", retry.InitialDelay))
+		return err
 	}
 
-	maxDelay, err := time.ParseDuration(retry.MaxDelay)
+	maxDelay, err := validatePositiveDuration("git.retry.max_delay", retry.MaxDelay)
 	if err != nil {
-		return cerrors.NewConfigValidation("git.retry.max_delay", fmt.Sprintf("invalid: %v", err))
+		return err
 	}
-	if maxDelay <= 0 {
-		return cerrors.NewConfigValidation("git.retry.max_delay", fmt.Sprintf("must be positive, got %s", retry.MaxDelay))
-	}
+
 	if initialDelay > maxDelay {
 		return cerrors.NewConfigValidation("git.retry.initial_delay", fmt.Sprintf("(%s) must not exceed max_delay (%s)", retry.InitialDelay, retry.MaxDelay))
 	}
-	if retry.Multiplier < 1.0 {
-		return cerrors.NewConfigValidation("git.retry.multiplier", fmt.Sprintf("must be at least 1.0, got %f", retry.Multiplier))
+
+	if err := validateRetryMultiplier(retry.Multiplier); err != nil {
+		return err
 	}
-	if retry.JitterFactor < 0 || retry.JitterFactor > 1 {
-		return cerrors.NewConfigValidation("git.retry.jitter_factor", fmt.Sprintf("must be between 0 and 1, got %f", retry.JitterFactor))
+
+	return validateJitterFactor(retry.JitterFactor)
+}
+
+func validateRetryAttempts(maxAttempts int) error {
+	if maxAttempts < 1 {
+		return cerrors.NewConfigValidation("git.retry.max_attempts", fmt.Sprintf("must be at least 1, got %d", maxAttempts))
+	}
+
+	if maxAttempts > maxRetryAttempts {
+		return cerrors.NewConfigValidation("git.retry.max_attempts", fmt.Sprintf("must not exceed %d, got %d", maxRetryAttempts, maxAttempts))
+	}
+
+	return nil
+}
+
+func validatePositiveDuration(field, raw string) (time.Duration, error) {
+	duration, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, cerrors.NewConfigValidation(field, fmt.Sprintf("invalid: %v", err))
+	}
+
+	if duration <= 0 {
+		return 0, cerrors.NewConfigValidation(field, fmt.Sprintf("must be positive, got %s", raw))
+	}
+
+	return duration, nil
+}
+
+func validateRetryMultiplier(multiplier float64) error {
+	if multiplier < 1.0 {
+		return cerrors.NewConfigValidation("git.retry.multiplier", fmt.Sprintf("must be at least 1.0, got %f", multiplier))
+	}
+
+	return nil
+}
+
+func validateJitterFactor(jitterFactor float64) error {
+	if jitterFactor < 0 || jitterFactor > 1 {
+		return cerrors.NewConfigValidation("git.retry.jitter_factor", fmt.Sprintf("must be between 0 and 1, got %f", jitterFactor))
 	}
 
 	return nil
@@ -290,13 +330,16 @@ func validateHook(h Hook, hookType string, index int) error {
 	return nil
 }
 
+// ValidateEnvironment validates configured root paths against the local filesystem.
 func (c *Config) ValidateEnvironment() error {
 	if err := validateRootPath("projects_root", c.ProjectsRoot); err != nil {
 		return err
 	}
+
 	if err := validateRootPath("workspaces_root", c.WorkspacesRoot); err != nil {
 		return err
 	}
+
 	if err := validateRootPath("closed_root", c.ClosedRoot); err != nil {
 		return err
 	}
