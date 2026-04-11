@@ -2,6 +2,7 @@ package output
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 )
@@ -278,5 +279,19 @@ func TestNewMultiProgressClampsNegativeTotal(t *testing.T) {
 
 	if cap(progress.results) != 0 {
 		t.Fatalf("expected zero-capacity results slice, got %d", cap(progress.results))
+	}
+}
+
+func TestMultiProgressWithWriterNilFallsBackToStderr(t *testing.T) {
+	t.Parallel()
+
+	progress := NewMultiProgress(1).WithWriter(nil)
+
+	if progress.writer != os.Stderr {
+		t.Fatal("expected nil writer to fall back to stderr")
+	}
+
+	if progress.isTTY != isWriterTTY(os.Stderr) {
+		t.Fatal("expected TTY state to match stderr")
 	}
 }

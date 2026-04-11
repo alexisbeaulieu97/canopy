@@ -42,6 +42,14 @@ func (s *Spinner) WithWriter(w io.Writer) *Spinner {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.running {
+		return s
+	}
+
+	if w == nil {
+		w = os.Stderr
+	}
+
 	s.writer = w
 	s.isTTY = isWriterTTY(w)
 

@@ -2,6 +2,7 @@ package output
 
 import (
 	"bytes"
+	"os"
 	"testing"
 	"time"
 )
@@ -69,5 +70,38 @@ func TestSpinnerStopWithMessageWaitsForAnimateExit(t *testing.T) {
 	case <-stopped:
 	case <-time.After(time.Second):
 		t.Fatal("StopWithMessage did not return after animate signaled exit")
+	}
+}
+
+func TestSpinnerWithWriterNilFallsBackToStderr(t *testing.T) {
+	t.Parallel()
+
+	spinner := NewSpinner("loading").WithWriter(nil)
+
+	if spinner.writer != os.Stderr {
+		t.Fatal("expected nil writer to fall back to stderr")
+	}
+
+	if spinner.isTTY != isWriterTTY(os.Stderr) {
+		t.Fatal("expected TTY state to match stderr")
+	}
+}
+
+func TestSpinnerWithWriterIgnoredWhileRunning(t *testing.T) {
+	t.Parallel()
+
+	initialWriter := &bytes.Buffer{}
+	replacementWriter := &bytes.Buffer{}
+	spinner := NewSpinner("loading").WithWriter(initialWriter)
+	spinner.running = true
+
+	spinner.WithWriter(replacementWriter)
+
+	if spinner.writer != initialWriter {
+		t.Fatal("expected running spinner to keep its current writer")
+	}
+
+	if spinner.isTTY != isWriterTTY(initialWriter) {
+		t.Fatal("expected TTY state to remain unchanged while running")
 	}
 }

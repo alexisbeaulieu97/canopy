@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -150,9 +151,17 @@ func TestWorkspaceSyncBulkJSONReturnsNonZeroForWorkspaceErrors(t *testing.T) {
 		t.Fatalf("expected 2 payload items, got %d", len(payload))
 	}
 
-	if payload[0].WorkspaceID != "WS-FAIL" || payload[0].Error == "" {
-		t.Fatalf("expected failing workspace entry first, got %+v", payload[0])
+	for _, item := range payload {
+		if item.WorkspaceID == "WS-FAIL" {
+			if item.Error == "" {
+				t.Fatalf("expected failing workspace entry to include an error, got %+v", item)
+			}
+
+			return
+		}
 	}
+
+	t.Fatal("expected payload to contain WS-FAIL entry")
 }
 
 func TestWorkspaceSyncBulkJSONReturnsNonZeroForPartialResults(t *testing.T) {
@@ -198,6 +207,62 @@ func TestWorkspaceSyncBulkJSONReturnsNonZeroForPartialResults(t *testing.T) {
 
 	if payload[0].Result == nil || payload[0].Result.TotalErrors != 1 {
 		t.Fatalf("expected partial sync result with one error, got %+v", payload[0].Result)
+	}
+}
+
+func TestWorkspaceSyncBulkSummaryCountsAreNotDuplicated(t *testing.T) {
+	workspaces := map[string]domain.Workspace{
+		"WS-FAIL": {
+			ID:      "WS-FAIL",
+			DirName: "WS-FAIL",
+			Repos:   []domain.Repo{{Name: "repo-fail"}},
+		},
+		"WS-PARTIAL": {
+			ID:      "WS-PARTIAL",
+			DirName: "WS-PARTIAL",
+			Repos: []domain.Repo{
+				{Name: "repo-ok"},
+				{Name: "repo-error"},
+			},
+		},
+	}
+
+	storage := mocks.NewMockWorkspaceStorage()
+	storage.Workspaces = workspaces
+	storage.LoadFunc = func(_ context.Context, id string) (*domain.Workspace, error) {
+		if id == "WS-FAIL" {
+			return nil, cerrors.NewWorkspaceNotFound(id)
+		}
+
+		ws := storage.Workspaces[id]
+
+		return &ws, nil
+	}
+
+	git := mocks.NewMockGitOperations()
+	git.FetchFunc = func(_ context.Context, repoName string) error {
+		if repoName == "repo-error" {
+			return errors.New("fetch failed")
+		}
+
+		return nil
+	}
+	git.StatusFunc = func(context.Context, string) (bool, int, int, string, error) {
+		return false, 0, 1, "main", nil
+	}
+	git.PullFunc = func(context.Context, string) error { return nil }
+
+	appInstance := newWorkspaceSyncTestApp(workspaces, storage, git)
+
+	stdout, err := executeWorkspaceSyncCommand(t, appInstance, "--pattern", "^WS-", "--no-progress")
+	assertCommandFailed(t, err)
+
+	if !strings.Contains(err.Error(), "2 workspaces failed") {
+		t.Fatalf("expected command failure to report 2 workspaces failed, got %v", err)
+	}
+
+	if !strings.Contains(stdout, "Bulk sync complete: 2 workspaces synced, 1 commits pulled, 2 failed") {
+		t.Fatalf("expected summary counts without duplication, got output:\n%s", stdout)
 	}
 }
 

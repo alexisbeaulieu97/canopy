@@ -169,14 +169,11 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 					style = output.ErrorStyle
 					errDetail := sanitizeErrorForDisplay(res.Err.Error())
 					statusText = "error: " + errDetail
-					failed++
 				} else if res.Value != nil {
-					totalUpdated += res.Value.TotalUpdated
 					if res.Value.TotalErrors > 0 {
 						icon = icons.Warning()
 						style = output.WarningStyle
 						statusText = fmt.Sprintf("partial: %d updated, %d errors", res.Value.TotalUpdated, res.Value.TotalErrors)
-						failed++
 					} else if res.Value.TotalUpdated > 0 {
 						icon = icons.Success()
 						statusText = fmt.Sprintf("pulled %d commits", res.Value.TotalUpdated)

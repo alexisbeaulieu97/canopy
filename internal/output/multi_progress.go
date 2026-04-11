@@ -47,6 +47,10 @@ func (m *MultiProgress) WithWriter(w io.Writer) *MultiProgress {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if w == nil {
+		w = os.Stderr
+	}
+
 	m.writer = w
 	m.isTTY = isWriterTTY(w)
 
