@@ -91,6 +91,7 @@ var (
 			}
 
 			printHookPreview(string(phase), previews)
+
 			return nil
 		},
 	}

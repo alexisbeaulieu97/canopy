@@ -43,7 +43,7 @@ func ColorEnabled() bool {
 		}
 	}
 
-	if !term.IsTerminal(int(os.Stdout.Fd())) {
+	if !term.IsTerminal(int(os.Stdout.Fd())) { //nolint:gosec // G115: file descriptor from os.File.Fd() fits in int on all supported platforms; cast required by term.IsTerminal signature
 		return false
 	}
 

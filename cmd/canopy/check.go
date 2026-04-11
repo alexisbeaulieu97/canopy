@@ -54,6 +54,7 @@ var checkCmd = &cobra.Command{
 		appInstance.Logger.Infof("Projects Root: %s", cfg.GetProjectsRoot())
 		appInstance.Logger.Infof("Workspaces Root: %s", cfg.GetWorkspacesRoot())
 		appInstance.Logger.Infof("Naming Pattern: %s", cfg.GetWorkspaceNaming())
+
 		if registry := cfg.GetRegistry(); registry != nil {
 			appInstance.Logger.Infof("Registry File: %s", registry.Path())
 		}
@@ -64,6 +65,7 @@ var checkCmd = &cobra.Command{
 		}
 
 		appInstance.Logger.Info("Configuration is valid.")
+
 		return nil
 	},
 }

@@ -29,6 +29,7 @@ func (s *Service) SyncWorkspace(ctx context.Context, id string, opts SyncOptions
 		}
 
 		executor := NewParallelExecutor(s.config.GetParallelWorkers())
+
 		results, err := ParallelMap(ctx, executor, len(ws.Repos), func(runCtx context.Context, index int) (domain.RepoSyncStatus, error) {
 			repo := ws.Repos[index]
 			return s.syncRepo(runCtx, dirName, repo, opts.Timeout), nil

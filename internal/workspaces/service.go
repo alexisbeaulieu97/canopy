@@ -361,7 +361,7 @@ func (s *Service) UseEmoji() bool {
 
 type noopHookExecutor struct{}
 
-func (noopHookExecutor) ExecuteHooks([]ports.HookSpec, domain.HookContext, ports.HookExecuteOptions) ([]domain.HookCommandPreview, error) {
+func (noopHookExecutor) ExecuteHooks(context.Context, []ports.HookSpec, domain.HookContext, ports.HookExecuteOptions) ([]domain.HookCommandPreview, error) {
 	return nil, nil
 }
 

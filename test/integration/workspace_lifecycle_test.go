@@ -205,6 +205,7 @@ func TestWorkspaceRenameWithBranch(t *testing.T) {
 		t.Errorf("Branch should be renamed to TEST-BRANCH-NEW, got %s", newBranch)
 	}
 }
+
 func TestWorkspaceListWithStatus(t *testing.T) {
 	tc := newTestContext(t)
 

@@ -123,6 +123,7 @@ func (s *Spinner) StopWithMessage(icon, message string) {
 	}
 
 	<-stopped
+
 	_, _ = fmt.Fprintf(writer, "\r\033[K%s %s\n", icon, message) //nolint:forbidigo // spinner output
 }
 

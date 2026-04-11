@@ -59,6 +59,7 @@ PowerShell:
 		case "powershell":
 			return cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
 		}
+
 		return nil
 	},
 }

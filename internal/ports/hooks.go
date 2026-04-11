@@ -12,12 +12,11 @@ type HookExecutor interface {
 	// ExecuteHooks runs a list of hooks with the given context.
 	// If ContinueOnError is true, it continues even if a hook fails.
 	// If DryRun is true, it returns command previews without executing.
-	ExecuteHooks(hooks []HookSpec, ctx domain.HookContext, opts HookExecuteOptions) ([]domain.HookCommandPreview, error)
+	ExecuteHooks(ctx context.Context, hooks []HookSpec, hookCtx domain.HookContext, opts HookExecuteOptions) ([]domain.HookCommandPreview, error)
 }
 
 // HookExecuteOptions controls hook execution behavior.
 type HookExecuteOptions struct {
 	ContinueOnError bool
 	DryRun          bool
-	BaseContext     context.Context
 }

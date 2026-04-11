@@ -181,9 +181,11 @@ func (p *Progress) renderTTY(pct float64) {
 	if p.opts.ShowCount && p.opts.Total > 0 {
 		line += Colorize(MutedStyle, fmt.Sprintf(" %d/%d", p.current, p.opts.Total))
 	}
+
 	if p.opts.ShowPercentage {
 		line += fmt.Sprintf(" %3.0f%%", pct*100)
 	}
+
 	if p.message != "" {
 		line += " " + p.message
 	}

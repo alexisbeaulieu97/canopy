@@ -21,8 +21,6 @@ const (
 )
 
 // RunHooks executes lifecycle hooks for an existing workspace without performing other actions.
-//
-//nolint:contextcheck // Hooks manage their own timeout context per-hook
 func (s *Service) RunHooks(ctx context.Context, workspaceID string, phase HookPhase, continueOnError bool) error {
 	workspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -53,9 +51,8 @@ func (s *Service) RunHooks(ctx context.Context, workspaceID string, phase HookPh
 		Repos:         workspace.Repos,
 	}
 
-	if _, err := s.hookExecutor.ExecuteHooks(selected, hookCtx, ports.HookExecuteOptions{
+	if _, err := s.hookExecutor.ExecuteHooks(ctx, selected, hookCtx, ports.HookExecuteOptions{
 		ContinueOnError: continueOnError,
-		BaseContext:     ctx,
 	}); err != nil {
 		if s.logger != nil {
 			s.logger.Error(fmt.Sprintf("%s hooks failed", phase), "error", err)
@@ -70,8 +67,6 @@ func (s *Service) RunHooks(ctx context.Context, workspaceID string, phase HookPh
 }
 
 // PreviewHooks returns a dry-run preview of lifecycle hooks for an existing workspace.
-//
-//nolint:contextcheck // Hooks manage their own timeout context per-hook
 func (s *Service) PreviewHooks(ctx context.Context, workspaceID string, phase HookPhase) ([]domain.HookCommandPreview, error) {
 	workspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -102,9 +97,8 @@ func (s *Service) PreviewHooks(ctx context.Context, workspaceID string, phase Ho
 		Repos:         workspace.Repos,
 	}
 
-	previews, err := s.hookExecutor.ExecuteHooks(selected, hookCtx, ports.HookExecuteOptions{
-		DryRun:      true,
-		BaseContext: ctx,
+	previews, err := s.hookExecutor.ExecuteHooks(ctx, selected, hookCtx, ports.HookExecuteOptions{
+		DryRun: true,
 	})
 	if err != nil {
 		if s.logger != nil {

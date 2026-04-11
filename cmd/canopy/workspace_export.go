@@ -66,12 +66,14 @@ Examples:
 		}
 
 		var data []byte
+
 		switch format {
 		case formatJSON:
 			data, err = json.MarshalIndent(export, "", "  ")
 		default:
 			data, err = yaml.Marshal(export)
 		}
+
 		if err != nil {
 			return cerrors.NewInternalError("marshal export", err)
 		}
@@ -81,6 +83,7 @@ Examples:
 			if err := os.WriteFile(outputFile, data, 0o644); err != nil { //nolint:gosec // user-specified output file
 				return cerrors.NewIOFailed("write export file", err)
 			}
+
 			output.Infof("Exported workspace %s to %s", id, outputFile)
 		} else {
 			output.Print(string(data))
@@ -126,6 +129,7 @@ Examples:
 		} else {
 			data, err = os.ReadFile(inputFile) //nolint:gosec // user-specified input file
 		}
+
 		if err != nil {
 			return cerrors.NewIOFailed("read import file", err)
 		}
@@ -152,6 +156,7 @@ Examples:
 		}
 
 		output.SuccessWithPath("Imported workspace", workspaceID, app.Config.GetWorkspacesRoot()+"/"+dirName)
+
 		return nil
 	},
 }

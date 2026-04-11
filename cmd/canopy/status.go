@@ -39,6 +39,7 @@ var statusCmd = &cobra.Command{
 		if len(parts) == 0 {
 			return cerrors.NewNotInWorkspace(cwd)
 		}
+
 		workspaceID := parts[0]
 
 		status, err := app.Service.GetStatus(cmd.Context(), workspaceID)
@@ -55,6 +56,7 @@ var statusCmd = &cobra.Command{
 		}
 
 		output.Infof("Workspace: %s", status.ID)
+
 		for _, r := range status.Repos {
 			if r.Error != "" {
 				output.Warnf("- %s: Error: %s", r.Name, strings.ReplaceAll(string(r.Error), "\n", " "))
@@ -65,6 +67,7 @@ var statusCmd = &cobra.Command{
 			if r.IsDirty {
 				statusStr = "Dirty"
 			}
+
 			output.Infof("- %s: %s (Branch: %s, Unpushed: %d)", r.Name, statusStr, r.Branch, r.UnpushedCommits)
 		}
 

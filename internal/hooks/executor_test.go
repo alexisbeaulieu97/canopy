@@ -32,7 +32,7 @@ func TestExecuteHooks_Success(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
+	_, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks failed: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestExecuteHooks_CommandFailed(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
+	_, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{})
 	if err == nil {
 		t.Fatal("Expected error for failed hook")
 	}
@@ -94,7 +94,7 @@ func TestExecuteHooks_ContinueOnError(t *testing.T) {
 	}
 
 	// With continueOnError=true, should continue despite first hook failing
-	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{ContinueOnError: true})
+	_, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{ContinueOnError: true})
 	if err != nil {
 		t.Fatalf("ExecuteHooks should succeed with continueOnError=true: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestExecuteHooks_HookContinueOnError(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
+	_, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks should succeed when hook has ContinueOnError=true: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestExecuteHooks_Timeout(t *testing.T) {
 	}
 
 	start := time.Now()
-	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
+	_, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{})
 	duration := time.Since(start)
 
 	if err == nil {
@@ -199,7 +199,7 @@ func TestExecuteHooks_EnvironmentVariables(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
+	_, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks failed: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestExecuteHooks_RepoFilter(t *testing.T) {
 		},
 	}
 
-	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
+	_, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks failed: %v", err)
 	}
@@ -301,7 +301,7 @@ func TestExecuteHooks_RepoEnvironmentVariables(t *testing.T) {
 		},
 	}
 
-	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
+	_, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks failed: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestExecuteHooks_WorkingDirectory(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	_, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
+	_, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteHooks failed: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestExecuteHooks_DryRunPreview(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	previews, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{DryRun: true})
+	previews, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("ExecuteHooks dry-run failed: %v", err)
 	}
@@ -450,7 +450,7 @@ func TestExecuteHooks_DryRunResolvesTemplate(t *testing.T) {
 		Repos:         []domain.Repo{},
 	}
 
-	previews, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{DryRun: true})
+	previews, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("ExecuteHooks dry-run failed: %v", err)
 	}
@@ -486,7 +486,7 @@ func TestExecuteHooks_DryRunIncludesRepoInfo(t *testing.T) {
 		},
 	}
 
-	previews, err := executor.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{DryRun: true})
+	previews, err := executor.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{DryRun: true})
 	if err != nil {
 		t.Fatalf("ExecuteHooks dry-run failed: %v", err)
 	}
@@ -519,13 +519,13 @@ func TestExecuteHooks_EmptyHooks(t *testing.T) {
 	}
 
 	// Empty hooks should succeed
-	_, err := executor.ExecuteHooks([]ports.HookSpec{}, ctx, ports.HookExecuteOptions{})
+	_, err := executor.ExecuteHooks(t.Context(), []ports.HookSpec{}, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("Empty hooks should succeed: %v", err)
 	}
 
 	// Nil hooks should also succeed
-	_, err = executor.ExecuteHooks(nil, ctx, ports.HookExecuteOptions{})
+	_, err = executor.ExecuteHooks(t.Context(), nil, ctx, ports.HookExecuteOptions{})
 	if err != nil {
 		t.Fatalf("Nil hooks should succeed: %v", err)
 	}

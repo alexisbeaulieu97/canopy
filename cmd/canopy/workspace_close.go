@@ -23,6 +23,7 @@ var workspaceCloseCmd = &cobra.Command{
 	Short: "Close a workspace (keep metadata or delete)",
 	Args: func(cmd *cobra.Command, args []string) error {
 		pattern, _ := cmd.Flags().GetString("pattern")
+
 		all, _ := cmd.Flags().GetBool("all")
 		if all && pattern != "" {
 			return cerrors.NewInvalidArgument("pattern", "cannot use --pattern with --all")
@@ -123,6 +124,7 @@ var workspaceCloseCmd = &cobra.Command{
 					if previewErr != nil {
 						return previewErr
 					}
+
 					previews = append(previews, preview)
 				}
 
@@ -166,10 +168,12 @@ var workspaceCloseCmd = &cobra.Command{
 			if report.Cancelled {
 				skipped := len(ids) - len(report.SuccessIDs) - len(report.FailedIDs)
 				output.Warnf("Bulk close cancelled: %d succeeded, %d failed, %d skipped", len(report.SuccessIDs), len(report.FailedIDs), skipped)
+
 				return cerrors.NewOperationCancelled("bulk close")
 			}
 
 			output.Success("Bulk close completed", fmt.Sprintf("%d succeeded, %d failed", len(report.SuccessIDs), len(report.FailedIDs)))
+
 			if len(report.FailedIDs) > 0 {
 				output.Warnf("Failed workspaces: %s", strings.Join(report.FailedIDs, ", "))
 				return cerrors.NewCommandFailed("bulk close", report.FirstErr)
@@ -198,6 +202,7 @@ var workspaceCloseCmd = &cobra.Command{
 			}
 
 			output.Success("Ran pre_close hooks for workspace", id)
+
 			return nil
 		}
 
@@ -232,6 +237,7 @@ var workspaceCloseCmd = &cobra.Command{
 			}
 
 			printWorkspaceClosePreview(preview)
+
 			return nil
 		}
 
@@ -272,6 +278,7 @@ var workspaceCloseCmd = &cobra.Command{
 		}
 
 		reader := bufio.NewReader(os.Stdin)
+
 		promptSuffix := "[y/N]"
 		if configDefaultArchive {
 			promptSuffix = "[Y/n]"

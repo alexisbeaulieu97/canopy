@@ -28,6 +28,7 @@ func Bytes(size int64, opts ByteSizeOptions) string {
 	}
 
 	const unit = 1024
+
 	value := absInt64(size)
 	if value < unit {
 		return fmt.Sprintf("%d B", size)
@@ -170,8 +171,10 @@ func calendarDayNumber(t time.Time) int64 {
 }
 
 func absInt64(v int64) uint64 {
-	const minInt64 = -1 << 63
-	const minInt64Magnitude = uint64(1) << 63
+	const (
+		minInt64          = -1 << 63
+		minInt64Magnitude = uint64(1) << 63
+	)
 
 	if v >= 0 {
 		return uint64(v)

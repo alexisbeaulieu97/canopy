@@ -70,7 +70,7 @@ func TestCreateWorkspace_TemplateSetupCommandsDisableDefaultHookTimeout(t *testi
 		t.Fatalf("expected template setup timeout sentinel -1, got %d", call.Hooks[0].Timeout)
 	}
 
-	if call.Options.BaseContext == nil {
+	if call.BaseCtx == nil {
 		t.Fatal("expected template setup hooks to receive a base context")
 	}
 }

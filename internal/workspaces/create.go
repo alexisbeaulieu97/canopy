@@ -82,7 +82,6 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, di
 	}
 
 	// Run post_create hooks
-	//nolint:contextcheck // Hooks manage their own timeout context per-hook
 	if err := s.runPostCreateHooks(ctx, id, dirName, branchName, repos, opts); err != nil {
 		// Hook failures don't rollback the workspace (per design.md)
 		// But we return the error if not continuing on hook errors
@@ -120,12 +119,10 @@ func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID, dir
 			s.logger.Info("Running template setup command", "index", i, "workspace_id", workspaceID, "command", trimmed)
 		}
 
-		_, err := s.hookExecutor.ExecuteHooks([]ports.HookSpec{{
+		_, err := s.hookExecutor.ExecuteHooks(ctx, []ports.HookSpec{{
 			Command: trimmed,
 			Timeout: -1,
-		}}, hookCtx, ports.HookExecuteOptions{
-			BaseContext: ctx,
-		})
+		}}, hookCtx, ports.HookExecuteOptions{})
 		if err != nil {
 			failed = true
 
@@ -273,10 +270,8 @@ func (s *Service) runPostCreateHooks(ctx context.Context, id, dirName, branchNam
 		Repos:         repos,
 	}
 
-	//nolint:contextcheck // Hooks manage their own timeout context per-hook
-	if _, err := s.hookExecutor.ExecuteHooks(hooksConfig.PostCreate, hookCtx, ports.HookExecuteOptions{
+	if _, err := s.hookExecutor.ExecuteHooks(ctx, hooksConfig.PostCreate, hookCtx, ports.HookExecuteOptions{
 		ContinueOnError: opts.ContinueOnHookErr,
-		BaseContext:     ctx,
 	}); err != nil {
 		s.logger.Error("post_create hooks failed", "error", err)
 

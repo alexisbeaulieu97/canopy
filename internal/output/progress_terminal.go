@@ -10,7 +10,7 @@ import (
 
 func isWriterTTY(w io.Writer) bool {
 	if f, ok := w.(*os.File); ok {
-		return term.IsTerminal(int(f.Fd()))
+		return term.IsTerminal(int(f.Fd())) //nolint:gosec // G115: file descriptor from os.File.Fd() fits in int on all supported platforms; cast required by term.IsTerminal signature
 	}
 
 	return false

@@ -148,7 +148,7 @@ func (m Model) renderHeader() string {
 		countText = components.SubtleTextStyle.Render(fmt.Sprintf("(%d)", total))
 	}
 
-	b.WriteString(fmt.Sprintf("%s %s %s", logo, title, countText))
+	fmt.Fprintf(&b, "%s %s %s", logo, title, countText)
 
 	// Disk usage stat
 	if m.workspaces.TotalDiskUsage() > 0 {
@@ -249,7 +249,7 @@ func (m Model) renderDetailView() string {
 	// Loading state
 	detailState := m.getDetailState()
 	if detailState != nil && detailState.Loading {
-		b.WriteString(fmt.Sprintf("  %s Loading workspace details...", m.ui.Spinner.View()))
+		fmt.Fprintf(&b, "  %s Loading workspace details...", m.ui.Spinner.View())
 
 		return b.String()
 	}

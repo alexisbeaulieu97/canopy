@@ -1,6 +1,7 @@
 package mocks_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ func TestMockHookExecutor(t *testing.T) {
 		hooks := []ports.HookSpec{{Command: "echo test"}}
 		ctx := domain.HookContext{WorkspaceID: "test-ws"}
 
-		_, err := mock.ExecuteHooks(hooks, ctx, ports.HookExecuteOptions{})
+		_, err := mock.ExecuteHooks(t.Context(), hooks, ctx, ports.HookExecuteOptions{})
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -41,7 +42,7 @@ func TestMockHookExecutor(t *testing.T) {
 		mock := mocks.NewMockHookExecutor()
 		mock.ExecuteHooksErr = errors.New("hook failed")
 
-		_, err := mock.ExecuteHooks(nil, domain.HookContext{}, ports.HookExecuteOptions{})
+		_, err := mock.ExecuteHooks(t.Context(), nil, domain.HookContext{}, ports.HookExecuteOptions{})
 		if err == nil || err.Error() != "hook failed" {
 			t.Errorf("expected 'hook failed' error, got %v", err)
 		}
@@ -52,12 +53,12 @@ func TestMockHookExecutor(t *testing.T) {
 
 		called := false
 		mock := mocks.NewMockHookExecutor()
-		mock.ExecuteHooksFunc = func(_ []ports.HookSpec, _ domain.HookContext, _ ports.HookExecuteOptions) ([]domain.HookCommandPreview, error) {
+		mock.ExecuteHooksFunc = func(_ context.Context, _ []ports.HookSpec, _ domain.HookContext, _ ports.HookExecuteOptions) ([]domain.HookCommandPreview, error) {
 			called = true
 			return nil, nil
 		}
 
-		_, _ = mock.ExecuteHooks(nil, domain.HookContext{}, ports.HookExecuteOptions{})
+		_, _ = mock.ExecuteHooks(t.Context(), nil, domain.HookContext{}, ports.HookExecuteOptions{})
 
 		if !called {
 			t.Error("custom function was not called")
@@ -68,7 +69,7 @@ func TestMockHookExecutor(t *testing.T) {
 		t.Parallel()
 
 		mock := mocks.NewMockHookExecutor()
-		_, _ = mock.ExecuteHooks(nil, domain.HookContext{}, ports.HookExecuteOptions{})
+		_, _ = mock.ExecuteHooks(t.Context(), nil, domain.HookContext{}, ports.HookExecuteOptions{})
 
 		mock.ResetCalls()
 

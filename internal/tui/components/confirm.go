@@ -78,13 +78,13 @@ func (d ConfirmDialog) Render() string {
 	b.WriteString("\n")
 
 	// Target
-	b.WriteString(fmt.Sprintf("  Target: %s", d.TargetLabel))
+	fmt.Fprintf(&b, "  Target: %s", d.TargetLabel)
 	b.WriteString("\n\n")
 
 	// Action buttons
 	confirmBtn := AccentTextStyle.Render("[y] Confirm")
 	cancelBtn := SubtleTextStyle.Render("[n/esc] Cancel")
-	b.WriteString(fmt.Sprintf("  %s  %s", confirmBtn, cancelBtn))
+	fmt.Fprintf(&b, "  %s  %s", confirmBtn, cancelBtn)
 
 	return b.String()
 }

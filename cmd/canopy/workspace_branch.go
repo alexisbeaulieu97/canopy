@@ -18,6 +18,7 @@ var workspaceBranchCmd = &cobra.Command{
 	Short: "Switch branch for all repositories in a workspace",
 	Args: func(cmd *cobra.Command, args []string) error {
 		pattern, _ := cmd.Flags().GetString("pattern")
+
 		all, _ := cmd.Flags().GetBool("all")
 		if all && pattern != "" {
 			return cerrors.NewInvalidArgument("pattern", "cannot use --pattern with --all")
@@ -55,6 +56,7 @@ var workspaceBranchCmd = &cobra.Command{
 
 		if pattern != "" {
 			branchName := args[0]
+
 			ids, err := resolveBulkWorkspaceIDs(cmd.Context(), service, pattern)
 			if err != nil {
 				return err
@@ -80,6 +82,7 @@ var workspaceBranchCmd = &cobra.Command{
 			})
 
 			output.Success("Bulk branch switch completed", fmt.Sprintf("%d succeeded, %d failed", len(report.SuccessIDs), len(report.FailedIDs)))
+
 			if len(report.FailedIDs) > 0 {
 				output.Warnf("Failed workspaces: %s", strings.Join(report.FailedIDs, ", "))
 				return cerrors.NewCommandFailed("branch", report.FirstErr)
@@ -96,6 +99,7 @@ var workspaceBranchCmd = &cobra.Command{
 		}
 
 		output.Infof("Switched workspace %s to branch %s", id, branchName)
+
 		return nil
 	},
 }

@@ -46,14 +46,15 @@ func NewExecutor(logger *logging.Logger) *Executor {
 // ExecuteHooks runs a list of hooks with the given context.
 // If continueOnError is true at the executor level, it continues even if a hook fails.
 func (e *Executor) ExecuteHooks(
+	ctx context.Context,
 	hks []ports.HookSpec,
-	ctx domain.HookContext,
+	hookCtx domain.HookContext,
 	opts ports.HookExecuteOptions,
 ) ([]domain.HookCommandPreview, error) {
 	var previews []domain.HookCommandPreview
 
 	for i, hook := range hks {
-		hookPreviews, err := e.executeHook(hook, ctx, i, opts)
+		hookPreviews, err := e.executeHook(ctx, hook, hookCtx, i, opts)
 		if opts.DryRun {
 			previews = append(previews, hookPreviews...)
 		}
@@ -73,35 +74,36 @@ func (e *Executor) ExecuteHooks(
 
 // executeHook runs a single hook command.
 func (e *Executor) executeHook(
+	ctx context.Context,
 	hook ports.HookSpec,
-	ctx domain.HookContext,
+	hookCtx domain.HookContext,
 	index int,
 	opts ports.HookExecuteOptions,
 ) ([]domain.HookCommandPreview, error) {
 	var previews []domain.HookCommandPreview
 
 	// Determine repos to run against
-	repos := ctx.Repos
+	repos := hookCtx.Repos
 	if len(hook.Repos) > 0 {
-		repos = filterRepos(ctx.Repos, hook.Repos)
+		repos = filterRepos(hookCtx.Repos, hook.Repos)
 	}
 
 	// If repos filter specified, run once per matching repo
 	if len(hook.Repos) > 0 {
 		for _, repo := range repos {
-			repoPath := filepath.Join(ctx.WorkspacePath, repo.Name)
+			repoPath := filepath.Join(hookCtx.WorkspacePath, repo.Name)
 
-			resolvedCommand, err := e.resolveCommand(hook, ctx, &repo)
+			resolvedCommand, err := e.resolveCommand(hook, hookCtx, &repo)
 			if err != nil {
 				return previews, err
 			}
 
 			if opts.DryRun {
-				previews = append(previews, e.previewCommand(index, resolvedCommand, hook.Description, repoPath, ctx, &repo))
+				previews = append(previews, e.previewCommand(index, resolvedCommand, hook.Description, repoPath, hookCtx, &repo))
 				continue
 			}
 
-			if err := e.runCommand(opts.BaseContext, hook, ctx, repoPath, &repo, index, resolvedCommand); err != nil {
+			if err := e.runCommand(ctx, hook, hookCtx, repoPath, &repo, index, resolvedCommand); err != nil {
 				return previews, err
 			}
 		}
@@ -110,24 +112,24 @@ func (e *Executor) executeHook(
 	}
 
 	// No repos filter - run once in workspace root
-	resolvedCommand, err := e.resolveCommand(hook, ctx, nil)
+	resolvedCommand, err := e.resolveCommand(hook, hookCtx, nil)
 	if err != nil {
 		return previews, err
 	}
 
 	if opts.DryRun {
-		previews = append(previews, e.previewCommand(index, resolvedCommand, hook.Description, ctx.WorkspacePath, ctx, nil))
+		previews = append(previews, e.previewCommand(index, resolvedCommand, hook.Description, hookCtx.WorkspacePath, hookCtx, nil))
 		return previews, nil
 	}
 
-	return previews, e.runCommand(opts.BaseContext, hook, ctx, ctx.WorkspacePath, nil, index, resolvedCommand)
+	return previews, e.runCommand(ctx, hook, hookCtx, hookCtx.WorkspacePath, nil, index, resolvedCommand)
 }
 
 // runCommand executes the hook command in the specified directory.
 func (e *Executor) runCommand(
-	baseCtx context.Context,
+	ctx context.Context,
 	hook ports.HookSpec,
-	ctx domain.HookContext,
+	hookCtx domain.HookContext,
 	workDir string,
 	repo *domain.Repo,
 	index int,
@@ -136,22 +138,18 @@ func (e *Executor) runCommand(
 	shell := resolveShell(hook.Shell)
 	timeout, hasTimeout := resolveTimeout(hook.Timeout)
 
-	if baseCtx == nil {
-		baseCtx = context.Background()
-	}
-
 	var (
 		execCtx context.Context
 		cancel  context.CancelFunc
 	)
 	if hasTimeout {
-		execCtx, cancel = context.WithTimeout(baseCtx, timeout)
+		execCtx, cancel = context.WithTimeout(ctx, timeout)
 	} else {
-		execCtx, cancel = context.WithCancel(baseCtx)
+		execCtx, cancel = context.WithCancel(ctx)
 	}
 	defer cancel()
 
-	cmd := e.buildCommand(execCtx, shell, resolvedCommand, workDir, ctx, repo)
+	cmd := e.buildCommand(execCtx, shell, resolvedCommand, workDir, hookCtx, repo)
 
 	var stdout, stderr bytes.Buffer
 

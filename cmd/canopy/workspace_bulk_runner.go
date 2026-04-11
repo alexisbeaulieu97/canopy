@@ -78,6 +78,7 @@ func confirmBulkWorkspaceAction(force, interactive bool, count int, operation st
 	}
 
 	reader := bufio.NewReader(os.Stdin)
+
 	output.Printf("%s %d workspaces? [y/N]: ", operation, count)
 
 	answer, err := reader.ReadString('\n')

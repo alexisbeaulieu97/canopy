@@ -25,6 +25,7 @@ Per-repository timeouts can be configured to prevent slow remotes from blocking 
 Bulk sync continues across workspaces and exits non-zero if any workspace fails.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		pattern, _ := cmd.Flags().GetString("pattern")
+
 		all, _ := cmd.Flags().GetBool("all")
 		if all && pattern != "" {
 			return cerrors.NewInvalidArgument("pattern", "cannot use --pattern with --all")
@@ -52,8 +53,10 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 		noProgress, _ := cmd.Flags().GetBool("no-progress")
 
 		var timeout time.Duration
+
 		if timeoutStr != "" {
 			var err error
+
 			timeout, err = time.ParseDuration(timeoutStr)
 			if err != nil {
 				return cerrors.NewInvalidArgument("timeout", fmt.Sprintf("invalid duration: %v", err))
@@ -116,23 +119,30 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 					if res.Err != nil {
 						errText = res.Err.Error()
 					}
+
 					payload = append(payload, map[string]interface{}{
 						"workspace_id": res.ID,
 						"result":       res.Value,
 						"error":        errText,
 					})
 				}
+
 				return output.PrintJSON(payload)
 			}
 
 			// Render bulk sync results
 			output.Println("")
+
 			icons := output.NewIcons()
 
-			var failed int
-			var totalUpdated int
+			var (
+				failed       int
+				totalUpdated int
+			)
+
 			for _, res := range report.Results {
 				var icon string
+
 				style := output.SuccessStyle
 				statusText := ""
 
@@ -193,6 +203,7 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 		}
 
 		id := args[0]
+
 		result, err := app.Service.SyncWorkspace(cmd.Context(), id, opts)
 		if err != nil {
 			return err

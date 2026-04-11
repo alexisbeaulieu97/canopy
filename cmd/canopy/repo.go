@@ -49,6 +49,7 @@ var repoListCmd = &cobra.Command{
 				Name string `json:"name"`
 				Path string `json:"path"`
 			}
+
 			var repoList []repoInfo
 			for _, repo := range repos {
 				repoList = append(repoList, repoInfo{
@@ -56,6 +57,7 @@ var repoListCmd = &cobra.Command{
 					Path: filepath.Join(cfg.GetProjectsRoot(), repo),
 				})
 			}
+
 			return output.PrintJSON(map[string]interface{}{
 				"repos": repoList,
 			})
@@ -65,6 +67,7 @@ var repoListCmd = &cobra.Command{
 			path := filepath.Join(cfg.GetProjectsRoot(), repo)
 			output.Infof("%s (%s)", repo, path)
 		}
+
 		return nil
 	},
 }
@@ -96,11 +99,13 @@ var repoAddCmd = &cobra.Command{
 			if alias == "" {
 				alias = giturl.DeriveAlias(url)
 			}
+
 			if alias == "" {
 				alias = name
 			}
 
 			entry := ports.RegistryEntry{URL: url}
+
 			realAlias, err := registerWithPrompt(cmd, app.Config.GetRegistry(), alias, entry, app.Logger)
 			if err != nil {
 				// Use a detached context for cleanup to ensure it runs even if cmd.Context() is cancelled
@@ -113,10 +118,12 @@ var repoAddCmd = &cobra.Command{
 
 				return cerrors.NewRegistryError("register", "registration failed", err)
 			}
+
 			output.Infof("Registered repository as '%s'", realAlias)
 		}
 
 		output.Success("Added repository", url)
+
 		return nil
 	},
 }
@@ -153,6 +160,7 @@ var repoRemoveCmd = &cobra.Command{
 			}
 
 			printRepoRemovePreview(preview)
+
 			return nil
 		}
 
@@ -161,6 +169,7 @@ var repoRemoveCmd = &cobra.Command{
 		}
 
 		output.Success("Removed repository", name)
+
 		return nil
 	},
 }
@@ -184,6 +193,7 @@ var repoSyncCmd = &cobra.Command{
 		}
 
 		output.Success("Synced repository", name)
+
 		return nil
 	},
 }
@@ -225,6 +235,7 @@ var repoRegisterCmd = &cobra.Command{
 		}
 
 		output.Infof("Registered '%s' -> %s", alias, url)
+
 		return nil
 	},
 }
@@ -258,6 +269,7 @@ var repoUnregisterCmd = &cobra.Command{
 		}
 
 		output.Infof("Unregistered '%s'", alias)
+
 		return nil
 	},
 }
@@ -279,6 +291,7 @@ var repoListRegistryCmd = &cobra.Command{
 			output.Column("URL", output.RepoURLWidth, output.MutedStyle),
 			output.Column("TAGS", output.RepoTagsWidth, output.MutedStyle),
 		)
+
 		for _, entry := range entries {
 			output.Printf("%s %s %s\n",
 				output.Column(entry.Alias, output.RepoAliasWidth, output.AccentStyle),
@@ -286,7 +299,9 @@ var repoListRegistryCmd = &cobra.Command{
 				output.Column(strings.Join(entry.Tags, ", "), output.RepoTagsWidth, lipgloss.NewStyle()),
 			)
 		}
+
 		output.Infof("\n%d entries", len(entries))
+
 		return nil
 	},
 }
@@ -310,17 +325,21 @@ var repoShowCmd = &cobra.Command{
 
 		output.Infof("Alias:        %s", alias)
 		output.Infof("URL:          %s", entry.URL)
+
 		if entry.DefaultBranch != "" {
 			output.Infof("Branch:       %s", entry.DefaultBranch)
 		}
+
 		if entry.Description != "" {
 			output.Infof("Description:  %s", entry.Description)
 		}
+
 		if len(entry.Tags) > 0 {
 			output.Infof("Tags:         %s", strings.Join(entry.Tags, ", "))
 		}
 
 		repoName := giturl.ExtractRepoName(entry.URL)
+
 		canonicalPath := filepath.Join(app.Config.GetProjectsRoot(), repoName)
 		if _, err := os.Stat(canonicalPath); err == nil {
 			output.Infof("Canonical:    %s (present)", canonicalPath)
@@ -347,6 +366,7 @@ var repoStatusCmd = &cobra.Command{
 
 		if len(args) > 0 {
 			name := args[0]
+
 			status, err := svc.GetCanonicalRepoStatus(cmd.Context(), name)
 			if err != nil {
 				return err
@@ -357,6 +377,7 @@ var repoStatusCmd = &cobra.Command{
 			}
 
 			printSingleRepoStatus(status)
+
 			return nil
 		}
 
@@ -370,6 +391,7 @@ var repoStatusCmd = &cobra.Command{
 		}
 
 		printRepoStatusesTable(statuses)
+
 		return nil
 	},
 }
@@ -400,6 +422,7 @@ var repoPathCmd = &cobra.Command{
 		}
 
 		output.Println(path)
+
 		return nil
 	},
 }

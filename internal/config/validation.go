@@ -47,6 +47,7 @@ func (c *Config) validateRequiredFields() error {
 	if err := validateRequiredField("projects_root", c.ProjectsRoot); err != nil {
 		return err
 	}
+
 	if err := validateRequiredField("workspaces_root", c.WorkspacesRoot); err != nil {
 		return err
 	}
@@ -70,12 +71,15 @@ func (c *Config) validateWorkspaceSettings() error {
 	if err := c.validateRequiredFields(); err != nil {
 		return err
 	}
+
 	if err := c.validateCloseDefault(); err != nil {
 		return err
 	}
+
 	if err := c.validateWorkspaceNaming(); err != nil {
 		return err
 	}
+
 	if err := c.validatePatterns(); err != nil {
 		return err
 	}
@@ -109,6 +113,7 @@ func (c *Config) validateWorkspaceNaming() error {
 	}
 
 	_, err := c.computeWorkspaceDir("EXAMPLE-123")
+
 	return err
 }
 
@@ -179,6 +184,7 @@ func (c *Config) validateParallelWorkers() error {
 	if c.ParallelWorkers < MinParallelWorkers {
 		return cerrors.NewConfigValidation("parallel_workers", fmt.Sprintf("must be at least %d, got %d", MinParallelWorkers, c.ParallelWorkers))
 	}
+
 	if c.ParallelWorkers > MaxParallelWorkers {
 		return cerrors.NewConfigValidation("parallel_workers", fmt.Sprintf("must not exceed %d, got %d", MaxParallelWorkers, c.ParallelWorkers))
 	}
@@ -190,6 +196,7 @@ func (c *Config) validateLockSettings() error {
 	if c.LockTimeout == "" {
 		c.LockTimeout = DefaultLockTimeout.String()
 	}
+
 	if c.LockStaleThreshold == "" {
 		c.LockStaleThreshold = DefaultLockStaleThreshold.String()
 	}
@@ -198,6 +205,7 @@ func (c *Config) validateLockSettings() error {
 	if err != nil {
 		return cerrors.NewConfigValidation("lock_timeout", fmt.Sprintf("invalid duration %q: %v", c.LockTimeout, err))
 	}
+
 	if lockTimeout <= 0 {
 		return cerrors.NewConfigValidation("lock_timeout", fmt.Sprintf("must be positive, got %s", lockTimeout))
 	}
@@ -206,6 +214,7 @@ func (c *Config) validateLockSettings() error {
 	if err != nil {
 		return cerrors.NewConfigValidation("lock_stale_threshold", fmt.Sprintf("invalid duration %q: %v", c.LockStaleThreshold, err))
 	}
+
 	if lockStale <= 0 {
 		return cerrors.NewConfigValidation("lock_stale_threshold", fmt.Sprintf("must be positive, got %s", lockStale))
 	}
@@ -300,6 +309,7 @@ func (c *Config) validateHooks() error {
 			return err
 		}
 	}
+
 	for i, h := range c.Hooks.PreClose {
 		if err := validateHook(h, "pre_close", i); err != nil {
 			return err
@@ -314,15 +324,19 @@ func validateHook(h Hook, hookType string, index int) error {
 	if strings.TrimSpace(h.Command) == "" {
 		return cerrors.NewConfigValidation(field, "command cannot be empty")
 	}
+
 	if strings.Contains(h.Command, "\x00") {
 		return cerrors.NewConfigValidation(field, "command contains invalid null byte")
 	}
+
 	if strings.ContainsAny(h.Command, "\n\r") {
 		return cerrors.NewConfigValidation(field, "command cannot contain newlines")
 	}
+
 	if h.Timeout < 0 {
 		return cerrors.NewConfigValidation(field, fmt.Sprintf("timeout must be non-negative, got %d", h.Timeout))
 	}
+
 	if h.Shell != "" && strings.TrimSpace(h.Shell) == "" {
 		return cerrors.NewConfigValidation(field, "shell cannot be empty or whitespace-only when specified")
 	}

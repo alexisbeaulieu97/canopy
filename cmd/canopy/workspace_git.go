@@ -53,6 +53,7 @@ Examples:
 
 		// Count failures for exit code.
 		var failures int
+
 		for _, r := range results {
 			if r.Error != nil || r.ExitCode != 0 {
 				failures++
