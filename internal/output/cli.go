@@ -30,12 +30,6 @@ func Infof(format string, args ...interface{}) {
 	fmt.Printf(format+"\n", args...) //nolint:forbidigo // user-facing CLI output
 }
 
-// Warn prints a warning message to stderr.
-// Example: Warn("Configuration may be incomplete") -> "Configuration may be incomplete"
-func Warn(message string) {
-	fmt.Fprintln(os.Stderr, message) //nolint:forbidigo // user-facing CLI output
-}
-
 // Warnf prints a formatted warning message to stderr.
 // Example: Warnf("Missing %d files", 3) -> "Missing 3 files"
 func Warnf(format string, args ...interface{}) {

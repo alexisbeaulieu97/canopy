@@ -20,15 +20,6 @@ const (
 	DefaultBranchName = "main"
 )
 
-// HealthService defines the interface for workspace health check operations.
-type HealthService interface {
-	// CheckWorkspace performs health checks on a specific workspace.
-	CheckWorkspace(ctx context.Context, workspaceID string, fix bool) (*domain.WorkspaceHealthReport, error)
-
-	// CheckAllWorkspaces performs health checks on all active workspaces.
-	CheckAllWorkspaces(ctx context.Context, fix bool) ([]domain.WorkspaceHealthReport, error)
-}
-
 // WorkspaceHealthService handles health checks for workspaces.
 type WorkspaceHealthService struct {
 	config          ports.ConfigProvider

@@ -218,31 +218,6 @@ func TestInfof(t *testing.T) {
 	}
 }
 
-func TestWarn(t *testing.T) {
-	tests := []struct {
-		name    string
-		message string
-		want    string
-	}{
-		{
-			name:    "simple warning",
-			message: "Configuration may be incomplete",
-			want:    "Configuration may be incomplete\n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := captureStderr(t, func() {
-				Warn(tt.message)
-			})
-			if got != tt.want {
-				t.Errorf("Warn() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestWarnf(t *testing.T) {
 	tests := []struct {
 		name   string
