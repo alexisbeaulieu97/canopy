@@ -768,6 +768,10 @@ func requirePOSIXPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission-based filesystem tests are not reliable on windows")
 	}
+
+	if os.Geteuid() == 0 {
+		t.Skip("permission-based filesystem tests are not reliable when running as root")
+	}
 }
 
 func hasHealthCheck(checks []domain.HealthCheck, name, description string) bool {
