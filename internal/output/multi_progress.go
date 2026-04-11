@@ -27,6 +27,10 @@ type ProgressResult struct {
 
 // NewMultiProgress creates a new multi-operation progress tracker.
 func NewMultiProgress(total int) *MultiProgress {
+	if total < 0 {
+		total = 0
+	}
+
 	writer := os.Stderr
 
 	return &MultiProgress{

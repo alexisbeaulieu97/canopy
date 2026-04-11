@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -120,7 +121,7 @@ func (c *Config) validateWorkspaceNaming() error {
 func (c *Config) validatePatterns() error {
 	for _, p := range c.Defaults.WorkspacePatterns {
 		if _, err := regexp.Compile(p.Pattern); err != nil {
-			return cerrors.NewConfigValidation("workspace_patterns", fmt.Sprintf("invalid regex pattern '%s': %v", p.Pattern, err))
+			return cerrors.NewConfigValidation("defaults.workspace_patterns", fmt.Sprintf("invalid regex pattern '%s': %v", p.Pattern, err))
 		}
 	}
 
@@ -128,7 +129,15 @@ func (c *Config) validatePatterns() error {
 }
 
 func (c *Config) validateTemplates() error {
-	for name, tmpl := range c.Templates {
+	names := make([]string, 0, len(c.Templates))
+	for name := range c.Templates {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+
+	for _, name := range names {
+		tmpl := c.Templates[name]
 		if err := validateTemplate(name, tmpl); err != nil {
 			return err
 		}
@@ -305,13 +314,13 @@ func validateJitterFactor(jitterFactor float64) error {
 
 func (c *Config) validateHooks() error {
 	for i, h := range c.Hooks.PostCreate {
-		if err := validateHook(h, "post_create", i); err != nil {
+		if err := validateHook(h, "hooks.post_create", i); err != nil {
 			return err
 		}
 	}
 
 	for i, h := range c.Hooks.PreClose {
-		if err := validateHook(h, "pre_close", i); err != nil {
+		if err := validateHook(h, "hooks.pre_close", i); err != nil {
 			return err
 		}
 	}
@@ -319,26 +328,29 @@ func (c *Config) validateHooks() error {
 	return nil
 }
 
-func validateHook(h Hook, hookType string, index int) error {
-	field := fmt.Sprintf("%s hook[%d]", hookType, index)
+func validateHook(h Hook, field string, index int) error {
+	formatDetail := func(detail string) string {
+		return fmt.Sprintf("hook[%d]: %s", index, detail)
+	}
+
 	if strings.TrimSpace(h.Command) == "" {
-		return cerrors.NewConfigValidation(field, "command cannot be empty")
+		return cerrors.NewConfigValidation(field, formatDetail("command cannot be empty"))
 	}
 
 	if strings.Contains(h.Command, "\x00") {
-		return cerrors.NewConfigValidation(field, "command contains invalid null byte")
+		return cerrors.NewConfigValidation(field, formatDetail("command contains invalid null byte"))
 	}
 
 	if strings.ContainsAny(h.Command, "\n\r") {
-		return cerrors.NewConfigValidation(field, "command cannot contain newlines")
+		return cerrors.NewConfigValidation(field, formatDetail("command cannot contain newlines"))
 	}
 
 	if h.Timeout < 0 {
-		return cerrors.NewConfigValidation(field, fmt.Sprintf("timeout must be non-negative, got %d", h.Timeout))
+		return cerrors.NewConfigValidation(field, formatDetail(fmt.Sprintf("timeout must be non-negative, got %d", h.Timeout)))
 	}
 
 	if h.Shell != "" && strings.TrimSpace(h.Shell) == "" {
-		return cerrors.NewConfigValidation(field, "shell cannot be empty or whitespace-only when specified")
+		return cerrors.NewConfigValidation(field, formatDetail("shell cannot be empty or whitespace-only when specified"))
 	}
 
 	return nil

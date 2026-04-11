@@ -139,12 +139,10 @@ func formatUnknownFieldError(unknownFields []string) string {
 }
 
 func extractUnknownFields(errMsg string) []string {
-	idx := strings.Index(errMsg, "invalid keys:")
-	if idx == -1 {
+	keysStr, _ := extractUnknownFieldSegment(errMsg)
+	if keysStr == "" {
 		return nil
 	}
-
-	keysStr := strings.TrimSpace(errMsg[idx+len("invalid keys:"):])
 
 	var fields []string
 
@@ -158,11 +156,46 @@ func extractUnknownFields(errMsg string) []string {
 	return fields
 }
 
+func extractUnknownFieldSegment(errMsg string) (fieldsLine, remainder string) {
+	idx := strings.Index(errMsg, "invalid keys:")
+	if idx == -1 {
+		return "", ""
+	}
+
+	lineStart := strings.LastIndex(errMsg[:idx], "\n") + 1
+	lineEndOffset := strings.IndexAny(errMsg[idx:], "\n\r")
+
+	lineEnd := len(errMsg)
+	if lineEndOffset >= 0 {
+		lineEnd = idx + lineEndOffset
+	}
+
+	fieldsLine = strings.TrimSpace(errMsg[idx+len("invalid keys:") : lineEnd])
+
+	parts := make([]string, 0, 2)
+	if prefix := strings.TrimSpace(errMsg[:lineStart]); prefix != "" {
+		parts = append(parts, prefix)
+	}
+
+	if suffix := strings.TrimSpace(errMsg[lineEnd:]); suffix != "" {
+		parts = append(parts, suffix)
+	}
+
+	return fieldsLine, strings.Join(parts, "\n")
+}
+
 func handleUnmarshalError(err error) error {
 	errMsg := err.Error()
 	if strings.Contains(errMsg, "has invalid keys") {
 		if unknownFields := extractUnknownFields(errMsg); len(unknownFields) > 0 {
-			return cerrors.NewConfigValidation("config", formatUnknownFieldError(unknownFields))
+			unknownFieldErr := formatUnknownFieldError(unknownFields)
+
+			_, remainder := extractUnknownFieldSegment(errMsg)
+			if strings.TrimSpace(remainder) != "" {
+				return cerrors.NewConfigInvalid(fmt.Sprintf("%s; failed to unmarshal: %s", unknownFieldErr, remainder))
+			}
+
+			return cerrors.NewConfigValidation("config", unknownFieldErr)
 		}
 	}
 

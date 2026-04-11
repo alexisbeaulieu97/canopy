@@ -6,6 +6,14 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
+var defaultPortGitRetryConfig = ports.GitRetryConfig{
+	MaxAttempts:  3,
+	InitialDelay: time.Second,
+	MaxDelay:     30 * time.Second,
+	Multiplier:   2.0,
+	JitterFactor: 0.25,
+}
+
 // GetProjectsRoot returns the projects root directory.
 func (c *Config) GetProjectsRoot() string {
 	return c.ProjectsRoot
@@ -100,7 +108,10 @@ func (c *Config) GetUseEmoji() bool {
 
 // GetGitRetryConfig returns the parsed git retry configuration.
 func (c *Config) GetGitRetryConfig() ports.GitRetryConfig {
-	parsed, _ := c.Git.Retry.Parse()
+	parsed, err := c.Git.Retry.Parse()
+	if err != nil {
+		return defaultPortGitRetryConfig
+	}
 
 	return ports.GitRetryConfig{
 		MaxAttempts:  parsed.MaxAttempts,

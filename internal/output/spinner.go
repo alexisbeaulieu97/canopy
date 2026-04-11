@@ -51,6 +51,7 @@ func (s *Spinner) WithWriter(w io.Writer) *Spinner {
 // Start begins the spinner animation.
 func (s *Spinner) Start() {
 	s.mu.Lock()
+
 	if s.running {
 		s.mu.Unlock()
 		return
@@ -81,6 +82,7 @@ func (s *Spinner) SetMessage(msg string) {
 // Stop stops the spinner and clears the line.
 func (s *Spinner) Stop() {
 	s.mu.Lock()
+
 	if !s.running || s.finished {
 		s.mu.Unlock()
 		return
@@ -104,6 +106,7 @@ func (s *Spinner) Stop() {
 // StopWithMessage stops the spinner and displays a final message.
 func (s *Spinner) StopWithMessage(icon, message string) {
 	s.mu.Lock()
+
 	if !s.running || s.finished {
 		s.mu.Unlock()
 		return

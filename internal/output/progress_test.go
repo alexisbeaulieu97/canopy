@@ -262,3 +262,21 @@ func TestProgress_NonTTYOutput(t *testing.T) {
 		t.Errorf("line 0 should contain message, got: %s", lines[0])
 	}
 }
+
+func TestNewMultiProgressClampsNegativeTotal(t *testing.T) {
+	t.Parallel()
+
+	progress := NewMultiProgress(-1)
+
+	if progress.total != 0 {
+		t.Fatalf("expected total to be clamped to 0, got %d", progress.total)
+	}
+
+	if progress.results == nil {
+		t.Fatal("expected results slice to be initialized")
+	}
+
+	if cap(progress.results) != 0 {
+		t.Fatalf("expected zero-capacity results slice, got %d", cap(progress.results))
+	}
+}

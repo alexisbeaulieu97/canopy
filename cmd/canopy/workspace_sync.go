@@ -83,11 +83,18 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 			}
 
 			if len(ids) == 0 {
+				if jsonOutput {
+					return output.PrintJSON([]map[string]any{})
+				}
+
 				output.Info("No matching workspaces found.")
+
 				return nil
 			}
 
-			printMatchedWorkspaceIDs(ids)
+			if !jsonOutput {
+				printMatchedWorkspaceIDs(ids)
+			}
 
 			numWorkers := app.Config.GetParallelWorkers()
 			if numWorkers <= 0 {
@@ -98,22 +105,30 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 				Parallelism:  numWorkers,
 				ShowProgress: !noProgress && !jsonOutput,
 				OnSuccess: func(id string, current, total int, _ *domain.SyncResult) {
-					output.Infof("Synced workspace %s (%d/%d)", id, current, total)
+					if !jsonOutput {
+						output.Infof("Synced workspace %s (%d/%d)", id, current, total)
+					}
 				},
 				OnFailure: func(id string, current, total int, err error) {
-					output.Warnf("Workspace %s sync failed (%d/%d): %v", id, current, total, err)
+					if !jsonOutput {
+						output.Warnf("Workspace %s sync failed (%d/%d): %v", id, current, total, err)
+					}
 				},
 			}, func(ctx context.Context, id string) (*domain.SyncResult, error) {
 				return app.Service.SyncWorkspace(ctx, id, opts)
 			})
 
 			if report.Cancelled {
-				output.Warnf("Bulk sync cancelled")
+				if !jsonOutput {
+					output.Warnf("Bulk sync cancelled")
+				}
+
 				return cerrors.NewOperationCancelled("bulk sync")
 			}
 
+			failed, totalUpdated := summarizeBulkSyncReport(report.Results)
 			if jsonOutput {
-				payload := make([]map[string]interface{}, 0, len(report.Results))
+				payload := make([]map[string]any, 0, len(report.Results))
 				for _, res := range report.Results {
 					errText := ""
 					if res.Err != nil {
@@ -127,18 +142,21 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 					})
 				}
 
-				return output.PrintJSON(payload)
+				if err := output.PrintJSON(payload); err != nil {
+					return err
+				}
+
+				if failed > 0 {
+					return cerrors.NewCommandFailed("sync", fmt.Errorf("%d workspaces failed", failed))
+				}
+
+				return nil
 			}
 
 			// Render bulk sync results
 			output.Println("")
 
 			icons := output.NewIcons()
-
-			var (
-				failed       int
-				totalUpdated int
-			)
 
 			for _, res := range report.Results {
 				var icon string
@@ -231,6 +249,26 @@ func init() {
 	workspaceSyncCmd.Flags().String("pattern", "", "Sync workspaces matching a regex pattern")
 	workspaceSyncCmd.Flags().Bool("all", false, "Sync all workspaces (equivalent to --pattern \".*\")")
 	workspaceSyncCmd.Flags().Bool("no-progress", false, "Disable progress indicators")
+}
+
+func summarizeBulkSyncReport(results []bulkWorkspaceResult[*domain.SyncResult]) (failed, totalUpdated int) {
+	for _, res := range results {
+		if res.Err != nil {
+			failed++
+			continue
+		}
+
+		if res.Value == nil {
+			continue
+		}
+
+		totalUpdated += res.Value.TotalUpdated
+		if res.Value.TotalErrors > 0 {
+			failed++
+		}
+	}
+
+	return failed, totalUpdated
 }
 
 func renderSyncResult(workspaceID string, result *domain.SyncResult) {

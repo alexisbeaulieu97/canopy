@@ -696,7 +696,7 @@ func TestValidateValues(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "post_create hook[0]",
+			errSubstr: "hook[0]: command cannot be empty",
 			errType:   cerrors.ConfigValidation,
 		},
 		{
@@ -717,7 +717,7 @@ func TestValidateValues(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "pre_close hook[1]",
+			errSubstr: "hook[1]: command cannot be empty",
 			errType:   cerrors.ConfigValidation,
 		},
 		{
@@ -737,7 +737,7 @@ func TestValidateValues(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "post_create hook[0]",
+			errSubstr: "hook[0]: command cannot be empty",
 			errType:   cerrors.ConfigValidation,
 		},
 		{
@@ -757,7 +757,7 @@ func TestValidateValues(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "pre_close hook[0]",
+			errSubstr: "hook[0]: command cannot contain newlines",
 			errType:   cerrors.ConfigValidation,
 		},
 		{
@@ -777,7 +777,7 @@ func TestValidateValues(t *testing.T) {
 				},
 			},
 			wantErr:   true,
-			errSubstr: "post_create hook[0]",
+			errSubstr: "hook[0]: timeout must be non-negative",
 			errType:   cerrors.ConfigValidation,
 		},
 	}
@@ -1725,6 +1725,10 @@ func TestExtractUnknownFields(t *testing.T) {
 			errMsg: "some other error without invalid keys",
 			want:   nil,
 		},
+		{
+			errMsg: "2 error(s) decoding:\n\n* '' has invalid keys: field1, field2\n* 'parallel_workers' expected type 'int', got unconvertible type 'string', value: 'bad'",
+			want:   []string{"field1", "field2"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1745,52 +1749,160 @@ func TestExtractUnknownFields(t *testing.T) {
 	}
 }
 
+func TestHandleUnmarshalErrorWithMixedErrors(t *testing.T) {
+	err := handleUnmarshalError(errors.New("2 error(s) decoding:\n\n* '' has invalid keys: field1, field2\n* 'parallel_workers' expected type 'int', got unconvertible type 'string', value: 'bad'"))
+
+	var canopyErr *cerrors.CanopyError
+	if !errors.As(err, &canopyErr) {
+		t.Fatalf("expected CanopyError, got %T", err)
+	}
+
+	if canopyErr.Code != cerrors.ErrConfigInvalid {
+		t.Fatalf("expected config invalid error, got %s", canopyErr.Code)
+	}
+
+	if !strings.Contains(canopyErr.Message, `unknown config field "field1"`) {
+		t.Fatalf("expected unknown field detail in message, got %q", canopyErr.Message)
+	}
+
+	if !strings.Contains(canopyErr.Message, "expected type 'int'") {
+		t.Fatalf("expected decode error detail in message, got %q", canopyErr.Message)
+	}
+}
+
+func TestGetGitRetryConfigFallsBackToDefaultsOnParseError(t *testing.T) {
+	cfg := Config{
+		Git: GitConfig{
+			Retry: GitRetrySettings{
+				MaxAttempts:  99,
+				InitialDelay: "not-a-duration",
+				MaxDelay:     "still-not-a-duration",
+				Multiplier:   9.0,
+				JitterFactor: 0.9,
+			},
+		},
+	}
+
+	got := cfg.GetGitRetryConfig()
+
+	if got != defaultPortGitRetryConfig {
+		t.Fatalf("GetGitRetryConfig() = %+v, want %+v", got, defaultPortGitRetryConfig)
+	}
+}
+
+func TestValidateTemplatesSortsTemplateNames(t *testing.T) {
+	cfg := Config{
+		Templates: map[string]Template{
+			"zeta":  {},
+			"alpha": {},
+		},
+	}
+
+	err := cfg.ValidateTemplates()
+	if err == nil {
+		t.Fatal("expected template validation error, got nil")
+	}
+
+	var canopyErr *cerrors.CanopyError
+	if !errors.As(err, &canopyErr) {
+		t.Fatalf("expected CanopyError, got %T", err)
+	}
+
+	if canopyErr.Context["field"] != "templates.alpha.repos" {
+		t.Fatalf("expected first validation error for sorted template name, got %q", canopyErr.Context["field"])
+	}
+}
+
+func TestValidatePatternsUsesCanonicalFieldPath(t *testing.T) {
+	cfg := Config{
+		Defaults: Defaults{
+			WorkspacePatterns: []WorkspacePattern{
+				{Pattern: "["},
+			},
+		},
+	}
+
+	err := cfg.validatePatterns()
+	if err == nil {
+		t.Fatal("expected pattern validation error, got nil")
+	}
+
+	var canopyErr *cerrors.CanopyError
+	if !errors.As(err, &canopyErr) {
+		t.Fatalf("expected CanopyError, got %T", err)
+	}
+
+	if canopyErr.Context["field"] != "defaults.workspace_patterns" {
+		t.Fatalf("expected canonical field path, got %q", canopyErr.Context["field"])
+	}
+}
+
+func TestValidateHookUsesCanonicalFieldPath(t *testing.T) {
+	err := validateHook(Hook{}, "hooks.post_create", 0)
+	if err == nil {
+		t.Fatal("expected hook validation error, got nil")
+	}
+
+	var canopyErr *cerrors.CanopyError
+	if !errors.As(err, &canopyErr) {
+		t.Fatalf("expected CanopyError, got %T", err)
+	}
+
+	if canopyErr.Context["field"] != "hooks.post_create" {
+		t.Fatalf("expected canonical hook field path, got %q", canopyErr.Context["field"])
+	}
+
+	if canopyErr.Context["detail"] != "hook[0]: command cannot be empty" {
+		t.Fatalf("expected indexed hook detail, got %q", canopyErr.Context["detail"])
+	}
+}
+
 // TestHookValidation tests hook field validation including shell validation
 func TestHookValidation(t *testing.T) {
 	tests := []struct {
 		name      string
 		hook      Hook
-		hookType  string
+		field     string
 		wantErr   bool
 		errSubstr string
 	}{
 		{
-			name:     "valid hook",
-			hook:     Hook{Command: "echo hello", Timeout: 30},
-			hookType: "post_create",
-			wantErr:  false,
+			name:    "valid hook",
+			hook:    Hook{Command: "echo hello", Timeout: 30},
+			field:   "hooks.post_create",
+			wantErr: false,
 		},
 		{
-			name:     "valid hook with shell",
-			hook:     Hook{Command: "echo hello", Shell: "/bin/bash"},
-			hookType: "post_create",
-			wantErr:  false,
+			name:    "valid hook with shell",
+			hook:    Hook{Command: "echo hello", Shell: "/bin/bash"},
+			field:   "hooks.post_create",
+			wantErr: false,
 		},
 		{
 			name:      "negative timeout rejected",
 			hook:      Hook{Command: "echo hello", Timeout: -5},
-			hookType:  "post_create",
+			field:     "hooks.post_create",
 			wantErr:   true,
 			errSubstr: "timeout must be non-negative",
 		},
 		{
 			name:      "whitespace-only shell rejected",
 			hook:      Hook{Command: "echo hello", Shell: "   "},
-			hookType:  "post_create",
+			field:     "hooks.post_create",
 			wantErr:   true,
 			errSubstr: "shell cannot be empty or whitespace-only",
 		},
 		{
-			name:     "empty shell is valid (uses default)",
-			hook:     Hook{Command: "echo hello", Shell: ""},
-			hookType: "post_create",
-			wantErr:  false,
+			name:    "empty shell is valid (uses default)",
+			hook:    Hook{Command: "echo hello", Shell: ""},
+			field:   "hooks.post_create",
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateHook(tt.hook, tt.hookType, 0)
+			err := validateHook(tt.hook, tt.field, 0)
 
 			if tt.wantErr {
 				if err == nil {
