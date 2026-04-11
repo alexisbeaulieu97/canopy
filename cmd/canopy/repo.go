@@ -596,10 +596,10 @@ func printRepoStatusesTable(statuses []domain.CanonicalRepoStatus) {
 		output.Column("WORKSPACES", output.RepoWorkspacesWidth, output.MutedStyle),
 	)
 	output.Printf("%s %s %s %s\n",
-		output.SeparatorLine(output.RepoNameWidth),
-		output.SeparatorLine(output.RepoSizeWidth),
-		output.SeparatorLine(output.RepoLastFetchWidth),
-		output.SeparatorLine(output.RepoWorkspacesWidth),
+		output.HorizontalRule(output.RepoNameWidth),
+		output.HorizontalRule(output.RepoSizeWidth),
+		output.HorizontalRule(output.RepoLastFetchWidth),
+		output.HorizontalRule(output.RepoWorkspacesWidth),
 	)
 
 	for _, s := range statuses {

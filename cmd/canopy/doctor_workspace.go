@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -132,14 +131,7 @@ func buildWorkspaceHealthReport(reports []domain.WorkspaceHealthReport) *Workspa
 // outputWorkspaceHealthReport writes the report to the given writer.
 func outputWorkspaceHealthReport(out io.Writer, report *WorkspaceHealthReport, jsonOutput bool) error {
 	if jsonOutput {
-		data, err := json.MarshalIndent(report, "", "  ")
-		if err != nil {
-			return err
-		}
-
-		_, _ = fmt.Fprintln(out, string(data))
-
-		return nil
+		return output.WriteIndentedJSON(out, report)
 	}
 
 	printWorkspaceHealthReport(out, report)
@@ -149,15 +141,11 @@ func outputWorkspaceHealthReport(out io.Writer, report *WorkspaceHealthReport, j
 
 // printWorkspaceHealthReport outputs the report in human-readable format.
 func printWorkspaceHealthReport(out io.Writer, report *WorkspaceHealthReport) {
-	_, _ = fmt.Fprintln(out, "Workspace Health Check")
-	_, _ = fmt.Fprintln(out, output.SeparatorLine(output.SeparatorWidth))
-	_, _ = fmt.Fprintln(out)
+	output.WriteReportHeader(out, "Workspace Health Check", output.SeparatorWidth)
 
 	if len(report.Workspaces) == 0 {
 		_, _ = fmt.Fprintln(out, "  No active workspaces found.")
-		_, _ = fmt.Fprintln(out)
-		_, _ = fmt.Fprintln(out, output.SeparatorLine(output.SeparatorWidth))
-		_, _ = fmt.Fprintf(out, "Summary: %s\n", report.Summary)
+		output.WriteReportSummary(out, report.Summary, output.SeparatorWidth)
 
 		return
 	}
@@ -166,8 +154,7 @@ func printWorkspaceHealthReport(out io.Writer, report *WorkspaceHealthReport) {
 		printWorkspaceReport(out, ws)
 	}
 
-	_, _ = fmt.Fprintln(out, output.SeparatorLine(output.SeparatorWidth))
-	_, _ = fmt.Fprintf(out, "Summary: %s\n", report.Summary)
+	output.WriteReportSummary(out, report.Summary, output.SeparatorWidth)
 }
 
 // printWorkspaceReport outputs a single workspace's health report.

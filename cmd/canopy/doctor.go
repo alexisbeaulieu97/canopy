@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -177,15 +176,10 @@ func calculateReportSummary(report *DoctorReport) {
 // outputDoctorReport writes the report to the given writer.
 func outputDoctorReport(out io.Writer, report *DoctorReport, jsonOutput bool) error {
 	if jsonOutput {
-		data, err := json.MarshalIndent(report, "", "  ")
-		if err != nil {
-			return err
-		}
-
-		_, _ = fmt.Fprintln(out, string(data))
-	} else {
-		printHumanReport(out, report)
+		return output.WriteIndentedJSON(out, report)
 	}
+
+	printHumanReport(out, report)
 
 	return nil
 }
@@ -193,9 +187,7 @@ func outputDoctorReport(out io.Writer, report *DoctorReport, jsonOutput bool) er
 // printHumanReport outputs the doctor report in human-readable format.
 // Write errors are intentionally ignored as this is CLI output with no recovery path.
 func printHumanReport(out io.Writer, report *DoctorReport) {
-	_, _ = fmt.Fprintln(out, "Canopy Doctor")
-	_, _ = fmt.Fprintln(out, output.SeparatorLine(output.SeparatorWidth))
-	_, _ = fmt.Fprintln(out)
+	output.WriteReportHeader(out, "Canopy Doctor", output.SeparatorWidth)
 
 	for _, c := range report.Checks {
 		style := severityStyle(c.Severity)
@@ -213,9 +205,7 @@ func printHumanReport(out io.Writer, report *DoctorReport) {
 		}
 	}
 
-	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintln(out, output.SeparatorLine(output.SeparatorWidth))
-	_, _ = fmt.Fprintf(out, "Summary: %s\n", report.Summary)
+	output.WriteReportSummary(out, report.Summary, output.SeparatorWidth)
 }
 
 // loadConfigForDoctor attempts to load config without failing on missing files.

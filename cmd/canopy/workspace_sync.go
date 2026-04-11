@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -167,7 +165,7 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 				if res.Err != nil {
 					icon = icons.Error()
 					style = output.ErrorStyle
-					errDetail := sanitizeErrorForDisplay(res.Err.Error())
+					errDetail := output.SanitizeInlineMessage(res.Err.Error(), 50)
 					statusText = "error: " + errDetail
 				} else if res.Value != nil {
 					if res.Value.TotalErrors > 0 {
@@ -183,8 +181,7 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 					}
 				}
 
-				coloredIcon := output.Colorize(style, icon)
-				_, _ = fmt.Fprintf(os.Stdout, "%s %-20s %s\n", coloredIcon, res.ID, statusText) //nolint:forbidigo // user-facing CLI output
+				output.Println(output.FormatStatusRow(res.ID, 20, statusText, style, icon))
 			}
 
 			// Summary
@@ -203,12 +200,15 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 				summaryParts = append(summaryParts, output.Colorize(output.ErrorStyle, fmt.Sprintf("%d failed", failed)))
 			}
 
-			successIcon := output.Colorize(output.SuccessStyle, icons.Success())
+			summaryStyle := output.SuccessStyle
+			summaryIcon := icons.Success()
+
 			if failed > 0 {
-				successIcon = output.Colorize(output.WarningStyle, icons.Warning())
+				summaryStyle = output.WarningStyle
+				summaryIcon = icons.Warning()
 			}
 
-			_, _ = fmt.Fprintf(os.Stdout, "%s Bulk sync complete: %s\n", successIcon, strings.Join(summaryParts, ", ")) //nolint:forbidigo // user-facing CLI output
+			output.Println(output.FormatStatusSummary("Bulk sync complete", summaryParts, summaryStyle, summaryIcon))
 
 			if failed > 0 {
 				return cerrors.NewCommandFailed("sync", fmt.Errorf("%d workspaces failed", failed))
@@ -298,7 +298,7 @@ func renderSyncResult(workspaceID string, result *domain.SyncResult) {
 			style = output.ErrorStyle
 		case domain.SyncStatusError:
 			icon = icons.Error()
-			errDetail := sanitizeErrorForDisplay(r.Error)
+			errDetail := output.SanitizeInlineMessage(r.Error, 50)
 			statusText = "error: " + errDetail
 			style = output.ErrorStyle
 		default:
@@ -306,8 +306,7 @@ func renderSyncResult(workspaceID string, result *domain.SyncResult) {
 			statusText = string(r.Status)
 		}
 
-		coloredIcon := output.Colorize(style, icon)
-		_, _ = fmt.Fprintf(os.Stdout, "%s %-20s %s\n", coloredIcon, r.Name, statusText) //nolint:forbidigo // user-facing CLI output
+		output.Println(output.FormatStatusRow(r.Name, 20, statusText, style, icon))
 	}
 
 	// Print summary
@@ -326,23 +325,13 @@ func renderSyncResult(workspaceID string, result *domain.SyncResult) {
 		summaryParts = append(summaryParts, output.Colorize(output.ErrorStyle, fmt.Sprintf("%d failed", result.TotalErrors)))
 	}
 
-	successIcon := output.Colorize(output.SuccessStyle, icons.Success())
+	summaryStyle := output.SuccessStyle
+	summaryIcon := icons.Success()
+
 	if result.TotalErrors > 0 {
-		successIcon = output.Colorize(output.WarningStyle, icons.Warning())
+		summaryStyle = output.WarningStyle
+		summaryIcon = icons.Warning()
 	}
 
-	_, _ = fmt.Fprintf(os.Stdout, "%s Sync complete: %s\n", successIcon, strings.Join(summaryParts, ", ")) //nolint:forbidigo // user-facing CLI output
-}
-
-func sanitizeErrorForDisplay(errText string) string {
-	errText = strings.ReplaceAll(errText, "\n", " ")
-	errText = strings.ReplaceAll(errText, "\r", " ")
-	errText = strings.ReplaceAll(errText, "\t", " ")
-
-	runes := []rune(errText)
-	if len(runes) > 50 {
-		errText = string(runes[:47]) + "..."
-	}
-
-	return errText
+	output.Println(output.FormatStatusSummary("Sync complete", summaryParts, summaryStyle, summaryIcon))
 }

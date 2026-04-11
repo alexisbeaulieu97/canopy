@@ -49,9 +49,11 @@ func TestColumnTruncation(t *testing.T) {
 	}
 }
 
-func TestSeparatorLine(t *testing.T) {
-	line := SeparatorLine(4)
-	if line != "────" {
-		t.Fatalf("unexpected separator line: %q", line)
+func TestHorizontalRule(t *testing.T) {
+	t.Setenv("CANOPY_COLOR", "0")
+
+	line := HorizontalRule(4)
+	if line != "----" {
+		t.Fatalf("unexpected horizontal rule: %q", line)
 	}
 }
