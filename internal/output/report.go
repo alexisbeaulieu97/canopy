@@ -44,9 +44,7 @@ func FormatStatusSummary(label string, parts []string, style lipgloss.Style, ico
 
 // SanitizeInlineMessage collapses whitespace and truncates long inline messages.
 func SanitizeInlineMessage(text string, maxRunes int) string {
-	text = strings.ReplaceAll(text, "\n", " ")
-	text = strings.ReplaceAll(text, "\r", " ")
-	text = strings.ReplaceAll(text, "\t", " ")
+	text = strings.Join(strings.Fields(text), " ")
 
 	if maxRunes <= 0 {
 		return text

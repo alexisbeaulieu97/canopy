@@ -28,6 +28,10 @@ func printRepoRemovePreview(preview *domain.RepoRemovePreview) {
 }
 
 func printSingleRepoStatus(status *domain.CanonicalRepoStatus) {
+	if status == nil {
+		return
+	}
+
 	output.Infof("Repository:    %s", status.Name)
 	output.Infof("Path:          %s", status.Path)
 	output.Infof("Size:          %s", output.FormatBytes(status.DiskUsageBytes))

@@ -33,6 +33,10 @@ func parseTags(raw string) []string {
 }
 
 func registerWithPrompt(cmd *cobra.Command, registry ports.RepoRegistry, alias string, entry ports.RegistryEntry, logger rollbackLogger) (string, error) {
+	if cmd == nil {
+		return "", cerrors.NewInvalidArgument("cmd", "command is required")
+	}
+
 	if registry == nil {
 		return alias, cerrors.NewConfigInvalid("registry not configured")
 	}

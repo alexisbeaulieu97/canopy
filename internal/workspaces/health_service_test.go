@@ -441,6 +441,52 @@ func TestWorkspaceHealthService_CheckGitConfig(t *testing.T) {
 	}
 }
 
+func TestWorkspaceHealthService_CheckGitConfig_LinkedWorktreeUsesCanonicalConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	worktreePath := filepath.Join(tmpDir, "repo1")
+	gitFilePath := filepath.Join(worktreePath, ".git")
+	gitdirPath := filepath.Join(tmpDir, "canonical", ".git", "worktrees", "repo1")
+	canonicalConfigPath := filepath.Join(tmpDir, "canonical", ".git", "config")
+
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("failed to create worktree directory: %v", err)
+	}
+
+	if err := os.MkdirAll(gitdirPath, 0o755); err != nil {
+		t.Fatalf("failed to create worktree gitdir: %v", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(canonicalConfigPath), 0o755); err != nil {
+		t.Fatalf("failed to create canonical git directory: %v", err)
+	}
+
+	if err := os.WriteFile(gitFilePath, []byte("gitdir: "+gitdirPath), 0o644); err != nil {
+		t.Fatalf("failed to write .git file: %v", err)
+	}
+
+	configContent := `[core]
+	repositoryformatversion = 0
+[remote "origin"]
+	url = https://github.com/example/repo.git
+`
+	if err := os.WriteFile(canonicalConfigPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write canonical config file: %v", err)
+	}
+
+	svc := NewHealthService(nil, nil, nil, nil, nil)
+	checks := svc.checkGitConfig("repo1", worktreePath)
+
+	if len(checks) == 0 {
+		t.Fatalf("checkGitConfig() returned no checks")
+	}
+
+	if checks[0].Status != domain.HealthStatusHealthy {
+		t.Fatalf("checkGitConfig() status = %v, want %v", checks[0].Status, domain.HealthStatusHealthy)
+	}
+}
+
 func TestWorkspaceHealthService_CheckRemoteURLValidity(t *testing.T) {
 	t.Parallel()
 

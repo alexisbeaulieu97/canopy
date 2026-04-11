@@ -41,7 +41,7 @@ func (s *WorkspaceHealthService) checkGitConfig(repoName, worktreePath string) [
 			return checks
 		}
 
-		configPath = filepath.Join(gitdirPath, "config")
+		configPath = resolveGitConfigPath(gitdirPath)
 	}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) { //nolint:gosec // G703: configPath derived from trusted .git worktree link file
@@ -107,13 +107,7 @@ func (s *WorkspaceHealthService) checkRemoteURLValidity(repoName, worktreePath s
 		gitdirPath := strings.TrimSpace(strings.TrimPrefix(gitdirLine, "gitdir:"))
 		gitdirPath = resolveGitdirPath(gitdirPath, worktreePath)
 
-		parentDir := filepath.Dir(gitdirPath)
-		if filepath.Base(parentDir) == "worktrees" {
-			canonicalGitDir := filepath.Dir(parentDir)
-			configPath = filepath.Join(canonicalGitDir, "config")
-		} else {
-			configPath = filepath.Join(gitdirPath, "config")
-		}
+		configPath = resolveGitConfigPath(gitdirPath)
 	}
 
 	remoteURL, err := parseRemoteURL(configPath)
@@ -225,6 +219,15 @@ func isValidRemoteURL(rawURL string) bool {
 	}
 
 	return true
+}
+
+func resolveGitConfigPath(gitdirPath string) string {
+	parentDir := filepath.Dir(gitdirPath)
+	if filepath.Base(parentDir) == "worktrees" {
+		return filepath.Join(filepath.Dir(parentDir), "config")
+	}
+
+	return filepath.Join(gitdirPath, "config")
 }
 
 func trimMatchingQuotes(value string) string {

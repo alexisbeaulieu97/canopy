@@ -51,6 +51,7 @@ func TestColumnTruncation(t *testing.T) {
 
 func TestHorizontalRule(t *testing.T) {
 	t.Setenv("CANOPY_COLOR", "0")
+	t.Setenv("CANOPY_UNICODE", "0")
 
 	line := HorizontalRule(4)
 	if line != "----" {
