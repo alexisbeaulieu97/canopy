@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
@@ -73,18 +73,23 @@ var workspaceNewCmd = &cobra.Command{
 			}
 
 			output.Success("Ran post_create hooks for workspace", id)
+
 			return nil
 		}
 
-		var templateRepos []string
-		var templatePtr *config.Template
+		var (
+			templateRepos []string
+			templatePtr   *ports.WorkspaceTemplate
+		)
 
 		if templateName != "" {
 			template, err := cfg.ResolveTemplate(templateName)
 			if err != nil {
 				return err
 			}
+
 			templateRepos = template.Repos
+
 			templatePtr = &template
 			if branch == "" && template.DefaultBranch != "" {
 				branch = template.DefaultBranch
@@ -93,6 +98,7 @@ var workspaceNewCmd = &cobra.Command{
 
 		// Resolve repos.
 		var resolvedRepos []domain.Repo
+
 		mergedRepos := mergeTemplateRepos(templateRepos, repos)
 		if len(mergedRepos) > 0 {
 			resolvedRepos, err = service.ResolveRepos(id, mergedRepos)
@@ -147,6 +153,7 @@ var workspaceNewCmd = &cobra.Command{
 		} else {
 			output.SuccessWithPath("Created workspace", id, workspacePath)
 		}
+
 		return nil
 	},
 }

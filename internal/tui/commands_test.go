@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
 func TestLoadWorkspaces_Success(t *testing.T) {
@@ -145,10 +146,10 @@ func TestLoadWorkspaceDetails_Success(t *testing.T) {
 		return nil, nil
 	}
 
-	model.workspaces.SetItems([]workspaceItem{
+	model.workspaces.SetItems([]components.WorkspaceItem{
 		{
 			Workspace: workspace,
-			Summary:   workspaceSummary{RepoCount: 0},
+			Summary:   components.WorkspaceSummary{RepoCount: 0},
 		},
 	}, 0)
 

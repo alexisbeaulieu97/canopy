@@ -23,6 +23,7 @@ var workspaceCloseCmd = &cobra.Command{
 	Short: "Close a workspace (keep metadata or delete)",
 	Args: func(cmd *cobra.Command, args []string) error {
 		pattern, _ := cmd.Flags().GetString("pattern")
+
 		all, _ := cmd.Flags().GetBool("all")
 		if all && pattern != "" {
 			return cerrors.NewInvalidArgument("pattern", "cannot use --pattern with --all")
@@ -104,25 +105,17 @@ var workspaceCloseCmd = &cobra.Command{
 				keepMetadata = false
 			}
 
-			matched, err := service.ListWorkspacesMatching(cmd.Context(), pattern)
+			ids, err := resolveBulkWorkspaceIDs(cmd.Context(), service, pattern)
 			if err != nil {
 				return err
 			}
 
-			if len(matched) == 0 {
+			if len(ids) == 0 {
 				output.Info("No matching workspaces found.")
 				return nil
 			}
 
-			ids := make([]string, len(matched))
-			for i, ws := range matched {
-				ids[i] = ws.ID
-			}
-
-			output.Infof("Matched %d workspaces:", len(ids))
-			for _, id := range ids {
-				output.Infof("  - %s", id)
-			}
+			printMatchedWorkspaceIDs(ids)
 
 			if dryRun {
 				previews := make([]*domain.WorkspaceClosePreview, 0, len(ids))
@@ -131,6 +124,7 @@ var workspaceCloseCmd = &cobra.Command{
 					if previewErr != nil {
 						return previewErr
 					}
+
 					previews = append(previews, preview)
 				}
 
@@ -149,100 +143,40 @@ var workspaceCloseCmd = &cobra.Command{
 				return nil
 			}
 
-			if !force {
-				if !interactive {
-					return cerrors.NewInvalidArgument("force", "bulk close requires confirmation; rerun with --force")
-				}
-
-				reader := bufio.NewReader(os.Stdin)
-				output.Printf("Close %d workspaces? [y/N]: ", len(ids))
-				answer, readErr := reader.ReadString('\n')
-				if readErr != nil {
-					return cerrors.NewOperationCancelled("bulk close")
-				}
-
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "y" && answer != "yes" {
-					return cerrors.NewOperationCancelled("bulk close")
-				}
+			if err := confirmBulkWorkspaceAction(force, interactive, len(ids), "Bulk close"); err != nil {
+				return err
 			}
 
-			var (
-				successIDs []string
-				failedIDs  []string
-				firstErr   error
-			)
-
-			// Set up progress tracking
-			showProgress := !noProgress && !jsonOutput
-			var progress *output.Progress
-			if showProgress {
-				progressOpts := output.DefaultProgressOptions(len(ids))
-				progress = output.NewProgress(progressOpts)
-			}
-
-			cancelled := false
-			for i, id := range ids {
-				// Check for context cancellation
-				if cmd.Context().Err() != nil {
-					if !cancelled {
-						cancelled = true
-						if progress != nil {
-							progress.Cancel()
-						}
-					}
-
-					break
-				}
-
-				if showProgress {
-					progress.SetMessage(id)
-				} else {
-					output.Infof("Closing workspace %s (%d/%d)", id, i+1, len(ids))
-				}
-
-				if keepMetadata {
-					_, err = service.CloseWorkspaceKeepMetadataWithOptions(cmd.Context(), id, force, closeOpts)
-				} else {
-					err = service.CloseWorkspaceWithOptions(cmd.Context(), id, force, closeOpts)
-				}
-
-				if err != nil {
-					if firstErr == nil {
-						firstErr = err
-					}
-					failedIDs = append(failedIDs, id)
-
-					// Always log the error for visibility
+			report := runBulkWorkspaceOperations(cmd.Context(), ids, bulkWorkspaceRunOptions[struct{}]{
+				Parallelism:  1,
+				ShowProgress: !noProgress && !jsonOutput,
+				OnStart: func(id string, current, total int) {
+					output.Infof("Closing workspace %s (%d/%d)", id, current, total)
+				},
+				OnFailure: func(id string, _, _ int, err error) {
 					output.Warnf("Failed to close workspace %s: %v", id, err)
-					if showProgress {
-						progress.Increment(fmt.Sprintf("%s (failed)", id))
-					}
-
-					continue
+				},
+			}, func(ctx context.Context, id string) (struct{}, error) {
+				if keepMetadata {
+					_, err := service.CloseWorkspaceKeepMetadataWithOptions(ctx, id, force, closeOpts)
+					return struct{}{}, err
 				}
 
-				successIDs = append(successIDs, id)
-				if showProgress {
-					progress.Increment(id)
-				}
-			}
+				return struct{}{}, service.CloseWorkspaceWithOptions(ctx, id, force, closeOpts)
+			})
 
-			if progress != nil {
-				progress.Finish()
-			}
+			if report.Cancelled {
+				skipped := len(ids) - len(report.SuccessIDs) - len(report.FailedIDs)
+				output.Warnf("Bulk close cancelled: %d succeeded, %d failed, %d skipped", len(report.SuccessIDs), len(report.FailedIDs), skipped)
 
-			// Handle cancellation
-			if cancelled {
-				skipped := len(ids) - len(successIDs) - len(failedIDs)
-				output.Warnf("Bulk close cancelled: %d succeeded, %d failed, %d skipped", len(successIDs), len(failedIDs), skipped)
 				return cerrors.NewOperationCancelled("bulk close")
 			}
 
-			output.Success("Bulk close completed", fmt.Sprintf("%d succeeded, %d failed", len(successIDs), len(failedIDs)))
-			if len(failedIDs) > 0 {
-				output.Warnf("Failed workspaces: %s", strings.Join(failedIDs, ", "))
-				return cerrors.NewCommandFailed("bulk close", firstErr)
+			output.Success("Bulk close completed", fmt.Sprintf("%d succeeded, %d failed", len(report.SuccessIDs), len(report.FailedIDs)))
+
+			if len(report.FailedIDs) > 0 {
+				output.Warnf("Failed workspaces: %s", strings.Join(report.FailedIDs, ", "))
+				return cerrors.NewCommandFailed("bulk close", report.FirstErr)
 			}
 
 			return nil
@@ -268,6 +202,7 @@ var workspaceCloseCmd = &cobra.Command{
 			}
 
 			output.Success("Ran pre_close hooks for workspace", id)
+
 			return nil
 		}
 
@@ -302,6 +237,7 @@ var workspaceCloseCmd = &cobra.Command{
 			}
 
 			printWorkspaceClosePreview(preview)
+
 			return nil
 		}
 
@@ -342,6 +278,7 @@ var workspaceCloseCmd = &cobra.Command{
 		}
 
 		reader := bufio.NewReader(os.Stdin)
+
 		promptSuffix := "[y/N]"
 		if configDefaultArchive {
 			promptSuffix = "[Y/n]"

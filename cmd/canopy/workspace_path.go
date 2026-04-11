@@ -33,6 +33,7 @@ var workspacePathCmd = &cobra.Command{
 		}
 
 		output.Println(path)
+
 		return nil
 	},
 }

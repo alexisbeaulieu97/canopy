@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
@@ -22,8 +21,6 @@ const (
 )
 
 // RunHooks executes lifecycle hooks for an existing workspace without performing other actions.
-//
-//nolint:contextcheck // Hooks manage their own timeout context per-hook
 func (s *Service) RunHooks(ctx context.Context, workspaceID string, phase HookPhase, continueOnError bool) error {
 	workspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -32,7 +29,7 @@ func (s *Service) RunHooks(ctx context.Context, workspaceID string, phase HookPh
 
 	hooksConfig := s.config.GetHooks()
 
-	var selected []config.Hook
+	var selected []ports.HookSpec
 
 	switch phase {
 	case HookPhasePostCreate:
@@ -54,7 +51,7 @@ func (s *Service) RunHooks(ctx context.Context, workspaceID string, phase HookPh
 		Repos:         workspace.Repos,
 	}
 
-	if _, err := s.hookExecutor.ExecuteHooks(selected, hookCtx, ports.HookExecuteOptions{
+	if _, err := s.hookExecutor.ExecuteHooks(ctx, selected, hookCtx, ports.HookExecuteOptions{
 		ContinueOnError: continueOnError,
 	}); err != nil {
 		if s.logger != nil {
@@ -70,8 +67,6 @@ func (s *Service) RunHooks(ctx context.Context, workspaceID string, phase HookPh
 }
 
 // PreviewHooks returns a dry-run preview of lifecycle hooks for an existing workspace.
-//
-//nolint:contextcheck // Hooks manage their own timeout context per-hook
 func (s *Service) PreviewHooks(ctx context.Context, workspaceID string, phase HookPhase) ([]domain.HookCommandPreview, error) {
 	workspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -80,7 +75,7 @@ func (s *Service) PreviewHooks(ctx context.Context, workspaceID string, phase Ho
 
 	hooksConfig := s.config.GetHooks()
 
-	var selected []config.Hook
+	var selected []ports.HookSpec
 
 	switch phase {
 	case HookPhasePostCreate:
@@ -102,7 +97,7 @@ func (s *Service) PreviewHooks(ctx context.Context, workspaceID string, phase Ho
 		Repos:         workspace.Repos,
 	}
 
-	previews, err := s.hookExecutor.ExecuteHooks(selected, hookCtx, ports.HookExecuteOptions{
+	previews, err := s.hookExecutor.ExecuteHooks(ctx, selected, hookCtx, ports.HookExecuteOptions{
 		DryRun: true,
 	})
 	if err != nil {

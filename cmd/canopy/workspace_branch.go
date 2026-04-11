@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -17,6 +18,7 @@ var workspaceBranchCmd = &cobra.Command{
 	Short: "Switch branch for all repositories in a workspace",
 	Args: func(cmd *cobra.Command, args []string) error {
 		pattern, _ := cmd.Flags().GetString("pattern")
+
 		all, _ := cmd.Flags().GetBool("all")
 		if all && pattern != "" {
 			return cerrors.NewInvalidArgument("pattern", "cannot use --pattern with --all")
@@ -54,50 +56,36 @@ var workspaceBranchCmd = &cobra.Command{
 
 		if pattern != "" {
 			branchName := args[0]
-			matched, err := service.ListWorkspacesMatching(cmd.Context(), pattern)
+
+			ids, err := resolveBulkWorkspaceIDs(cmd.Context(), service, pattern)
 			if err != nil {
 				return err
 			}
 
-			if len(matched) == 0 {
+			if len(ids) == 0 {
 				output.Info("No matching workspaces found.")
 				return nil
 			}
 
-			ids := make([]string, len(matched))
-			for i, ws := range matched {
-				ids[i] = ws.ID
-			}
+			printMatchedWorkspaceIDs(ids)
 
-			output.Infof("Matched %d workspaces:", len(ids))
-			for _, id := range ids {
-				output.Infof("  - %s", id)
-			}
-
-			var (
-				successIDs []string
-				failedIDs  []string
-				firstErr   error
-			)
-
-			for i, id := range ids {
-				output.Infof("Switching workspace %s (%d/%d)", id, i+1, len(ids))
-				if err := service.SwitchBranch(cmd.Context(), id, branchName, create); err != nil {
-					if firstErr == nil {
-						firstErr = err
-					}
-					failedIDs = append(failedIDs, id)
+			report := runBulkWorkspaceOperations(cmd.Context(), ids, bulkWorkspaceRunOptions[struct{}]{
+				Parallelism: 1,
+				OnStart: func(id string, current, total int) {
+					output.Infof("Switching workspace %s (%d/%d)", id, current, total)
+				},
+				OnFailure: func(id string, _, _ int, err error) {
 					output.Warnf("Failed to switch workspace %s: %v", id, err)
-					continue
-				}
+				},
+			}, func(ctx context.Context, id string) (struct{}, error) {
+				return struct{}{}, service.SwitchBranch(ctx, id, branchName, create)
+			})
 
-				successIDs = append(successIDs, id)
-			}
+			output.Success("Bulk branch switch completed", fmt.Sprintf("%d succeeded, %d failed", len(report.SuccessIDs), len(report.FailedIDs)))
 
-			output.Success("Bulk branch switch completed", fmt.Sprintf("%d succeeded, %d failed", len(successIDs), len(failedIDs)))
-			if len(failedIDs) > 0 {
-				output.Warnf("Failed workspaces: %s", strings.Join(failedIDs, ", "))
-				return cerrors.NewCommandFailed("branch", firstErr)
+			if len(report.FailedIDs) > 0 {
+				output.Warnf("Failed workspaces: %s", strings.Join(report.FailedIDs, ", "))
+				return cerrors.NewCommandFailed("branch", report.FirstErr)
 			}
 
 			return nil
@@ -111,6 +99,7 @@ var workspaceBranchCmd = &cobra.Command{
 		}
 
 		output.Infof("Switched workspace %s to branch %s", id, branchName)
+
 		return nil
 	},
 }

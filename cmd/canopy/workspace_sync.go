@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -25,6 +25,7 @@ Per-repository timeouts can be configured to prevent slow remotes from blocking 
 Bulk sync continues across workspaces and exits non-zero if any workspace fails.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		pattern, _ := cmd.Flags().GetString("pattern")
+
 		all, _ := cmd.Flags().GetBool("all")
 		if all && pattern != "" {
 			return cerrors.NewInvalidArgument("pattern", "cannot use --pattern with --all")
@@ -52,8 +53,10 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 		noProgress, _ := cmd.Flags().GetBool("no-progress")
 
 		var timeout time.Duration
+
 		if timeoutStr != "" {
 			var err error
+
 			timeout, err = time.ParseDuration(timeoutStr)
 			if err != nil {
 				return cerrors.NewInvalidArgument("timeout", fmt.Sprintf("invalid duration: %v", err))
@@ -74,168 +77,106 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 		}
 
 		if pattern != "" {
-			matched, err := app.Service.ListWorkspacesMatching(cmd.Context(), pattern)
+			ids, err := resolveBulkWorkspaceIDs(cmd.Context(), app.Service, pattern)
 			if err != nil {
 				return err
 			}
 
-			if len(matched) == 0 {
+			if len(ids) == 0 {
+				if jsonOutput {
+					return output.PrintJSON([]map[string]any{})
+				}
+
 				output.Info("No matching workspaces found.")
+
 				return nil
 			}
 
-			ids := make([]string, len(matched))
-			for i, ws := range matched {
-				ids[i] = ws.ID
+			if !jsonOutput {
+				printMatchedWorkspaceIDs(ids)
 			}
-
-			output.Infof("Matched %d workspaces:", len(ids))
-			for _, id := range ids {
-				output.Infof("  - %s", id)
-			}
-
-			type syncJob struct {
-				index int
-				id    string
-			}
-			type syncResult struct {
-				index  int
-				id     string
-				result *domain.SyncResult
-				err    error
-			}
-
-			jobs := make(chan syncJob, len(ids))
-			results := make(chan syncResult, len(ids))
-
-			for i, id := range ids {
-				jobs <- syncJob{index: i, id: id}
-			}
-			close(jobs)
 
 			numWorkers := app.Config.GetParallelWorkers()
 			if numWorkers <= 0 {
 				numWorkers = 1
 			}
-			if numWorkers > len(ids) {
-				numWorkers = len(ids)
-			}
 
-			var wg sync.WaitGroup
-			for w := 0; w < numWorkers; w++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					for job := range jobs {
-						result, syncErr := app.Service.SyncWorkspace(cmd.Context(), job.id, opts)
-						results <- syncResult{
-							index:  job.index,
-							id:     job.id,
-							result: result,
-							err:    syncErr,
-						}
+			report := runBulkWorkspaceOperations(cmd.Context(), ids, bulkWorkspaceRunOptions[*domain.SyncResult]{
+				Parallelism:  numWorkers,
+				ShowProgress: !noProgress && !jsonOutput,
+				OnSuccess: func(id string, current, total int, _ *domain.SyncResult) {
+					if !jsonOutput {
+						output.Infof("Synced workspace %s (%d/%d)", id, current, total)
 					}
-				}()
-			}
-
-			go func() {
-				wg.Wait()
-				close(results)
-			}()
-
-			// Set up progress tracking
-			showProgress := !noProgress && !jsonOutput
-			var progress *output.Progress
-			if showProgress {
-				progressOpts := output.DefaultProgressOptions(len(ids))
-				progress = output.NewProgress(progressOpts)
-			}
-
-			orderedResults := make([]syncResult, len(ids))
-			cancelled := false
-			done := 0
-			for res := range results {
-				// Check for context cancellation
-				if cmd.Context().Err() != nil && !cancelled {
-					cancelled = true
-					if progress != nil {
-						progress.Cancel()
+				},
+				OnFailure: func(id string, current, total int, err error) {
+					if !jsonOutput {
+						output.Warnf("Workspace %s sync failed (%d/%d): %v", id, current, total, err)
 					}
+				},
+			}, func(ctx context.Context, id string) (*domain.SyncResult, error) {
+				return app.Service.SyncWorkspace(ctx, id, opts)
+			})
+
+			if report.Cancelled {
+				if !jsonOutput {
+					output.Warnf("Bulk sync cancelled")
 				}
 
-				done++
-				orderedResults[res.index] = res
-
-				// Always log errors for visibility
-				if res.err != nil {
-					output.Warnf("Workspace %s sync failed (%d/%d): %v", res.id, done, len(ids), res.err)
-				}
-
-				if showProgress && !cancelled {
-					if res.err != nil {
-						progress.Increment(fmt.Sprintf("%s (failed)", res.id))
-					} else {
-						progress.Increment(res.id)
-					}
-				} else if res.err == nil {
-					// Log success when progress is off or after cancellation
-					output.Infof("Synced workspace %s (%d/%d)", res.id, done, len(ids))
-				}
-			}
-
-			if progress != nil {
-				progress.Finish()
-			}
-
-			// Handle cancellation
-			if cancelled {
-				output.Warnf("Bulk sync cancelled")
 				return cerrors.NewOperationCancelled("bulk sync")
 			}
 
+			failed, totalUpdated := summarizeBulkSyncReport(report.Results)
 			if jsonOutput {
-				payload := make([]map[string]interface{}, 0, len(orderedResults))
-				for _, res := range orderedResults {
+				payload := make([]map[string]any, 0, len(report.Results))
+				for _, res := range report.Results {
 					errText := ""
-					if res.err != nil {
-						errText = res.err.Error()
+					if res.Err != nil {
+						errText = res.Err.Error()
 					}
+
 					payload = append(payload, map[string]interface{}{
-						"workspace_id": res.id,
-						"result":       res.result,
+						"workspace_id": res.ID,
+						"result":       res.Value,
 						"error":        errText,
 					})
 				}
-				return output.PrintJSON(payload)
+
+				if err := output.PrintJSON(payload); err != nil {
+					return err
+				}
+
+				if failed > 0 {
+					return cerrors.NewCommandFailed("sync", fmt.Errorf("%d workspaces failed", failed))
+				}
+
+				return nil
 			}
 
 			// Render bulk sync results
 			output.Println("")
+
 			icons := output.NewIcons()
 
-			var failed int
-			var totalUpdated int
-			for _, res := range orderedResults {
+			for _, res := range report.Results {
 				var icon string
+
 				style := output.SuccessStyle
 				statusText := ""
 
-				if res.err != nil {
+				if res.Err != nil {
 					icon = icons.Error()
 					style = output.ErrorStyle
-					errDetail := sanitizeErrorForDisplay(res.err.Error())
+					errDetail := sanitizeErrorForDisplay(res.Err.Error())
 					statusText = "error: " + errDetail
-					failed++
-				} else if res.result != nil {
-					totalUpdated += res.result.TotalUpdated
-					if res.result.TotalErrors > 0 {
+				} else if res.Value != nil {
+					if res.Value.TotalErrors > 0 {
 						icon = icons.Warning()
 						style = output.WarningStyle
-						statusText = fmt.Sprintf("partial: %d updated, %d errors", res.result.TotalUpdated, res.result.TotalErrors)
-						failed++
-					} else if res.result.TotalUpdated > 0 {
+						statusText = fmt.Sprintf("partial: %d updated, %d errors", res.Value.TotalUpdated, res.Value.TotalErrors)
+					} else if res.Value.TotalUpdated > 0 {
 						icon = icons.Success()
-						statusText = fmt.Sprintf("pulled %d commits", res.result.TotalUpdated)
+						statusText = fmt.Sprintf("pulled %d commits", res.Value.TotalUpdated)
 					} else {
 						icon = icons.Success()
 						statusText = "already up-to-date"
@@ -243,7 +184,7 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 				}
 
 				coloredIcon := output.Colorize(style, icon)
-				_, _ = fmt.Fprintf(os.Stdout, "%s %-20s %s\n", coloredIcon, res.id, statusText) //nolint:forbidigo // user-facing CLI output
+				_, _ = fmt.Fprintf(os.Stdout, "%s %-20s %s\n", coloredIcon, res.ID, statusText) //nolint:forbidigo // user-facing CLI output
 			}
 
 			// Summary
@@ -277,6 +218,7 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 		}
 
 		id := args[0]
+
 		result, err := app.Service.SyncWorkspace(cmd.Context(), id, opts)
 		if err != nil {
 			return err
@@ -304,6 +246,26 @@ func init() {
 	workspaceSyncCmd.Flags().String("pattern", "", "Sync workspaces matching a regex pattern")
 	workspaceSyncCmd.Flags().Bool("all", false, "Sync all workspaces (equivalent to --pattern \".*\")")
 	workspaceSyncCmd.Flags().Bool("no-progress", false, "Disable progress indicators")
+}
+
+func summarizeBulkSyncReport(results []bulkWorkspaceResult[*domain.SyncResult]) (failed, totalUpdated int) {
+	for _, res := range results {
+		if res.Err != nil {
+			failed++
+			continue
+		}
+
+		if res.Value == nil {
+			continue
+		}
+
+		totalUpdated += res.Value.TotalUpdated
+		if res.Value.TotalErrors > 0 {
+			failed++
+		}
+	}
+
+	return failed, totalUpdated
 }
 
 func renderSyncResult(workspaceID string, result *domain.SyncResult) {

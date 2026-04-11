@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
 func TestToggleWorkspaceSelectionUpdatesItems(t *testing.T) {
@@ -15,7 +16,7 @@ func TestToggleWorkspaceSelectionUpdatesItems(t *testing.T) {
 
 	ws1 := domain.Workspace{ID: "ws-1"}
 	ws2 := domain.Workspace{ID: "ws-2"}
-	items := []workspaceItem{
+	items := []components.WorkspaceItem{
 		{Workspace: ws1},
 		{Workspace: ws2},
 	}
@@ -34,7 +35,7 @@ func TestToggleWorkspaceSelectionUpdatesItems(t *testing.T) {
 		t.Fatal("expected workspace item to be marked selected")
 	}
 
-	listItem := model.ui.List.Items()[0].(workspaceItem)
+	listItem := model.ui.List.Items()[0].(components.WorkspaceItem)
 	if !listItem.Selected {
 		t.Fatal("expected list item to be marked selected")
 	}
@@ -47,7 +48,7 @@ func TestSelectAllAndClearSelection(t *testing.T) {
 
 	ws1 := domain.Workspace{ID: "ws-1"}
 	ws2 := domain.Workspace{ID: "ws-2"}
-	items := []workspaceItem{
+	items := []components.WorkspaceItem{
 		{Workspace: ws1},
 		{Workspace: ws2},
 	}
@@ -75,7 +76,7 @@ func TestActionTargetIDsPrefersSelection(t *testing.T) {
 
 	ws1 := domain.Workspace{ID: "ws-1"}
 	ws2 := domain.Workspace{ID: "ws-2"}
-	items := []workspaceItem{
+	items := []components.WorkspaceItem{
 		{Workspace: ws1},
 		{Workspace: ws2},
 	}
@@ -98,7 +99,7 @@ func TestActionTargetIDsFallsBackToSelectedItem(t *testing.T) {
 
 	ws1 := domain.Workspace{ID: "ws-1"}
 	ws2 := domain.Workspace{ID: "ws-2"}
-	items := []workspaceItem{
+	items := []components.WorkspaceItem{
 		{Workspace: ws1},
 		{Workspace: ws2},
 	}

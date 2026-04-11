@@ -38,22 +38,28 @@ var templateListCmd = &cobra.Command{
 		for name := range templates {
 			names = append(names, name)
 		}
+
 		sort.Strings(names)
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		_, _ = fmt.Fprintln(w, "NAME\tREPOS\tDESCRIPTION")
+
 		for _, name := range names {
 			tmpl := templates[name]
+
 			repos := strings.Join(tmpl.Repos, ", ")
 			if repos == "" {
 				repos = "-"
 			}
+
 			description := tmpl.Description
 			if description == "" {
 				description = "-"
 			}
+
 			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", output.Colorize(output.AccentStyle, name), repos, description)
 		}
+
 		_ = w.Flush()
 
 		return nil
@@ -86,11 +92,13 @@ var templateShowCmd = &cobra.Command{
 		}
 
 		output.Infof("Template: %s", tmpl.Name)
+
 		if tmpl.Description != "" {
 			output.Infof("Description: %s", tmpl.Description)
 		} else {
 			output.Infof("Description: -")
 		}
+
 		if tmpl.DefaultBranch != "" {
 			output.Infof("Default branch: %s", tmpl.DefaultBranch)
 		}
@@ -99,6 +107,7 @@ var templateShowCmd = &cobra.Command{
 			output.Info("Repos: -")
 		} else {
 			output.Info("Repos:")
+
 			for _, repo := range tmpl.Repos {
 				registryAvailable := false
 				if registry := app.Config.GetRegistry(); registry != nil {
@@ -112,6 +121,7 @@ var templateShowCmd = &cobra.Command{
 
 		if len(tmpl.SetupCommands) > 0 {
 			output.Info("Setup commands:")
+
 			for _, command := range tmpl.SetupCommands {
 				output.Infof("  - %s", command)
 			}
@@ -142,6 +152,7 @@ var templateValidateCmd = &cobra.Command{
 		}
 
 		output.Info("Templates are valid.")
+
 		return nil
 	},
 }

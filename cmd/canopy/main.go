@@ -38,6 +38,7 @@ var (
 			ctx := context.WithValue(cmd.Context(), appContextKey, appInstance)
 			cmd.SetContext(ctx)
 			cmd.Root().SetContext(ctx)
+
 			return nil
 		},
 		Run: func(cmd *cobra.Command, _ []string) {

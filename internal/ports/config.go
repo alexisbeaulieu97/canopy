@@ -3,8 +3,6 @@ package ports
 
 import (
 	"time"
-
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 )
 
 // ConfigProvider defines the interface for configuration access.
@@ -46,27 +44,27 @@ type ConfigProvider interface {
 	GetLockStaleThreshold() time.Duration
 
 	// GetRegistry returns the repository registry.
-	GetRegistry() *config.RepoRegistry
+	GetRegistry() RepoRegistry
 
 	// GetHooks returns the lifecycle hooks configuration.
-	GetHooks() config.Hooks
+	GetHooks() HooksConfig
 
 	// GetKeybindings returns the TUI keybindings with defaults applied.
-	GetKeybindings() config.Keybindings
+	GetKeybindings() Keybindings
 
 	// GetUseEmoji returns whether emoji should be used in the TUI.
 	GetUseEmoji() bool
 
 	// GetGitRetryConfig returns the parsed git retry configuration.
-	GetGitRetryConfig() config.ParsedRetryConfig
+	GetGitRetryConfig() GitRetryConfig
 
 	// GetTemplates returns configured workspace templates as a defensive copy.
 	// Callers should not mutate the returned map or template values.
-	GetTemplates() map[string]config.Template
+	GetTemplates() map[string]WorkspaceTemplate
 
 	// ResolveTemplate returns a template by name.
 	// Returns an invalid-argument error when the name is empty or unknown.
-	ResolveTemplate(name string) (config.Template, error)
+	ResolveTemplate(name string) (WorkspaceTemplate, error)
 
 	// ValidateTemplates validates template definitions.
 	// Returns a config validation error when template fields are invalid.

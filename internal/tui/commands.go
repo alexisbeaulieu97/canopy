@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
@@ -32,14 +33,14 @@ func (m Model) loadWorkspaces() tea.Msg {
 		}
 	}
 
-	items := make([]workspaceItem, 0, len(workspaces))
+	items := make([]components.WorkspaceItem, 0, len(workspaces))
 
 	var totalUsage int64
 
 	for _, w := range workspaces {
-		items = append(items, workspaceItem{
+		items = append(items, components.WorkspaceItem{
 			Workspace: w,
-			Summary: workspaceSummary{
+			Summary: components.WorkspaceSummary{
 				RepoCount: len(w.Repos),
 			},
 			OrphanCount:       orphanCounts[w.ID],

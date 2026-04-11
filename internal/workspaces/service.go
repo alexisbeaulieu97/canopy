@@ -45,10 +45,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
-	"github.com/alexisbeaulieu97/canopy/internal/hooks"
 	"github.com/alexisbeaulieu97/canopy/internal/logging"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
@@ -132,7 +130,7 @@ func NewService(cfg ports.ConfigProvider, gitEngine ports.GitOperations, wsEngin
 	// Use provided hook executor or create default
 	hookExecutor := options.hookExecutor
 	if hookExecutor == nil {
-		hookExecutor = hooks.NewExecutor(logger)
+		hookExecutor = noopHookExecutor{}
 	}
 
 	// Use provided disk usage or create default
@@ -352,13 +350,19 @@ func (s *Service) StaleThresholdDays() int {
 }
 
 // Keybindings returns the TUI keybindings configuration with defaults applied.
-func (s *Service) Keybindings() config.Keybindings {
+func (s *Service) Keybindings() ports.Keybindings {
 	return s.config.GetKeybindings()
 }
 
 // UseEmoji returns whether emoji should be used in the TUI.
 func (s *Service) UseEmoji() bool {
 	return s.config.GetUseEmoji()
+}
+
+type noopHookExecutor struct{}
+
+func (noopHookExecutor) ExecuteHooks(context.Context, []ports.HookSpec, domain.HookContext, ports.HookExecuteOptions) ([]domain.HookCommandPreview, error) {
+	return nil, nil
 }
 
 // Canonical repository status methods

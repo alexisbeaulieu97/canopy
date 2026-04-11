@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
 // mockLogger captures logged errors for testing.
@@ -29,7 +30,7 @@ func TestSaveRegistryWithRollback_SuccessfulSave(t *testing.T) {
 	}
 
 	// Pre-populate with an entry
-	if err := registry.Register("test-alias", config.RegistryEntry{URL: "https://github.com/test/repo"}, false); err != nil {
+	if err := registry.Register("test-alias", ports.RegistryEntry{URL: "https://github.com/test/repo"}, false); err != nil {
 		t.Fatalf("failed to register test entry: %v", err)
 	}
 
@@ -70,7 +71,7 @@ func TestSaveRegistryWithRollback_SaveFailureWithSuccessfulRollback(t *testing.T
 	}
 
 	// Add an entry so registry has content
-	if err := registry.Register("test-alias", config.RegistryEntry{URL: "https://github.com/test/repo"}, false); err != nil {
+	if err := registry.Register("test-alias", ports.RegistryEntry{URL: "https://github.com/test/repo"}, false); err != nil {
 		t.Fatalf("failed to register test entry: %v", err)
 	}
 
@@ -126,7 +127,7 @@ func TestSaveRegistryWithRollback_RollbackFailure(t *testing.T) {
 	}
 
 	// Add an entry so registry has content
-	if err := registry.Register("test-alias", config.RegistryEntry{URL: "https://github.com/test/repo"}, false); err != nil {
+	if err := registry.Register("test-alias", ports.RegistryEntry{URL: "https://github.com/test/repo"}, false); err != nil {
 		t.Fatalf("failed to register test entry: %v", err)
 	}
 
@@ -173,7 +174,7 @@ func TestSaveRegistryWithRollback_NilLogger(t *testing.T) {
 	}
 
 	// Add an entry so registry has content
-	if err := registry.Register("test-alias", config.RegistryEntry{URL: "https://github.com/test/repo"}, false); err != nil {
+	if err := registry.Register("test-alias", ports.RegistryEntry{URL: "https://github.com/test/repo"}, false); err != nil {
 		t.Fatalf("failed to register test entry: %v", err)
 	}
 
@@ -197,7 +198,7 @@ func TestRegisterAlias_Success(t *testing.T) {
 		t.Fatalf("failed to load registry: %v", err)
 	}
 
-	entry := config.RegistryEntry{URL: "https://github.com/test/repo"}
+	entry := ports.RegistryEntry{URL: "https://github.com/test/repo"}
 	logger := &mockLogger{}
 
 	alias, err := registerAlias(registry, "test-alias", entry, logger)
@@ -229,7 +230,7 @@ func TestRegisterAlias_DuplicateError(t *testing.T) {
 		t.Fatalf("failed to load registry: %v", err)
 	}
 
-	entry := config.RegistryEntry{URL: "https://github.com/test/repo"}
+	entry := ports.RegistryEntry{URL: "https://github.com/test/repo"}
 	logger := &mockLogger{}
 
 	// First registration should succeed
@@ -239,7 +240,7 @@ func TestRegisterAlias_DuplicateError(t *testing.T) {
 	}
 
 	// Second registration with same alias should fail
-	_, err = registerAlias(registry, "test-alias", config.RegistryEntry{URL: "https://github.com/other/repo"}, logger)
+	_, err = registerAlias(registry, "test-alias", ports.RegistryEntry{URL: "https://github.com/other/repo"}, logger)
 	if err == nil {
 		t.Error("expected error for duplicate alias, got nil")
 	}

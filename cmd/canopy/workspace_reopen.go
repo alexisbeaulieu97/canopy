@@ -27,6 +27,7 @@ var workspaceReopenCmd = &cobra.Command{
 		}
 
 		output.Success("Restored workspace", id)
+
 		return nil
 	},
 }

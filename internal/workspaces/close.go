@@ -18,20 +18,16 @@ type CloseOptions struct {
 
 // CloseWorkspace removes a workspace with safety checks
 func (s *Service) CloseWorkspace(ctx context.Context, workspaceID string, force bool) error {
-	//nolint:contextcheck // Wrapper delegates to WithOptions which handles hooks with own timeout
 	return s.CloseWorkspaceWithOptions(ctx, workspaceID, force, CloseOptions{})
 }
 
 // CloseWorkspaceWithOptions removes a workspace with configurable options.
-//
-//nolint:contextcheck // This function manages hook contexts internally with their own timeouts
 func (s *Service) CloseWorkspaceWithOptions(ctx context.Context, workspaceID string, force bool, opts CloseOptions) error {
 	return s.withWorkspaceLock(ctx, workspaceID, false, func() error {
 		return s.closeWorkspaceWithOptionsUnlocked(ctx, workspaceID, force, opts)
 	})
 }
 
-//nolint:contextcheck // This function manages hook contexts internally with their own timeouts
 func (s *Service) closeWorkspaceWithOptionsUnlocked(ctx context.Context, workspaceID string, force bool, opts CloseOptions) error {
 	targetWorkspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -45,7 +41,7 @@ func (s *Service) closeWorkspaceWithOptionsUnlocked(ctx context.Context, workspa
 	}
 
 	// Run pre_close hooks before deletion
-	if err := s.executePreCloseHooks(targetWorkspace, workspaceID, dirName, opts); err != nil {
+	if err := s.executePreCloseHooks(ctx, targetWorkspace, workspaceID, dirName, opts); err != nil {
 		return err
 	}
 
@@ -66,19 +62,18 @@ func (s *Service) closeWorkspaceWithOptionsUnlocked(ctx context.Context, workspa
 
 // CloseWorkspaceKeepMetadata moves workspace metadata to the closed store and removes the active worktree.
 func (s *Service) CloseWorkspaceKeepMetadata(ctx context.Context, workspaceID string, force bool) (*domain.ClosedWorkspace, error) {
-	//nolint:contextcheck // Wrapper delegates to WithOptions which handles hooks with own timeout
 	return s.CloseWorkspaceKeepMetadataWithOptions(ctx, workspaceID, force, CloseOptions{})
 }
 
 // CloseWorkspaceKeepMetadataWithOptions moves workspace metadata to the closed store with configurable options.
-//
-//nolint:contextcheck // This function manages hook contexts internally with their own timeouts
 func (s *Service) CloseWorkspaceKeepMetadataWithOptions(ctx context.Context, workspaceID string, force bool, opts CloseOptions) (*domain.ClosedWorkspace, error) {
 	var closed *domain.ClosedWorkspace
 
 	if err := s.withWorkspaceLock(ctx, workspaceID, false, func() error {
 		var err error
+
 		closed, err = s.closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx, workspaceID, force, opts)
+
 		return err
 	}); err != nil {
 		return nil, err
@@ -87,7 +82,6 @@ func (s *Service) CloseWorkspaceKeepMetadataWithOptions(ctx context.Context, wor
 	return closed, nil
 }
 
-//nolint:contextcheck // This function manages hook contexts internally with their own timeouts
 func (s *Service) closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx context.Context, workspaceID string, force bool, opts CloseOptions) (*domain.ClosedWorkspace, error) {
 	targetWorkspace, dirName, err := s.findWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -101,7 +95,7 @@ func (s *Service) closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx context.Cont
 	}
 
 	// Run pre_close hooks before archiving
-	if err := s.executePreCloseHooks(targetWorkspace, workspaceID, dirName, opts); err != nil {
+	if err := s.executePreCloseHooks(ctx, targetWorkspace, workspaceID, dirName, opts); err != nil {
 		return nil, err
 	}
 
@@ -136,9 +130,7 @@ func (s *Service) closeWorkspaceKeepMetadataWithOptionsUnlocked(ctx context.Cont
 
 // executePreCloseHooks runs pre_close hooks if configured and not skipped.
 // Returns nil if hooks are skipped, succeed, or ContinueOnHookErr is set.
-//
-//nolint:contextcheck // Hooks manage their own timeout context per-hook
-func (s *Service) executePreCloseHooks(workspace *domain.Workspace, workspaceID, dirName string, opts CloseOptions) error {
+func (s *Service) executePreCloseHooks(ctx context.Context, workspace *domain.Workspace, workspaceID, dirName string, opts CloseOptions) error {
 	if opts.SkipHooks {
 		return nil
 	}
@@ -155,7 +147,7 @@ func (s *Service) executePreCloseHooks(workspace *domain.Workspace, workspaceID,
 		Repos:         workspace.Repos,
 	}
 
-	if _, err := s.hookExecutor.ExecuteHooks(hooksConfig.PreClose, hookCtx, ports.HookExecuteOptions{
+	if _, err := s.hookExecutor.ExecuteHooks(ctx, hooksConfig.PreClose, hookCtx, ports.HookExecuteOptions{
 		ContinueOnError: opts.ContinueOnHookErr,
 	}); err != nil {
 		s.logger.Error("pre_close hooks failed", "error", err)

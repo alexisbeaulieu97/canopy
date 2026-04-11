@@ -12,6 +12,7 @@ import (
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/giturl"
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
 // RegistryEntry represents a single repository alias entry.
@@ -101,35 +102,35 @@ func (r *RepoRegistry) Save() error {
 }
 
 // Resolve returns a registry entry by alias if present.
-func (r *RepoRegistry) Resolve(alias string) (RegistryEntry, bool) {
+func (r *RepoRegistry) Resolve(alias string) (ports.RegistryEntry, bool) {
 	r.ensureMap()
 
 	entry, ok := r.Repos[alias]
 	if !ok {
-		return RegistryEntry{}, false
+		return ports.RegistryEntry{}, false
 	}
 
 	entry.Alias = alias
 
-	return entry, true
+	return toPortRegistryEntry(entry), true
 }
 
 // ResolveByURL returns a registry entry whose URL matches exactly.
-func (r *RepoRegistry) ResolveByURL(url string) (RegistryEntry, bool) {
+func (r *RepoRegistry) ResolveByURL(url string) (ports.RegistryEntry, bool) {
 	r.ensureMap()
 
 	for alias, entry := range r.Repos {
 		if entry.URL == strings.TrimSpace(url) {
 			entry.Alias = alias
-			return entry, true
+			return toPortRegistryEntry(entry), true
 		}
 	}
 
-	return RegistryEntry{}, false
+	return ports.RegistryEntry{}, false
 }
 
 // Register adds an entry under the provided alias. Errors if alias exists unless force is true.
-func (r *RepoRegistry) Register(alias string, entry RegistryEntry, force bool) error {
+func (r *RepoRegistry) Register(alias string, entry ports.RegistryEntry, force bool) error {
 	r.ensureMap()
 
 	alias = strings.TrimSpace(alias)
@@ -150,13 +151,13 @@ func (r *RepoRegistry) Register(alias string, entry RegistryEntry, force bool) e
 	}
 
 	entry.Alias = alias
-	r.Repos[alias] = stripAlias(entry)
+	r.Repos[alias] = stripAlias(fromPortRegistryEntry(entry))
 
 	return nil
 }
 
 // RegisterWithSuffix registers an entry, appending "-2" style suffixes until unique.
-func (r *RepoRegistry) RegisterWithSuffix(alias string, entry RegistryEntry) (string, error) {
+func (r *RepoRegistry) RegisterWithSuffix(alias string, entry ports.RegistryEntry) (string, error) {
 	r.ensureMap()
 
 	alias = strings.TrimSpace(alias)
@@ -181,7 +182,7 @@ func (r *RepoRegistry) RegisterWithSuffix(alias string, entry RegistryEntry) (st
 	}
 
 	entry.Alias = target
-	r.Repos[target] = stripAlias(entry)
+	r.Repos[target] = stripAlias(fromPortRegistryEntry(entry))
 
 	return target, nil
 }
@@ -200,13 +201,13 @@ func (r *RepoRegistry) Unregister(alias string) error {
 }
 
 // List returns all entries, optionally filtered by tags. Results are sorted by alias.
-func (r *RepoRegistry) List(tags []string) []RegistryEntry {
-	var entries []RegistryEntry
+func (r *RepoRegistry) List(tags []string) []ports.RegistryEntry {
+	var entries []ports.RegistryEntry
 
 	for alias, entry := range r.Repos {
 		entry.Alias = alias
 		if len(tags) == 0 || hasAllTags(entry.Tags, tags) {
-			entries = append(entries, entry)
+			entries = append(entries, toPortRegistryEntry(entry))
 		}
 	}
 
@@ -239,6 +240,26 @@ func defaultRegistryPath() (string, error) {
 func stripAlias(entry RegistryEntry) RegistryEntry {
 	entry.Alias = ""
 	return entry
+}
+
+func toPortRegistryEntry(entry RegistryEntry) ports.RegistryEntry {
+	return ports.RegistryEntry{
+		Alias:         entry.Alias,
+		URL:           entry.URL,
+		DefaultBranch: entry.DefaultBranch,
+		Description:   entry.Description,
+		Tags:          append([]string(nil), entry.Tags...),
+	}
+}
+
+func fromPortRegistryEntry(entry ports.RegistryEntry) RegistryEntry {
+	return RegistryEntry{
+		Alias:         entry.Alias,
+		URL:           entry.URL,
+		DefaultBranch: entry.DefaultBranch,
+		Description:   entry.Description,
+		Tags:          append([]string(nil), entry.Tags...),
+	}
 }
 
 func hasAllTags(entryTags, required []string) bool {

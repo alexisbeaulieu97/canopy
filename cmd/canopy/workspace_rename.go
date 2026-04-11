@@ -41,6 +41,7 @@ var workspaceRenameCmd = &cobra.Command{
 		} else {
 			output.Infof("Renamed workspace %s to %s", oldID, newID)
 		}
+
 		return nil
 	},
 }

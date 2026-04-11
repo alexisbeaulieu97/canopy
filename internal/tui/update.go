@@ -303,7 +303,7 @@ func (m *Model) updateWorkspaceSummary(id string, status *domain.WorkspaceStatus
 	m.workspaces.UpdateItemSummary(id, status, err)
 
 	for idx, listItem := range m.ui.List.Items() {
-		ws, ok := listItem.(workspaceItem)
+		ws, ok := listItem.(components.WorkspaceItem)
 		if !ok || ws.Workspace.ID != id {
 			continue
 		}
@@ -311,7 +311,7 @@ func (m *Model) updateWorkspaceSummary(id string, status *domain.WorkspaceStatus
 		if status != nil {
 			ws.Loaded = true
 			ws.Err = nil
-			ws.Summary = summarizeStatus(status)
+			ws.Summary = components.SummarizeStatus(status)
 		}
 
 		if err != nil {

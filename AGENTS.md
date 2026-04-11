@@ -16,3 +16,8 @@ Use `@/openspec/AGENTS.md` to learn:
 Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
+
+## Go Tooling
+
+- Run `gofmt` on changed Go files before finishing work. If `gofumpt` is available or enforced by lint, prefer that stricter formatter.
+- Run `golangci-lint` against the affected Go scope before closing out. If the local linter binary is incompatible with the repo toolchain, call that out explicitly.

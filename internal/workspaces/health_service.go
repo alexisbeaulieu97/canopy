@@ -354,7 +354,7 @@ func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, rep
 	gitdirPath = resolveGitdirPath(gitdirPath, worktreePath)
 
 	// Verify the gitdir path exists
-	if _, err := os.Stat(gitdirPath); os.IsNotExist(err) {
+	if _, err := os.Stat(gitdirPath); os.IsNotExist(err) { //nolint:gosec // G703: gitdirPath parsed from trusted .git worktree link file
 		check := domain.HealthCheck{
 			Name:        "worktree_ref:" + repoName,
 			Category:    domain.HealthCategoryWorktree,
@@ -450,7 +450,7 @@ func (s *WorkspaceHealthService) checkGitConfig(repoName, worktreePath string) [
 		gitdirPath = resolveGitdirPath(gitdirPath, worktreePath)
 		// Config is in the worktree-specific directory and in the parent canonical repo
 		// For now, just verify the worktree gitdir exists
-		if _, err := os.Stat(gitdirPath); err != nil {
+		if _, err := os.Stat(gitdirPath); err != nil { //nolint:gosec // G703: gitdirPath parsed from trusted .git worktree link file
 			return checks
 		}
 
@@ -458,7 +458,7 @@ func (s *WorkspaceHealthService) checkGitConfig(repoName, worktreePath string) [
 	}
 
 	// Check if config file exists and is readable
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+	if _, err := os.Stat(configPath); os.IsNotExist(err) { //nolint:gosec // G703: configPath derived from trusted .git worktree link file
 		checks = append(checks, domain.HealthCheck{
 			Name:        "git_config:" + repoName,
 			Category:    domain.HealthCategoryGitConfig,

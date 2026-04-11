@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/giturl"
@@ -22,7 +21,7 @@ type CanonicalRepoService struct {
 	projectsRoot string
 	logger       *logging.Logger
 	diskUsage    ports.DiskUsage
-	registry     *config.RepoRegistry
+	registry     ports.RepoRegistry
 }
 
 // NewCanonicalRepoService creates a new CanonicalRepoService.
@@ -33,7 +32,7 @@ func NewCanonicalRepoService(
 	projectsRoot string,
 	logger *logging.Logger,
 	diskUsage ports.DiskUsage,
-	registry *config.RepoRegistry,
+	registry ports.RepoRegistry,
 ) *CanonicalRepoService {
 	if gitEngine == nil {
 		panic("CanonicalRepoService: gitEngine is required but was nil")
@@ -121,7 +120,7 @@ func (c *CanonicalRepoService) registerRepoAlias(name, url string) error {
 		return cerrors.NewRegistryError("register", fmt.Sprintf("alias '%s' already exists for %s", name, giturl.Sanitize(existing.URL)), nil)
 	}
 
-	if err := c.registry.Register(name, config.RegistryEntry{URL: url}, false); err != nil {
+	if err := c.registry.Register(name, ports.RegistryEntry{URL: url}, false); err != nil {
 		return err
 	}
 

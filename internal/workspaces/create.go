@@ -4,12 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
-	"github.com/alexisbeaulieu97/canopy/internal/config"
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
@@ -20,7 +17,7 @@ import (
 type CreateOptions struct {
 	SkipHooks         bool // Skip post_create hooks
 	ContinueOnHookErr bool // Continue if hooks fail
-	Template          *config.Template
+	Template          *ports.WorkspaceTemplate
 }
 
 // CreateWorkspace creates a new workspace directory and returns the directory name
@@ -73,7 +70,7 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, di
 	s.cache.Invalidate(id)
 
 	if opts.Template != nil && len(opts.Template.SetupCommands) > 0 {
-		setupFailed := s.runTemplateSetupCommands(ctx, id, dirName, opts.Template.SetupCommands)
+		setupFailed := s.runTemplateSetupCommands(ctx, id, dirName, branchName, repos, opts.Template.SetupCommands)
 		if setupFailed {
 			ws.SetupIncomplete = true
 			if err := s.wsEngine.Save(ctx, ws); err != nil {
@@ -85,8 +82,7 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, di
 	}
 
 	// Run post_create hooks
-	//nolint:contextcheck // Hooks manage their own timeout context per-hook
-	if err := s.runPostCreateHooks(id, dirName, branchName, repos, opts); err != nil {
+	if err := s.runPostCreateHooks(ctx, id, dirName, branchName, repos, opts); err != nil {
 		// Hook failures don't rollback the workspace (per design.md)
 		// But we return the error if not continuing on hook errors
 		return err
@@ -95,12 +91,18 @@ func (s *Service) createWorkspaceWithOptionsUnlocked(ctx context.Context, id, di
 	return nil
 }
 
-func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID, dirName string, commands []string) bool {
+func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID, dirName, branchName string, repos []domain.Repo, commands []string) bool {
 	if len(commands) == 0 {
 		return false
 	}
 
 	workspacePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
+	hookCtx := domain.HookContext{
+		WorkspaceID:   workspaceID,
+		WorkspacePath: workspacePath,
+		BranchName:    branchName,
+		Repos:         repos,
+	}
 	failed := false
 
 	for i, command := range commands {
@@ -117,16 +119,10 @@ func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID, dir
 			s.logger.Info("Running template setup command", "index", i, "workspace_id", workspaceID, "command", trimmed)
 		}
 
-		cmd := shellCommand(ctx, trimmed)
-		cmd.Dir = workspacePath
-
-		outputBytes, err := cmd.CombinedOutput()
-
-		outputText := strings.TrimSpace(string(outputBytes))
-		if outputText != "" && s.logger != nil {
-			s.logger.Info("Template setup output", "index", i, "workspace_id", workspaceID, "output", outputText)
-		}
-
+		_, err := s.hookExecutor.ExecuteHooks(ctx, []ports.HookSpec{{
+			Command: trimmed,
+			Timeout: -1,
+		}}, hookCtx, ports.HookExecuteOptions{})
 		if err != nil {
 			failed = true
 
@@ -137,16 +133,6 @@ func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID, dir
 	}
 
 	return failed
-}
-
-func shellCommand(ctx context.Context, command string) *exec.Cmd {
-	if runtime.GOOS == "windows" {
-		// #nosec G204 -- template setup commands are user-configured and expected.
-		return exec.CommandContext(ctx, "cmd.exe", "/c", command)
-	}
-
-	// #nosec G204 -- template setup commands are user-configured and expected.
-	return exec.CommandContext(ctx, "sh", "-c", command)
 }
 
 func (s *Service) resolveCreateBranchName(id, branchName string) (string, error) {
@@ -267,7 +253,7 @@ func (s *Service) cloneWorkspaceRepos(ctx context.Context, repos []domain.Repo, 
 
 // runPostCreateHooks runs post_create hooks if configured and not skipped.
 // Returns nil if hooks are skipped or succeed, error otherwise.
-func (s *Service) runPostCreateHooks(id, dirName, branchName string, repos []domain.Repo, opts CreateOptions) error {
+func (s *Service) runPostCreateHooks(ctx context.Context, id, dirName, branchName string, repos []domain.Repo, opts CreateOptions) error {
 	if opts.SkipHooks {
 		return nil
 	}
@@ -284,8 +270,7 @@ func (s *Service) runPostCreateHooks(id, dirName, branchName string, repos []dom
 		Repos:         repos,
 	}
 
-	//nolint:contextcheck // Hooks manage their own timeout context per-hook
-	if _, err := s.hookExecutor.ExecuteHooks(hooksConfig.PostCreate, hookCtx, ports.HookExecuteOptions{
+	if _, err := s.hookExecutor.ExecuteHooks(ctx, hooksConfig.PostCreate, hookCtx, ports.HookExecuteOptions{
 		ContinueOnError: opts.ContinueOnHookErr,
 	}); err != nil {
 		s.logger.Error("post_create hooks failed", "error", err)

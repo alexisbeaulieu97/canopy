@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/formatting"
 	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
 )
 
@@ -16,7 +18,7 @@ const (
 
 // formatKeyAction formats a keyboard shortcut as key:action.
 func formatKeyAction(key, action string) string {
-	return subtleTextStyle.Render(fmt.Sprintf("%s:%s", accentTextStyle.Render(key), action))
+	return components.SubtleTextStyle.Render(fmt.Sprintf("%s:%s", components.AccentTextStyle.Render(key), action))
 }
 
 // View renders the UI by delegating to the current view state.
@@ -36,7 +38,7 @@ func (m Model) renderListView() string {
 	if m.pushing {
 		spinnerLine := fmt.Sprintf("  %s Pushing %s...",
 			m.ui.Spinner.View(),
-			accentTextStyle.Render(m.pushTarget))
+			components.AccentTextStyle.Render(m.pushTarget))
 		b.WriteString(spinnerLine)
 		b.WriteString("\n")
 	}
@@ -63,7 +65,7 @@ func (m Model) renderListViewWithConfirm(state *ConfirmViewState) string {
 	if m.pushing {
 		spinnerLine := fmt.Sprintf("%s Pushing %s...",
 			m.ui.Spinner.View(),
-			accentTextStyle.Render(m.pushTarget))
+			components.AccentTextStyle.Render(m.pushTarget))
 		b.WriteString(spinnerLine)
 		b.WriteString("\n\n")
 	}
@@ -120,10 +122,10 @@ func (m Model) confirmTargetLabel(state *ConfirmViewState) string {
 	}
 
 	if len(state.TargetIDs) == 1 {
-		return fmt.Sprintf("workspace %s", accentTextStyle.Render(state.TargetIDs[0]))
+		return fmt.Sprintf("workspace %s", components.AccentTextStyle.Render(state.TargetIDs[0]))
 	}
 
-	return fmt.Sprintf("%s workspaces", accentTextStyle.Render(strconv.Itoa(len(state.TargetIDs))))
+	return fmt.Sprintf("%s workspaces", components.AccentTextStyle.Render(strconv.Itoa(len(state.TargetIDs))))
 }
 
 // renderHeader renders the top header bar with logo, stats, and breadcrumb.
@@ -135,39 +137,42 @@ func (m Model) renderHeader() string {
 	visible := len(m.ui.List.Items())
 
 	// Logo and title
-	logo := accentTextStyle.Render(m.symbols.Workspaces())
-	title := titleStyle.Render("Workspaces")
+	logo := components.AccentTextStyle.Render(m.symbols.Workspaces())
+	title := components.TitleStyle.Render("Workspaces")
 
 	// Count badge
 	var countText string
 	if visible != total {
-		countText = subtleTextStyle.Render(fmt.Sprintf("(%d/%d)", visible, total))
+		countText = components.SubtleTextStyle.Render(fmt.Sprintf("(%d/%d)", visible, total))
 	} else {
-		countText = subtleTextStyle.Render(fmt.Sprintf("(%d)", total))
+		countText = components.SubtleTextStyle.Render(fmt.Sprintf("(%d)", total))
 	}
 
-	b.WriteString(fmt.Sprintf("%s %s %s", logo, title, countText))
+	fmt.Fprintf(&b, "%s %s %s", logo, title, countText)
 
 	// Disk usage stat
 	if m.workspaces.TotalDiskUsage() > 0 {
-		diskInfo := fmt.Sprintf("  %s %s", m.symbols.Disk(), humanizeBytes(m.workspaces.TotalDiskUsage()))
-		b.WriteString(mutedTextStyle.Render(diskInfo))
+		diskInfo := fmt.Sprintf("  %s %s", m.symbols.Disk(), formatting.Bytes(m.workspaces.TotalDiskUsage(), formatting.ByteSizeOptions{
+			Zero:      "0 B",
+			Precision: 1,
+		}))
+		b.WriteString(components.MutedTextStyle.Render(diskInfo))
 	}
 
 	// Active filters and selection on same line
 	var indicators []string
 
 	if m.workspaces.IsStaleFilterActive() {
-		indicators = append(indicators, badgeWarnStyle.Render(fmt.Sprintf("%s STALE", m.symbols.Stale())))
+		indicators = append(indicators, components.BadgeWarnStyle.Render(fmt.Sprintf("%s STALE", m.symbols.Stale())))
 	}
 
 	if m.ui.List.FilterValue() != "" {
-		searchBadge := badgeInfoStyle.Render(fmt.Sprintf("%s %s", m.symbols.Search(), m.ui.List.FilterValue()))
+		searchBadge := components.BadgeInfoStyle.Render(fmt.Sprintf("%s %s", m.symbols.Search(), m.ui.List.FilterValue()))
 		indicators = append(indicators, searchBadge)
 	}
 
 	if count := m.selectionCount(); count > 0 {
-		indicators = append(indicators, accentTextStyle.Render(fmt.Sprintf("%d selected", count)))
+		indicators = append(indicators, components.AccentTextStyle.Render(fmt.Sprintf("%d selected", count)))
 	}
 
 	if len(indicators) > 0 {
@@ -180,7 +185,7 @@ func (m Model) renderHeader() string {
 		b.WriteString("\n")
 
 		errMsg := fmt.Sprintf("%s Error: %v", m.symbols.Error(), m.err)
-		b.WriteString(statusDirtyStyle.Render(errMsg))
+		b.WriteString(components.StatusDirtyStyle.Render(errMsg))
 	}
 
 	// Info message on new line if any
@@ -188,7 +193,7 @@ func (m Model) renderHeader() string {
 		b.WriteString("\n")
 
 		infoMsg := fmt.Sprintf("%s %s", m.symbols.Check(), m.infoMessage)
-		b.WriteString(statusCleanStyle.Render(infoMsg))
+		b.WriteString(components.StatusCleanStyle.Render(infoMsg))
 	}
 
 	return b.String()
@@ -197,7 +202,7 @@ func (m Model) renderHeader() string {
 // renderFooter renders the keyboard shortcuts footer.
 func (m Model) renderFooter() string {
 	if m.pushing {
-		return subtleTextStyle.Render(fmt.Sprintf("  %s Push in progress...", m.symbols.Loading()))
+		return components.SubtleTextStyle.Render(fmt.Sprintf("  %s Push in progress...", m.symbols.Loading()))
 	}
 
 	if m.isConfirming() {
@@ -244,16 +249,16 @@ func (m Model) renderDetailView() string {
 	// Loading state
 	detailState := m.getDetailState()
 	if detailState != nil && detailState.Loading {
-		b.WriteString(fmt.Sprintf("  %s Loading workspace details...", m.ui.Spinner.View()))
+		fmt.Fprintf(&b, "  %s Loading workspace details...", m.ui.Spinner.View())
 
 		return b.String()
 	}
 
 	// No workspace selected
 	if m.selectedWS == nil {
-		b.WriteString(subtleTextStyle.Render("No workspace selected."))
+		b.WriteString(components.SubtleTextStyle.Render("No workspace selected."))
 		b.WriteString("\n\n")
-		b.WriteString(helpTextStyle.Render("Press [esc] to return to the list"))
+		b.WriteString(components.HelpTextStyle.Render("Press [esc] to return to the list"))
 
 		return b.String()
 	}
@@ -261,9 +266,9 @@ func (m Model) renderDetailView() string {
 	// Breadcrumb: Workspaces > WorkspaceID
 	breadcrumb := fmt.Sprintf("%s %s %s %s",
 		m.symbols.Workspaces(),
-		subtleTextStyle.Render("Workspaces"),
-		subtleTextStyle.Render(">"),
-		accentTextStyle.Render(m.selectedWS.ID))
+		components.SubtleTextStyle.Render("Workspaces"),
+		components.SubtleTextStyle.Render(">"),
+		components.AccentTextStyle.Render(m.selectedWS.ID))
 	b.WriteString(breadcrumb)
 	b.WriteString("\n\n")
 
@@ -306,28 +311,37 @@ func (m Model) renderDetailMetadata() string {
 	var rows []string
 
 	// Section header
-	rows = append(rows, boldTextStyle.Render("Workspace Info"))
+	rows = append(rows, components.BoldTextStyle.Render("Workspace Info"))
 	rows = append(rows, strings.Repeat("─", separatorWidth))
 
 	// Branch
 	row := fmt.Sprintf("  %s %-12s %s",
 		m.symbols.Branch(),
-		detailLabelStyle.Render("Branch"),
-		detailValueStyle.Render(m.selectedWS.BranchName))
+		components.DetailLabelStyle.Render("Branch"),
+		components.DetailValueStyle.Render(m.selectedWS.BranchName))
 	rows = append(rows, row)
 
 	// Disk usage
 	row = fmt.Sprintf("  %s %-12s %s",
 		m.symbols.Disk(),
-		detailLabelStyle.Render("Disk"),
-		detailValueStyle.Render(humanizeBytes(m.selectedWS.DiskUsageBytes)))
+		components.DetailLabelStyle.Render("Disk"),
+		components.DetailValueStyle.Render(formatting.Bytes(m.selectedWS.DiskUsageBytes, formatting.ByteSizeOptions{
+			Zero:      "0 B",
+			Precision: 1,
+		})))
 	rows = append(rows, row)
 
 	// Last modified
 	row = fmt.Sprintf("  %s %-12s %s",
 		m.symbols.Time(),
-		detailLabelStyle.Render("Modified"),
-		detailValueStyle.Render(relativeTime(m.selectedWS.LastModified)))
+		components.DetailLabelStyle.Render("Modified"),
+		components.DetailValueStyle.Render(formatting.RelativeTime(m.selectedWS.LastModified, formatting.RelativeTimeOptions{
+			Zero:          "unknown",
+			Compact:       true,
+			Yesterday:     true,
+			UseWeeks:      true,
+			AbsoluteAfter: 30 * 24 * time.Hour,
+		})))
 	rows = append(rows, row)
 
 	// Repo count
@@ -335,8 +349,8 @@ func (m Model) renderDetailMetadata() string {
 		repoCount := len(m.wsStatus.Repos)
 		row = fmt.Sprintf("  %s %-12s %s",
 			m.symbols.Repo(),
-			detailLabelStyle.Render("Repos"),
-			detailValueStyle.Render(fmt.Sprintf("%d", repoCount)))
+			components.DetailLabelStyle.Render("Repos"),
+			components.DetailValueStyle.Render(fmt.Sprintf("%d", repoCount)))
 		rows = append(rows, row)
 	}
 
@@ -347,13 +361,13 @@ func (m Model) renderDetailMetadata() string {
 func (m Model) renderDetailRepos() string {
 	var b strings.Builder
 
-	b.WriteString(boldTextStyle.Render("Repositories"))
+	b.WriteString(components.BoldTextStyle.Render("Repositories"))
 	b.WriteString("\n")
 	b.WriteString(strings.Repeat("─", separatorWidth))
 	b.WriteString("\n")
 
 	if m.wsStatus == nil || len(m.wsStatus.Repos) == 0 {
-		b.WriteString(subtleTextStyle.Render("  No repositories found."))
+		b.WriteString(components.SubtleTextStyle.Render("  No repositories found."))
 		return b.String()
 	}
 
@@ -374,7 +388,7 @@ func (m Model) renderRepoLine(repo domain.RepoStatus) string {
 	if repo.Error != "" {
 		errText := strings.ReplaceAll(string(repo.Error), "\n", " ")
 		statusParts = append(statusParts,
-			statusDirtyStyle.Render(fmt.Sprintf("%s %s", m.symbols.Error(), errText)))
+			components.StatusDirtyStyle.Render(fmt.Sprintf("%s %s", m.symbols.Error(), errText)))
 
 		branchLabel = "error"
 		if repo.Error == domain.StatusErrorTimeout {
@@ -382,22 +396,22 @@ func (m Model) renderRepoLine(repo domain.RepoStatus) string {
 		}
 	} else {
 		if repo.IsDirty {
-			statusParts = append(statusParts, statusDirtyStyle.Render(fmt.Sprintf("%s dirty", m.symbols.Dirty())))
+			statusParts = append(statusParts, components.StatusDirtyStyle.Render(fmt.Sprintf("%s dirty", m.symbols.Dirty())))
 		}
 
 		if repo.UnpushedCommits > 0 {
 			statusParts = append(statusParts,
-				statusDirtyStyle.Render(fmt.Sprintf("%s %d", m.symbols.Unpushed(), repo.UnpushedCommits)))
+				components.StatusDirtyStyle.Render(fmt.Sprintf("%s %d", m.symbols.Unpushed(), repo.UnpushedCommits)))
 		}
 
 		if repo.BehindRemote > 0 {
 			statusParts = append(statusParts,
-				statusWarnStyle.Render(fmt.Sprintf("%s %d", m.symbols.Behind(), repo.BehindRemote)))
+				components.StatusWarnStyle.Render(fmt.Sprintf("%s %d", m.symbols.Behind(), repo.BehindRemote)))
 		}
 	}
 
 	if len(statusParts) == 0 {
-		statusParts = append(statusParts, statusCleanStyle.Render(m.symbols.Check()))
+		statusParts = append(statusParts, components.StatusCleanStyle.Render(m.symbols.Check()))
 	}
 
 	statusStr := strings.Join(statusParts, " ")
@@ -406,7 +420,7 @@ func (m Model) renderRepoLine(repo domain.RepoStatus) string {
 	return fmt.Sprintf("  %s %-18s %s  %s",
 		m.symbols.Repo(),
 		repo.Name,
-		subtleTextStyle.Render(fmt.Sprintf("[%s]", branchLabel)),
+		components.SubtleTextStyle.Render(fmt.Sprintf("[%s]", branchLabel)),
 		statusStr)
 }
 
@@ -415,7 +429,7 @@ func (m Model) renderDetailOrphans() string {
 	var b strings.Builder
 
 	// Warning banner header
-	b.WriteString(statusWarnStyle.Render(fmt.Sprintf("%s Orphaned Worktrees (%d)", m.symbols.Warning(), len(m.wsOrphans))))
+	b.WriteString(components.StatusWarnStyle.Render(fmt.Sprintf("%s Orphaned Worktrees (%d)", m.symbols.Warning(), len(m.wsOrphans))))
 	b.WriteString("\n")
 	b.WriteString(strings.Repeat("─", separatorWidth))
 	b.WriteString("\n")
@@ -424,7 +438,7 @@ func (m Model) renderDetailOrphans() string {
 		line := fmt.Sprintf("  %s %-18s %s",
 			m.symbols.Warning(),
 			orphan.RepoName,
-			statusWarnStyle.Render(orphan.ReasonDescription()))
+			components.StatusWarnStyle.Render(orphan.ReasonDescription()))
 		b.WriteString(line)
 		b.WriteString("\n")
 	}

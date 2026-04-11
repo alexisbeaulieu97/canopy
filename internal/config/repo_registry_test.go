@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
 func TestLoadRegistryMissingFile(t *testing.T) {
@@ -27,7 +29,7 @@ func TestLoadRegistryMissingFile(t *testing.T) {
 func TestRegisterAndResolve(t *testing.T) {
 	registry := &RepoRegistry{path: filepath.Join(t.TempDir(), "repos.yaml"), Repos: map[string]RegistryEntry{}}
 
-	entry := RegistryEntry{URL: "https://github.com/example/api.git", Description: "API"}
+	entry := ports.RegistryEntry{URL: "https://github.com/example/api.git", Description: "API"}
 	if err := registry.Register("api", entry, false); err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
@@ -59,7 +61,7 @@ func TestRegisterAndResolve(t *testing.T) {
 func TestRegisterCollisionAndForce(t *testing.T) {
 	registry := &RepoRegistry{path: filepath.Join(t.TempDir(), "repos.yaml"), Repos: map[string]RegistryEntry{}}
 
-	entry := RegistryEntry{URL: "https://github.com/example/api.git"}
+	entry := ports.RegistryEntry{URL: "https://github.com/example/api.git"}
 	if err := registry.Register("api", entry, false); err != nil {
 		t.Fatalf("first register failed: %v", err)
 	}
@@ -68,7 +70,7 @@ func TestRegisterCollisionAndForce(t *testing.T) {
 		t.Fatalf("expected collision error")
 	}
 
-	if err := registry.Register("api", RegistryEntry{URL: "https://github.com/example/other.git"}, true); err != nil {
+	if err := registry.Register("api", ports.RegistryEntry{URL: "https://github.com/example/other.git"}, true); err != nil {
 		t.Fatalf("force register failed: %v", err)
 	}
 }
@@ -76,7 +78,7 @@ func TestRegisterCollisionAndForce(t *testing.T) {
 func TestRegisterWithSuffix(t *testing.T) {
 	registry := &RepoRegistry{path: filepath.Join(t.TempDir(), "repos.yaml"), Repos: map[string]RegistryEntry{}}
 
-	entry := RegistryEntry{URL: "https://github.com/example/api.git"}
+	entry := ports.RegistryEntry{URL: "https://github.com/example/api.git"}
 	if _, err := registry.RegisterWithSuffix("api", entry); err != nil {
 		t.Fatalf("register with suffix failed: %v", err)
 	}
@@ -89,7 +91,7 @@ func TestRegisterWithSuffix(t *testing.T) {
 func TestEnsureMapDefensiveInit(t *testing.T) {
 	var registry RepoRegistry
 
-	entry := RegistryEntry{URL: "https://github.com/example/api.git"}
+	entry := ports.RegistryEntry{URL: "https://github.com/example/api.git"}
 
 	if err := registry.Register("api", entry, false); err != nil {
 		t.Fatalf("register failed: %v", err)

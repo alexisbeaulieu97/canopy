@@ -93,6 +93,7 @@ Exit codes:
 			if registry := cfg.GetRegistry(); registry != nil {
 				configInfo["registry_path"] = registry.Path()
 			}
+
 			return output.PrintJSON(configInfo)
 		}
 
@@ -101,10 +102,12 @@ Exit codes:
 		output.Infof("  Workspaces root: %s", cfg.GetWorkspacesRoot())
 		output.Infof("  Closed root:     %s", cfg.GetClosedRoot())
 		output.Infof("  Workspace naming: %s", cfg.GetWorkspaceNaming())
+
 		if dirName, dirErr := cfg.ComputeWorkspaceDir("EXAMPLE-123"); dirErr == nil {
 			previewPath := filepath.Join(cfg.GetWorkspacesRoot(), dirName)
 			output.Infof("  Workspace naming preview: %s", previewPath)
 		}
+
 		if registry := cfg.GetRegistry(); registry != nil {
 			output.Infof("  Registry file:   %s", registry.Path())
 		}

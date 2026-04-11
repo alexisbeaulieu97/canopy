@@ -33,6 +33,7 @@ var workspaceRepoAddCmd = &cobra.Command{
 		}
 
 		output.Infof("Added repository %s to workspace %s", repoName, workspaceID)
+
 		return nil
 	},
 }
@@ -57,6 +58,7 @@ var workspaceRepoRemoveCmd = &cobra.Command{
 		}
 
 		output.Infof("Removed repository %s from workspace %s", repoName, workspaceID)
+
 		return nil
 	},
 }

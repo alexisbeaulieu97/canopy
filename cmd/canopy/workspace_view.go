@@ -41,6 +41,7 @@ var workspaceViewCmd = &cobra.Command{
 		}
 
 		renderWorkspaceView(status)
+
 		return nil
 	},
 }

@@ -32,6 +32,7 @@ var initCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
 		defer func() { _ = f.Close() }()
 
 		// Write defaults
@@ -50,6 +51,7 @@ templates:
 		}
 
 		fmt.Println("Initialized config at:", configFile) //nolint:forbidigo // user-facing CLI output
+
 		return nil
 	},
 }

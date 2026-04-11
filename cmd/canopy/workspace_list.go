@@ -12,6 +12,7 @@ import (
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/formatting"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
@@ -38,8 +39,10 @@ var workspaceListCmd = &cobra.Command{
 
 		// Parse timeout duration.
 		timeout := 5 * time.Second
+
 		if timeoutStr != "" {
 			var parseErr error
+
 			timeout, parseErr = time.ParseDuration(timeoutStr)
 			if parseErr != nil {
 				return cerrors.NewInvalidArgument("timeout", fmt.Sprintf("invalid duration: %v", parseErr))
@@ -71,6 +74,7 @@ var workspaceListCmd = &cobra.Command{
 				}
 
 				output.Infof("%s (Closed: %s)", a.Metadata.ID, closedDate)
+
 				for _, r := range a.Metadata.Repos {
 					output.Infof("  - %s (%s)", r.Name, r.URL)
 				}
@@ -143,6 +147,7 @@ var workspaceListCmd = &cobra.Command{
 
 					if result.Err != nil {
 						setRepoStatusError(ws, result.Err)
+
 						if !errors.Is(result.Err, context.DeadlineExceeded) {
 							output.Warnf("Failed to get status for %s: %v", ws.ID, result.Err)
 						}
@@ -152,6 +157,7 @@ var workspaceListCmd = &cobra.Command{
 				for i, w := range list {
 					ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 					status, statusErr := service.GetStatus(ctx, w.ID)
+
 					cancel()
 
 					ws := &workspacesWithStatus[i]
@@ -159,6 +165,7 @@ var workspaceListCmd = &cobra.Command{
 						ws.RepoStatuses = status.Repos
 					} else if statusErr != nil {
 						setRepoStatusError(ws, statusErr)
+
 						if !errors.Is(statusErr, context.DeadlineExceeded) {
 							output.Warnf("Failed to get status for %s: %v", w.ID, statusErr)
 						}
@@ -170,6 +177,7 @@ var workspaceListCmd = &cobra.Command{
 		if showLocks {
 			for i := range workspacesWithStatus {
 				ws := &workspacesWithStatus[i]
+
 				locked, lockErr := service.WorkspaceLocked(ws.ID)
 				if lockErr != nil {
 					output.Warnf("Failed to check lock status for %s: %v", ws.ID, lockErr)
@@ -191,6 +199,7 @@ var workspaceListCmd = &cobra.Command{
 				for i, ws := range workspacesWithStatus {
 					jsonWorkspaces[i] = workspaceJSONOutput(ws)
 				}
+
 				return output.PrintJSON(map[string]interface{}{
 					"workspaces": jsonWorkspaces,
 				})
@@ -206,6 +215,7 @@ var workspaceListCmd = &cobra.Command{
 			output.Println("No workspaces found.")
 			output.Println("")
 			output.Println(output.Colorize(output.MutedStyle, "Create one with: canopy workspace new <name> --repos <repo1,repo2>"))
+
 			return nil
 		}
 
@@ -292,7 +302,10 @@ func formatWorkspaceRow(ws workspaceWithStatusData, showLocks bool, icons output
 
 	repoCount := fmt.Sprintf("%d", len(ws.Repos))
 	size := output.FormatBytes(ws.DiskUsageBytes)
-	modified := formatRelativeTime(ws.LastModified)
+	modified := formatting.RelativeTime(ws.LastModified, formatting.RelativeTimeOptions{
+		Zero:          "-",
+		AbsoluteAfter: 7 * 24 * time.Hour,
+	})
 
 	status := formatWorkspaceStatus(ws.RepoStatuses, icons)
 	if showLocks && ws.Locked {
@@ -370,40 +383,4 @@ func formatFirstStatusIssue(dirty, unpushed, behind int, icons output.Icons) str
 	}
 
 	return output.Colorize(output.SuccessStyle, icons.Success()+" clean")
-}
-
-func formatRelativeTime(t time.Time) string {
-	if t.IsZero() {
-		return "-"
-	}
-
-	duration := time.Since(t)
-
-	switch {
-	case duration < time.Minute:
-		return "just now"
-	case duration < time.Hour:
-		mins := int(duration.Minutes())
-		if mins == 1 {
-			return "1 min ago"
-		}
-
-		return fmt.Sprintf("%d mins ago", mins)
-	case duration < 24*time.Hour:
-		hours := int(duration.Hours())
-		if hours == 1 {
-			return "1 hour ago"
-		}
-
-		return fmt.Sprintf("%d hours ago", hours)
-	case duration < 7*24*time.Hour:
-		days := int(duration.Hours() / 24)
-		if days == 1 {
-			return "1 day ago"
-		}
-
-		return fmt.Sprintf("%d days ago", days)
-	default:
-		return t.Format("Jan 2, 2006")
-	}
 }
