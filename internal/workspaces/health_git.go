@@ -180,8 +180,9 @@ func parseRemoteURL(configPath string) (string, error) {
 				break
 			}
 
-			if strings.HasPrefix(line, "url = ") {
-				return strings.TrimPrefix(line, "url = "), nil
+			key, value, ok := strings.Cut(line, "=")
+			if ok && strings.TrimSpace(key) == "url" {
+				return trimMatchingQuotes(strings.TrimSpace(value)), nil
 			}
 		}
 	}
@@ -194,7 +195,11 @@ func parseRemoteURL(configPath string) (string, error) {
 }
 
 func isValidRemoteURL(rawURL string) bool {
-	if strings.HasPrefix(rawURL, "git@") && strings.Contains(rawURL, ":") {
+	if rawURL == "" {
+		return false
+	}
+
+	if isLocalRemotePath(rawURL) || isSCPStyleRemote(rawURL) {
 		return true
 	}
 
@@ -216,6 +221,42 @@ func isValidRemoteURL(rawURL string) bool {
 	}
 
 	if parsed.Host == "" && parsed.Scheme != "file" {
+		return false
+	}
+
+	return true
+}
+
+func trimMatchingQuotes(value string) string {
+	if len(value) < 2 {
+		return value
+	}
+
+	if (value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'') {
+		return value[1 : len(value)-1]
+	}
+
+	return value
+}
+
+func isLocalRemotePath(rawURL string) bool {
+	return filepath.IsAbs(rawURL) ||
+		strings.HasPrefix(rawURL, "~/") ||
+		strings.HasPrefix(rawURL, "./") ||
+		strings.HasPrefix(rawURL, "../")
+}
+
+func isSCPStyleRemote(rawURL string) bool {
+	if strings.Contains(rawURL, "://") || strings.Contains(rawURL, " ") {
+		return false
+	}
+
+	hostPart, pathPart, ok := strings.Cut(rawURL, ":")
+	if !ok || hostPart == "" || pathPart == "" {
+		return false
+	}
+
+	if strings.Contains(hostPart, "/") {
 		return false
 	}
 

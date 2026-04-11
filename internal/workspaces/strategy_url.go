@@ -5,6 +5,8 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/giturl"
 )
 
+const urlStrategyName = "url"
+
 // URLStrategy resolves direct Git URLs to repositories.
 type URLStrategy struct {
 	// registryLookup optionally checks the registry to find an alias for a URL.
@@ -25,7 +27,7 @@ func NewURLStrategy(registryLookup URLRegistryLookup) *URLStrategy {
 
 // Name returns the strategy name for debugging.
 func (s *URLStrategy) Name() string {
-	return "url"
+	return urlStrategyName
 }
 
 // Resolve attempts to resolve a URL to a repository.

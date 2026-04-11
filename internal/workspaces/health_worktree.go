@@ -103,18 +103,24 @@ func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, rep
 	gitdirPath := strings.TrimSpace(strings.TrimPrefix(gitdirLine, "gitdir:"))
 	gitdirPath = resolveGitdirPath(gitdirPath, worktreePath)
 
-	if _, err := os.Stat(gitdirPath); os.IsNotExist(err) { //nolint:gosec // G703: gitdirPath parsed from trusted .git worktree link file
+	if _, err := os.Stat(gitdirPath); err != nil { //nolint:gosec // G703: gitdirPath parsed from trusted .git worktree link file
 		check := domain.HealthCheck{
-			Name:        "worktree_ref:" + repoName,
-			Category:    domain.HealthCategoryWorktree,
-			Status:      domain.HealthStatusCritical,
-			Description: "Worktree link points to non-existent git directory",
-			Fixable:     true,
-			FixAction:   "Re-create worktree from canonical repository",
-			Details:     "Missing: " + gitdirPath,
+			Name:     "worktree_ref:" + repoName,
+			Category: domain.HealthCategoryWorktree,
+			Status:   domain.HealthStatusCritical,
+			Fixable:  os.IsNotExist(err),
 		}
 
-		if fix {
+		if os.IsNotExist(err) {
+			check.Description = "Worktree link points to non-existent git directory"
+			check.FixAction = "Re-create worktree from canonical repository"
+			check.Details = "Missing: " + gitdirPath
+		} else {
+			check.Description = "Cannot access referenced git directory"
+			check.Details = "Error: " + err.Error()
+		}
+
+		if check.Fixable && fix {
 			if fixErr := s.fixMissingWorktree(ctx, repoName, worktreePath, branchName); fixErr == nil {
 				check.Status = domain.HealthStatusHealthy
 				check.Description = "Worktree recreated successfully"
@@ -164,8 +170,12 @@ func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, rep
 
 func (s *WorkspaceHealthService) fixMissingWorktree(ctx context.Context, repoName, worktreePath, branchName string) error {
 	canonicalPath := filepath.Join(s.config.GetProjectsRoot(), repoName)
-	if _, err := os.Stat(canonicalPath); os.IsNotExist(err) {
-		return cerrors.NewRepoNotFound(repoName)
+	if _, err := os.Stat(canonicalPath); err != nil {
+		if os.IsNotExist(err) {
+			return cerrors.NewRepoNotFound(repoName)
+		}
+
+		return err
 	}
 
 	if err := os.RemoveAll(worktreePath); err != nil && !os.IsNotExist(err) {
