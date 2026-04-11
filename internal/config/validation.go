@@ -12,6 +12,7 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/validation"
 )
 
+// Validate validates configuration values and environment prerequisites and returns an error when invalid.
 func (c *Config) Validate() error {
 	if err := c.ValidateValues(); err != nil {
 		return err
@@ -20,6 +21,7 @@ func (c *Config) Validate() error {
 	return c.ValidateEnvironment()
 }
 
+// ValidateValues validates configuration values without performing filesystem checks and returns an error when invalid.
 func (c *Config) ValidateValues() error {
 	if err := c.validateWorkspaceSettings(); err != nil {
 		return err
@@ -32,6 +34,7 @@ func (c *Config) ValidateValues() error {
 	return c.validateKeybindings()
 }
 
+// ValidateTemplates validates configured workspace templates and returns an error when any template is invalid.
 func (c *Config) ValidateTemplates() error {
 	return c.validateTemplates()
 }
@@ -201,6 +204,7 @@ func (c *Config) validateLockSettings() error {
 	return nil
 }
 
+// Configuration defaults and bounds for workspace closing, worker counts, and lock timings.
 const (
 	CloseDefaultDelete        = "delete"
 	CloseDefaultArchive       = "archive"

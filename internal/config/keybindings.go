@@ -44,7 +44,21 @@ func applyDefaultKeys(keys *[]string, defaults []string) {
 
 // WithDefaults returns a copy of Keybindings with defaults applied for empty fields.
 func (k Keybindings) WithDefaults() Keybindings {
-	result := k
+	result := Keybindings{
+		Quit:        copyKeys(k.Quit),
+		Search:      copyKeys(k.Search),
+		Sync:        copyKeys(k.Sync),
+		Push:        copyKeys(k.Push),
+		Close:       copyKeys(k.Close),
+		OpenEditor:  copyKeys(k.OpenEditor),
+		ToggleStale: copyKeys(k.ToggleStale),
+		Details:     copyKeys(k.Details),
+		Select:      copyKeys(k.Select),
+		SelectAll:   copyKeys(k.SelectAll),
+		DeselectAll: copyKeys(k.DeselectAll),
+		Confirm:     copyKeys(k.Confirm),
+		Cancel:      copyKeys(k.Cancel),
+	}
 
 	applyDefaultKeys(&result.Quit, DefaultQuitKeys)
 	applyDefaultKeys(&result.Search, DefaultSearchKeys)
@@ -126,7 +140,13 @@ func (k Keybindings) ValidateKeybindings() error {
 
 	keyUsage := make(map[string][]string)
 	addKeys := func(keys []string, action string) {
+		seen := make(map[string]struct{}, len(keys))
 		for _, key := range keys {
+			if _, ok := seen[key]; ok {
+				continue
+			}
+
+			seen[key] = struct{}{}
 			keyUsage[key] = append(keyUsage[key], action)
 		}
 	}

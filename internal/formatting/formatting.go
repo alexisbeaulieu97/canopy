@@ -3,7 +3,6 @@ package formatting
 
 import (
 	"fmt"
-	"math"
 	"time"
 )
 
@@ -29,7 +28,8 @@ func Bytes(size int64, opts ByteSizeOptions) string {
 	}
 
 	const unit = 1024
-	if absInt64(size) < unit {
+	value := absInt64(size)
+	if value < unit {
 		return fmt.Sprintf("%d B", size)
 	}
 
@@ -38,8 +38,7 @@ func Bytes(size int64, opts ByteSizeOptions) string {
 		precision = 0
 	}
 
-	value := absInt64(size)
-	divisor := int64(unit)
+	divisor := uint64(unit)
 	unitIndex := 0
 	units := []string{"KB", "MB", "GB", "TB"}
 
@@ -48,7 +47,7 @@ func Bytes(size int64, opts ByteSizeOptions) string {
 		unitIndex++
 	}
 
-	formattedValue := fmt.Sprintf("%.*f", precision, math.Abs(float64(size))/float64(divisor))
+	formattedValue := fmt.Sprintf("%.*f", precision, float64(value)/float64(divisor))
 	if size < 0 {
 		formattedValue = "-" + formattedValue
 	}
@@ -81,15 +80,18 @@ func RelativeTimeAt(now, t time.Time, opts RelativeTimeOptions) string {
 	case diff < 24*time.Hour:
 		hours := int(diff.Hours())
 		return formatCount(hours, "hour", "hours", opts.Compact)
-	case diff < 7*24*time.Hour:
-		days := int(diff.Hours() / 24)
+	}
+
+	days := calendarDaysBetween(now, t)
+	switch {
+	case days < 7:
 		if days == 1 && opts.Yesterday {
 			return "yesterday"
 		}
 
 		return formatCount(days, "day", "days", opts.Compact)
-	case opts.UseWeeks && diff < opts.absoluteAfter():
-		weeks := int(diff.Hours() / (24 * 7))
+	case opts.UseWeeks && days < opts.absoluteAfterDays():
+		weeks := days / 7
 		if weeks == 1 {
 			return "1 week ago"
 		}
@@ -105,7 +107,11 @@ func (o RelativeTimeOptions) absoluteAfter() time.Duration {
 		return o.AbsoluteAfter
 	}
 
-	return 7 * 24 * time.Hour
+	return 30 * 24 * time.Hour
+}
+
+func (o RelativeTimeOptions) absoluteAfterDays() int {
+	return durationDays(o.absoluteAfter())
 }
 
 func formatCount(count int, singular, plural string, compact bool) string {
@@ -124,10 +130,38 @@ func formatCount(count int, singular, plural string, compact bool) string {
 	return fmt.Sprintf("%d %s ago", count, plural)
 }
 
-func absInt64(v int64) int64 {
-	if v < 0 {
-		return -v
+func durationDays(d time.Duration) int {
+	if d <= 0 {
+		return 0
 	}
 
-	return v
+	return int(d / (24 * time.Hour))
+}
+
+func calendarDaysBetween(now, then time.Time) int {
+	if now.Before(then) {
+		return 0
+	}
+
+	location := now.Location()
+	nowDay := calendarDayNumber(now.In(location))
+	thenDay := calendarDayNumber(then.In(location))
+	if nowDay <= thenDay {
+		return 0
+	}
+
+	return int(nowDay - thenDay)
+}
+
+func calendarDayNumber(t time.Time) int64 {
+	year, month, day := t.Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Unix() / (24 * 60 * 60)
+}
+
+func absInt64(v int64) uint64 {
+	if v >= 0 {
+		return uint64(v)
+	}
+
+	return uint64(^v) + 1
 }

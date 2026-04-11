@@ -92,7 +92,7 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 			}
 
 			report := runBulkWorkspaceOperations(cmd.Context(), ids, bulkWorkspaceRunOptions[*domain.SyncResult]{
-				Parallelism: numWorkers,
+				Parallelism:  numWorkers,
 				ShowProgress: !noProgress && !jsonOutput,
 				OnSuccess: func(id string, current, total int, _ *domain.SyncResult) {
 					output.Infof("Synced workspace %s (%d/%d)", id, current, total)

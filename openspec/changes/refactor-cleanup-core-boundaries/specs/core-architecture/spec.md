@@ -25,7 +25,6 @@ The system SHALL initialize all services through a centralized App struct that m
 The codebase SHALL follow hexagonal architecture patterns.
 
 #### Scenario: Core package does not own shell-execution policy
-- **GIVEN** shell command execution is an infrastructure concern
 - **WHEN** workspace template setup commands are executed
 - **THEN** execution flows through an injected adapter contract
 - **AND** the workspace core package does not directly select shells or spawn commands for that concern

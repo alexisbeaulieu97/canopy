@@ -1098,6 +1098,25 @@ func TestKeybindingsWithDefaults(t *testing.T) {
 	}
 }
 
+func TestKeybindingsWithDefaults_DeepCopiesInputSlices(t *testing.T) {
+	input := Keybindings{
+		Quit:   []string{"x"},
+		Search: []string{"/"},
+	}
+
+	result := input.WithDefaults()
+	result.Quit[0] = "changed"
+	result.Search[0] = "changed"
+
+	if input.Quit[0] != "x" {
+		t.Fatalf("WithDefaults mutated input Quit slice: got %q", input.Quit[0])
+	}
+
+	if input.Search[0] != "/" {
+		t.Fatalf("WithDefaults mutated input Search slice: got %q", input.Search[0])
+	}
+}
+
 func TestKeybindingsValidation(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -1146,6 +1165,12 @@ func TestKeybindingsValidation(t *testing.T) {
 			kb: Keybindings{
 				OpenEditor: []string{"o", "e"},
 				Quit:       []string{"q", "ctrl+c"},
+			}.WithDefaults(),
+		},
+		{
+			name: "duplicate keys within one action do not create false conflicts",
+			kb: Keybindings{
+				Quit: []string{"q", "q"},
 			}.WithDefaults(),
 		},
 		{

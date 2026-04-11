@@ -19,45 +19,46 @@ func Load(configPath string) (*Config, error) {
 		return nil, cerrors.NewIOFailed("get user home dir", err)
 	}
 
-	viper.SetConfigType("yaml")
+	v := viper.New()
+	v.SetConfigType("yaml")
 
 	explicitConfigPath := false
 	if configPath != "" {
-		viper.SetConfigFile(expandPath(configPath, home))
+		v.SetConfigFile(expandPath(configPath, home))
 		explicitConfigPath = true
 	} else if envPath := os.Getenv("CANOPY_CONFIG"); envPath != "" {
-		viper.SetConfigFile(expandPath(envPath, home))
+		v.SetConfigFile(expandPath(envPath, home))
 		explicitConfigPath = true
 	} else {
-		viper.SetConfigName("config")
-		viper.AddConfigPath(".")
-		viper.AddConfigPath(filepath.Join(home, ".canopy"))
-		viper.AddConfigPath(filepath.Join(home, ".config", "canopy"))
+		v.SetConfigName("config")
+		v.AddConfigPath(".")
+		v.AddConfigPath(filepath.Join(home, ".canopy"))
+		v.AddConfigPath(filepath.Join(home, ".config", "canopy"))
 	}
 
-	viper.SetDefault("projects_root", filepath.Join(home, ".canopy", "projects"))
-	viper.SetDefault("workspaces_root", filepath.Join(home, ".canopy", "workspaces"))
-	viper.SetDefault("closed_root", filepath.Join(home, ".canopy", "closed"))
-	viper.SetDefault("workspace_close_default", CloseDefaultDelete)
-	viper.SetDefault("workspace_naming", "{{.ID}}")
-	viper.SetDefault("stale_threshold_days", 14)
-	viper.SetDefault("lock_timeout", DefaultLockTimeout.String())
-	viper.SetDefault("lock_stale_threshold", DefaultLockStaleThreshold.String())
-	viper.SetDefault("parallel_workers", DefaultParallelWorkers)
-	viper.SetDefault("git.retry.max_attempts", 3)
-	viper.SetDefault("git.retry.initial_delay", "1s")
-	viper.SetDefault("git.retry.max_delay", "30s")
-	viper.SetDefault("git.retry.multiplier", 2.0)
-	viper.SetDefault("git.retry.jitter_factor", 0.25)
+	v.SetDefault("projects_root", filepath.Join(home, ".canopy", "projects"))
+	v.SetDefault("workspaces_root", filepath.Join(home, ".canopy", "workspaces"))
+	v.SetDefault("closed_root", filepath.Join(home, ".canopy", "closed"))
+	v.SetDefault("workspace_close_default", CloseDefaultDelete)
+	v.SetDefault("workspace_naming", "{{.ID}}")
+	v.SetDefault("stale_threshold_days", 14)
+	v.SetDefault("lock_timeout", DefaultLockTimeout.String())
+	v.SetDefault("lock_stale_threshold", DefaultLockStaleThreshold.String())
+	v.SetDefault("parallel_workers", DefaultParallelWorkers)
+	v.SetDefault("git.retry.max_attempts", 3)
+	v.SetDefault("git.retry.initial_delay", "1s")
+	v.SetDefault("git.retry.max_delay", "30s")
+	v.SetDefault("git.retry.multiplier", 2.0)
+	v.SetDefault("git.retry.jitter_factor", 0.25)
 
-	viper.SetEnvPrefix("CANOPY")
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.AutomaticEnv()
+	v.SetEnvPrefix("CANOPY")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
 
-	if err := viper.ReadInConfig(); err != nil {
+	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			if explicitConfigPath {
-				return nil, cerrors.NewIOFailed("read config file", fmt.Errorf("config file not found: %s", viper.ConfigFileUsed()))
+				return nil, cerrors.NewIOFailed("read config file", fmt.Errorf("config file not found: %s", v.ConfigFileUsed()))
 			}
 		} else {
 			return nil, cerrors.NewIOFailed("read config file", err)
@@ -65,7 +66,7 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	var cfg Config
-	if err := viper.Unmarshal(&cfg, func(config *mapstructure.DecoderConfig) {
+	if err := v.Unmarshal(&cfg, func(config *mapstructure.DecoderConfig) {
 		config.ErrorUnused = true
 	}); err != nil {
 		return nil, handleUnmarshalError(err)

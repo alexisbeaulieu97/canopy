@@ -134,13 +134,21 @@ func (e *Executor) runCommand(
 	baseCtx context.Context,
 ) error {
 	shell := resolveShell(hook.Shell)
-	timeout := resolveTimeout(hook.Timeout)
+	timeout, hasTimeout := resolveTimeout(hook.Timeout)
 
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
 
-	execCtx, cancel := context.WithTimeout(baseCtx, timeout)
+	var (
+		execCtx context.Context
+		cancel  context.CancelFunc
+	)
+	if hasTimeout {
+		execCtx, cancel = context.WithTimeout(baseCtx, timeout)
+	} else {
+		execCtx, cancel = context.WithCancel(baseCtx)
+	}
 	defer cancel()
 
 	cmd := e.buildCommand(execCtx, shell, resolvedCommand, workDir, ctx, repo)
@@ -188,12 +196,16 @@ func resolveShell(hookShell string) string {
 }
 
 // resolveTimeout determines the timeout duration for the hook.
-func resolveTimeout(hookTimeout int) time.Duration {
-	if hookTimeout > 0 {
-		return time.Duration(hookTimeout) * time.Second
+func resolveTimeout(hookTimeout int) (time.Duration, bool) {
+	if hookTimeout < 0 {
+		return 0, false
 	}
 
-	return DefaultTimeout
+	if hookTimeout > 0 {
+		return time.Duration(hookTimeout) * time.Second, true
+	}
+
+	return DefaultTimeout, true
 }
 
 // buildCommand creates the exec.Cmd with proper environment variables.

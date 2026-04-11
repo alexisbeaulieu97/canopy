@@ -146,7 +146,7 @@ var workspaceCloseCmd = &cobra.Command{
 			}
 
 			report := runBulkWorkspaceOperations(cmd.Context(), ids, bulkWorkspaceRunOptions[struct{}]{
-				Parallelism: 1,
+				Parallelism:  1,
 				ShowProgress: !noProgress && !jsonOutput,
 				OnStart: func(id string, current, total int) {
 					output.Infof("Closing workspace %s (%d/%d)", id, current, total)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/mocks"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
@@ -36,6 +37,41 @@ func TestCreateWorkspace_UsesTemplateDefaultBranch(t *testing.T) {
 
 	if len(deps.cache.InvalidateCalls) == 0 {
 		t.Error("expected cache to be invalidated")
+	}
+}
+
+func TestCreateWorkspace_TemplateSetupCommandsDisableDefaultHookTimeout(t *testing.T) {
+	t.Parallel()
+
+	deps := newMockService(t)
+	hooks := mocks.NewMockHookExecutor()
+	deps.svc.hookExecutor = hooks
+
+	_, err := deps.svc.CreateWorkspaceWithOptions(context.Background(), "ws-setup", "", nil, CreateOptions{
+		SkipHooks: true,
+		Template: &ports.WorkspaceTemplate{
+			SetupCommands: []string{"echo ready"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorkspaceWithOptions failed: %v", err)
+	}
+
+	if hooks.CallCount() != 1 {
+		t.Fatalf("expected 1 template setup hook execution, got %d", hooks.CallCount())
+	}
+
+	call := hooks.ExecuteHooksCalls[0]
+	if got := len(call.Hooks); got != 1 {
+		t.Fatalf("expected 1 hook, got %d", got)
+	}
+
+	if call.Hooks[0].Timeout != -1 {
+		t.Fatalf("expected template setup timeout sentinel -1, got %d", call.Hooks[0].Timeout)
+	}
+
+	if call.Options.BaseContext == nil {
+		t.Fatal("expected template setup hooks to receive a base context")
 	}
 }
 

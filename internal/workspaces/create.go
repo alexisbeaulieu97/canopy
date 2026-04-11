@@ -122,6 +122,7 @@ func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID, dir
 
 		_, err := s.hookExecutor.ExecuteHooks([]ports.HookSpec{{
 			Command: trimmed,
+			Timeout: -1,
 		}}, hookCtx, ports.HookExecuteOptions{
 			BaseContext: ctx,
 		})

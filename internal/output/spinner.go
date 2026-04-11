@@ -18,6 +18,7 @@ type Spinner struct {
 	frame    int
 	running  bool
 	done     chan struct{}
+	stopped  chan struct{}
 	finished bool
 	isTTY    bool
 }
@@ -31,6 +32,7 @@ func NewSpinner(message string) *Spinner {
 		writer:  writer,
 		icons:   NewIcons(),
 		done:    make(chan struct{}),
+		stopped: make(chan struct{}),
 		isTTY:   isWriterTTY(writer),
 	}
 }
@@ -55,6 +57,9 @@ func (s *Spinner) Start() {
 	}
 
 	s.running = true
+	s.finished = false
+	s.done = make(chan struct{})
+	s.stopped = make(chan struct{})
 	s.mu.Unlock()
 
 	if !s.isTTY {
@@ -84,11 +89,13 @@ func (s *Spinner) Stop() {
 	s.finished = true
 	s.running = false
 	close(s.done)
+	stopped := s.stopped
 	isTTY := s.isTTY
 	writer := s.writer
 	s.mu.Unlock()
 
 	if isTTY {
+		<-stopped
 		_, _ = fmt.Fprint(writer, "\r\033[K") //nolint:forbidigo // spinner output
 	}
 }
@@ -104,11 +111,13 @@ func (s *Spinner) StopWithMessage(icon, message string) {
 	s.finished = true
 	s.running = false
 	close(s.done)
+	stopped := s.stopped
 	isTTY := s.isTTY
 	writer := s.writer
 	s.mu.Unlock()
 
 	if isTTY {
+		<-stopped
 		_, _ = fmt.Fprintf(writer, "\r\033[K%s %s\n", icon, message) //nolint:forbidigo // spinner output
 		return
 	}
@@ -127,6 +136,8 @@ func (s *Spinner) StopWithError(message string) {
 }
 
 func (s *Spinner) animate() {
+	defer close(s.stopped)
+
 	frames := s.icons.SpinnerFrames()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
