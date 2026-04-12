@@ -82,8 +82,10 @@ func runDoctorWorkspace(cmd *cobra.Command, args []string) error {
 
 	fullReport := buildWorkspaceHealthReport(reports)
 
-	if err := output.WriteStructuredReport(cmd.OutOrStdout(), fullReport, jsonOutput, func(outWriter io.Writer) {
+	if err := output.WriteStructuredReport(cmd.OutOrStdout(), fullReport, jsonOutput, func(outWriter io.Writer) error {
 		printWorkspaceHealthReport(outWriter, fullReport)
+
+		return nil
 	}); err != nil {
 		return err
 	}

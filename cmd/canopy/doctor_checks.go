@@ -118,8 +118,24 @@ func checkDirectory(name, path string, fix bool) []CheckResult {
 	}
 
 	testFile := file.Name()
-	_ = file.Close()
-	_ = os.Remove(testFile)
+
+	if closeErr := file.Close(); closeErr != nil {
+		result.Status = statusFail
+		result.Message = fmt.Sprintf("cannot finalize writability probe: %s", path)
+		result.Details = closeErr.Error()
+		results = append(results, result)
+
+		return results
+	}
+
+	if rmErr := os.Remove(testFile); rmErr != nil {
+		result.Status = statusFail
+		result.Message = fmt.Sprintf("directory probe cleanup failed: %s", path)
+		result.Details = rmErr.Error()
+		results = append(results, result)
+
+		return results
+	}
 
 	result.Status = statusPass
 	result.Message = fmt.Sprintf("directory exists and is writable: %s", path)

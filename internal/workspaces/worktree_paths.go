@@ -70,7 +70,14 @@ func resolveWorktreeGitDir(worktreePath string) (string, error) {
 		return "", err
 	}
 
-	gitdirLine := strings.TrimSpace(string(content))
+	raw := strings.TrimSpace(string(content))
+	lines := strings.Split(raw, "\n")
+
+	if len(lines) != 1 {
+		return "", invalidGitWorktreeLinkError{line: raw}
+	}
+
+	gitdirLine := strings.TrimSpace(lines[0])
 	if !strings.HasPrefix(gitdirLine, "gitdir:") {
 		return "", invalidGitWorktreeLinkError{line: gitdirLine}
 	}

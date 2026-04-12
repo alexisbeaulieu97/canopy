@@ -422,9 +422,6 @@ func formatFirstStatusIssue(dirty, unpushed, behind int, icons output.Icons) str
 		return output.Colorize(output.ErrorStyle, fmt.Sprintf("%s %d unpushed", icons.Unpushed(), unpushed))
 	}
 
-	if behind > 0 {
-		return output.Colorize(output.WarningStyle, fmt.Sprintf("%s %d behind", icons.Behind(), behind))
-	}
-
-	return output.Colorize(output.SuccessStyle, icons.Success()+" clean")
+	// behind > 0 guaranteed by caller
+	return output.Colorize(output.WarningStyle, fmt.Sprintf("%s %d behind", icons.Behind(), behind))
 }

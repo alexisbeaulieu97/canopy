@@ -39,8 +39,10 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	report := buildDoctorReport(cmd.Context(), fix)
 	calculateReportSummary(report)
 
-	if err := output.WriteStructuredReport(cmd.OutOrStdout(), report, jsonOutput, func(outWriter io.Writer) {
+	if err := output.WriteStructuredReport(cmd.OutOrStdout(), report, jsonOutput, func(outWriter io.Writer) error {
 		printHumanReport(outWriter, report)
+
+		return nil
 	}); err != nil {
 		return err
 	}
