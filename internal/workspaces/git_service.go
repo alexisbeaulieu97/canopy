@@ -12,18 +12,6 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
-// GitService defines the interface for git operations on workspaces.
-type GitService interface {
-	// PushWorkspace pushes all repos for a workspace.
-	PushWorkspace(ctx context.Context, workspaceID string) error
-
-	// RunGitInWorkspace executes an arbitrary git command across all repos in a workspace.
-	RunGitInWorkspace(ctx context.Context, workspaceID string, args []string, opts GitRunOptions) ([]RepoGitResult, error)
-
-	// SwitchBranch switches the branch for all repos in a workspace.
-	SwitchBranch(ctx context.Context, workspaceID, branchName string, create bool) error
-}
-
 // WorkspaceFinder is the interface for finding workspaces (used to avoid circular dependencies).
 type WorkspaceFinder interface {
 	FindWorkspace(ctx context.Context, workspaceID string) (*domain.Workspace, string, error)

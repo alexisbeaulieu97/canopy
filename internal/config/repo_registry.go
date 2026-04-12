@@ -133,16 +133,9 @@ func (r *RepoRegistry) ResolveByURL(url string) (ports.RegistryEntry, bool) {
 func (r *RepoRegistry) Register(alias string, entry ports.RegistryEntry, force bool) error {
 	r.ensureMap()
 
-	alias = strings.TrimSpace(alias)
-	if alias == "" {
-		return cerrors.NewInvalidArgument("alias", "is required")
-	}
-
-	entry.URL = strings.TrimSpace(entry.URL)
-
-	sanitizedURL := giturl.Sanitize(entry.URL)
-	if !giturl.IsURL(entry.URL) {
-		return cerrors.NewInvalidArgument("url", fmt.Sprintf("invalid repository URL: %s", sanitizedURL))
+	alias, entry, err := prepareRegistryEntry(alias, entry)
+	if err != nil {
+		return err
 	}
 
 	if _, exists := r.Repos[alias]; exists && !force {
@@ -160,31 +153,42 @@ func (r *RepoRegistry) Register(alias string, entry ports.RegistryEntry, force b
 func (r *RepoRegistry) RegisterWithSuffix(alias string, entry ports.RegistryEntry) (string, error) {
 	r.ensureMap()
 
-	alias = strings.TrimSpace(alias)
-	if alias == "" {
-		return "", cerrors.NewInvalidArgument("alias", "is required")
+	baseAlias, entry, err := prepareRegistryEntry(alias, entry)
+	if err != nil {
+		return "", err
 	}
 
-	entry.URL = strings.TrimSpace(entry.URL)
-
-	sanitizedURL := giturl.Sanitize(entry.URL)
-	if !giturl.IsURL(entry.URL) {
-		return "", cerrors.NewInvalidArgument("url", fmt.Sprintf("invalid repository URL: %s", sanitizedURL))
-	}
-
-	target := alias
+	target := baseAlias
 	for idx := 2; ; idx++ {
 		if _, exists := r.Repos[target]; !exists {
 			break
 		}
 
-		target = fmt.Sprintf("%s-%d", alias, idx)
+		target = fmt.Sprintf("%s-%d", baseAlias, idx)
 	}
 
 	entry.Alias = target
 	r.Repos[target] = stripAlias(fromPortRegistryEntry(entry))
 
 	return target, nil
+}
+
+func prepareRegistryEntry(alias string, entry ports.RegistryEntry) (string, ports.RegistryEntry, error) {
+	alias = strings.TrimSpace(alias)
+	if alias == "" {
+		return "", ports.RegistryEntry{}, cerrors.NewInvalidArgument("alias", "is required")
+	}
+
+	entry.URL = strings.TrimSpace(entry.URL)
+
+	sanitizedURL := giturl.Sanitize(entry.URL)
+	if !giturl.IsURL(entry.URL) {
+		return "", ports.RegistryEntry{}, cerrors.NewInvalidArgument("url", fmt.Sprintf("invalid repository URL: %s", sanitizedURL))
+	}
+
+	entry.Alias = alias
+
+	return alias, entry, nil
 }
 
 // Unregister removes an alias from the registry.

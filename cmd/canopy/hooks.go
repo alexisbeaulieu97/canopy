@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -13,16 +11,6 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
-
-type hookPreviewEnvelope struct {
-	DryRunHooks   bool                        `json:"dry_run_hooks"`
-	Phase         string                      `json:"phase"`
-	WorkspaceID   string                      `json:"workspace_id"`
-	WorkspacePath string                      `json:"workspace_path,omitempty"`
-	Commands      []domain.HookCommandPreview `json:"commands"`
-	Action        string                      `json:"action,omitempty"`
-	ClosedAt      *time.Time                  `json:"closed_at,omitempty"`
-}
 
 var (
 	hooksCmd = &cobra.Command{
@@ -81,13 +69,7 @@ var (
 			}
 
 			if jsonOutput {
-				return output.PrintJSON(hookPreviewEnvelope{
-					DryRunHooks: true,
-					Phase:       string(phase),
-					WorkspaceID: workspaceID,
-					Commands:    previews,
-					Action:      "test",
-				})
+				return printHookPreviewJSON(phase, workspaceID, "", "test", previews, nil)
 			}
 
 			printHookPreview(string(phase), previews)
@@ -170,47 +152,4 @@ func printHookPreview(phase string, previews []domain.HookCommandPreview) {
 
 		output.Infof("      working_dir: %s", preview.WorkingDir)
 	}
-}
-
-func closeWithHookDryRunJSON(
-	ctx context.Context,
-	service *workspaces.Service,
-	id string,
-	force bool,
-	keepMetadata bool,
-	opts workspaces.CloseOptions,
-	previews []domain.HookCommandPreview,
-) error {
-	if keepMetadata {
-		archived, err := service.CloseWorkspaceKeepMetadataWithOptions(ctx, id, force, opts)
-		if err != nil {
-			return err
-		}
-
-		var closedAt *time.Time
-		if archived != nil {
-			closedAt = archived.Metadata.ClosedAt
-		}
-
-		return output.PrintJSON(hookPreviewEnvelope{
-			DryRunHooks: true,
-			Phase:       string(workspaces.HookPhasePreClose),
-			WorkspaceID: id,
-			Commands:    previews,
-			Action:      "close_keep",
-			ClosedAt:    closedAt,
-		})
-	}
-
-	if err := service.CloseWorkspaceWithOptions(ctx, id, force, opts); err != nil {
-		return err
-	}
-
-	return output.PrintJSON(hookPreviewEnvelope{
-		DryRunHooks: true,
-		Phase:       string(workspaces.HookPhasePreClose),
-		WorkspaceID: id,
-		Commands:    previews,
-		Action:      "close_delete",
-	})
 }

@@ -12,15 +12,6 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
-// ExportService defines the interface for workspace export/import operations.
-type ExportService interface {
-	// ExportWorkspace creates a portable export of a workspace definition.
-	ExportWorkspace(ctx context.Context, workspaceID string) (*domain.WorkspaceExport, error)
-
-	// ImportWorkspace creates a workspace from an exported definition.
-	ImportWorkspace(ctx context.Context, export *domain.WorkspaceExport, idOverride, branchOverride string, force bool) (string, error)
-}
-
 // WorkspaceCreator is the interface for creating workspaces (used to avoid circular dependencies).
 type WorkspaceCreator interface {
 	CreateWorkspace(ctx context.Context, id, branchName string, repos []domain.Repo) (string, error)

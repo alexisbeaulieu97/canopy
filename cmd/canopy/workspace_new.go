@@ -31,16 +31,8 @@ var workspaceNewCmd = &cobra.Command{
 		jsonOutput, _ := cmd.Flags().GetBool("json")
 		templateName, _ := cmd.Flags().GetString("template")
 
-		if hooksOnly && noHooks {
-			return cerrors.NewInvalidArgument("flags", "cannot use --hooks-only with --no-hooks")
-		}
-
-		if dryRunHooks && noHooks {
-			return cerrors.NewInvalidArgument("flags", "cannot use --dry-run-hooks with --no-hooks")
-		}
-
-		if dryRunHooks && hooksOnly {
-			return cerrors.NewInvalidArgument("flags", "cannot use --dry-run-hooks with --hooks-only")
+		if err := validateHookExecutionFlags(noHooks, hooksOnly, dryRunHooks); err != nil {
+			return err
 		}
 
 		if jsonOutput && !dryRunHooks {
@@ -135,14 +127,7 @@ var workspaceNewCmd = &cobra.Command{
 			}
 
 			if jsonOutput {
-				return output.PrintJSON(hookPreviewEnvelope{
-					DryRunHooks:   true,
-					Phase:         string(workspaces.HookPhasePostCreate),
-					WorkspaceID:   id,
-					WorkspacePath: workspacePath,
-					Commands:      previews,
-					Action:        "create",
-				})
+				return printHookPreviewJSON(workspaces.HookPhasePostCreate, id, workspacePath, "create", previews, nil)
 			}
 
 			printHookPreview(string(workspaces.HookPhasePostCreate), previews)

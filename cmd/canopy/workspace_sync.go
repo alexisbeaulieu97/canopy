@@ -22,39 +22,31 @@ var workspaceSyncCmd = &cobra.Command{
 Per-repository timeouts can be configured to prevent slow remotes from blocking the entire operation.
 Bulk sync continues across workspaces and exits non-zero if any workspace fails.`,
 	Args: func(cmd *cobra.Command, args []string) error {
-		pattern, _ := cmd.Flags().GetString("pattern")
-
-		all, _ := cmd.Flags().GetBool("all")
-		if all && pattern != "" {
-			return cerrors.NewInvalidArgument("pattern", "cannot use --pattern with --all")
-		}
-
-		if pattern != "" || all {
-			if len(args) != 0 {
-				return cerrors.NewInvalidArgument("id", "cannot provide workspace ID with --pattern or --all")
-			}
-
-			return nil
-		}
-
-		if len(args) != 1 {
-			return cerrors.NewInvalidArgument("id", "workspace ID is required")
-		}
-
-		return nil
+		return validateWorkspaceTargetArgs(
+			cmd,
+			args,
+			1,
+			"id",
+			"workspace ID is required",
+			0,
+			"id",
+			"cannot provide workspace ID with --pattern or --all",
+		)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		timeoutStr, _ := cmd.Flags().GetString("timeout")
 		jsonOutput, _ := cmd.Flags().GetBool("json")
-		pattern, _ := cmd.Flags().GetString("pattern")
-		all, _ := cmd.Flags().GetBool("all")
+
+		pattern, err := resolveWorkspaceBulkPattern(cmd)
+		if err != nil {
+			return err
+		}
+
 		noProgress, _ := cmd.Flags().GetBool("no-progress")
 
 		var timeout time.Duration
 
 		if timeoutStr != "" {
-			var err error
-
 			timeout, err = time.ParseDuration(timeoutStr)
 			if err != nil {
 				return cerrors.NewInvalidArgument("timeout", fmt.Sprintf("invalid duration: %v", err))
@@ -68,10 +60,6 @@ Bulk sync continues across workspaces and exits non-zero if any workspace fails.
 
 		opts := workspaces.SyncOptions{
 			Timeout: timeout,
-		}
-
-		if all {
-			pattern = ".*"
 		}
 
 		if pattern != "" {

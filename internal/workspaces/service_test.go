@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -980,6 +981,43 @@ func TestGetCanonicalRepoStatus(t *testing.T) {
 
 	if status.UsedByCount != 1 || status.UsedBy[0] != "WS-1" {
 		t.Errorf("expected [WS-1], got %v", status.UsedBy)
+	}
+}
+
+func TestGetCanonicalRepoStatus_StatFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows - file permissions behave differently")
+	}
+
+	deps := newTestService(t)
+
+	repoName := "blocked-repo"
+
+	repoPath := filepath.Join(deps.projectsRoot, repoName)
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatalf("failed to create repo path: %v", err)
+	}
+
+	if err := os.Chmod(deps.projectsRoot, 0o000); err != nil {
+		t.Fatalf("failed to remove projects root permissions: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.Chmod(deps.projectsRoot, 0o750)
+	})
+
+	_, err := deps.svc.GetCanonicalRepoStatus(context.Background(), repoName)
+	if err == nil {
+		t.Fatal("expected stat failure, got nil")
+	}
+
+	var canopyErr *cerrors.CanopyError
+	if !errors.As(err, &canopyErr) {
+		t.Fatalf("expected canopy error, got %T", err)
+	}
+
+	if canopyErr.Code != cerrors.ErrIOFailed {
+		t.Fatalf("expected IO_FAILED, got %s", canopyErr.Code)
 	}
 }
 

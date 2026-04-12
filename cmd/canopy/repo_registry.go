@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -74,18 +75,52 @@ func nextAvailableAlias(registry ports.RepoRegistry, base string) string {
 }
 
 func registerAlias(registry ports.RepoRegistry, alias string, entry ports.RegistryEntry, logger rollbackLogger) (string, error) {
-	if err := registry.Register(alias, entry, false); err != nil {
+	return registerRegistryEntry(registry, alias, entry, false, logger)
+}
+
+func registerRegistryEntry(
+	registry ports.RepoRegistry,
+	alias string,
+	entry ports.RegistryEntry,
+	force bool,
+	logger rollbackLogger,
+) (string, error) {
+	normalizedAlias := strings.TrimSpace(alias)
+	if normalizedAlias == "" {
+		return "", cerrors.NewInvalidArgument("alias", "alias is required")
+	}
+
+	previousEntry, hadPrevious := registry.Resolve(normalizedAlias)
+
+	if err := registry.Register(normalizedAlias, entry, force); err != nil {
 		return "", err
 	}
 
 	rollbackFn := func() error {
-		return registry.Unregister(alias)
+		if hadPrevious {
+			return registry.Register(normalizedAlias, previousEntry, true)
+		}
+
+		return registry.Unregister(normalizedAlias)
 	}
 	if err := saveRegistryWithRollback(registry, rollbackFn, "registration", logger); err != nil {
 		return "", err
 	}
 
-	return alias, nil
+	return normalizedAlias, nil
+}
+
+func canonicalPathStatus(path string) (string, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return "present", nil
+	}
+
+	if os.IsNotExist(err) {
+		return "missing", nil
+	}
+
+	return "", cerrors.NewIOFailed("stat canonical path", err)
 }
 
 // rollbackLogger is an interface for logging rollback errors.

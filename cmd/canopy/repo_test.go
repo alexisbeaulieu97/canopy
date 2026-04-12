@@ -1,12 +1,14 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
 	"github.com/alexisbeaulieu97/canopy/internal/config"
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
@@ -243,5 +245,94 @@ func TestRegisterAlias_DuplicateError(t *testing.T) {
 	_, err = registerAlias(registry, "test-alias", ports.RegistryEntry{URL: "https://github.com/other/repo"}, logger)
 	if err == nil {
 		t.Error("expected error for duplicate alias, got nil")
+	}
+}
+
+func TestRegisterRegistryEntry_RollbackRestoresPreviousEntry(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows - file permissions behave differently")
+	}
+
+	tmpDir := t.TempDir()
+	registryPath := filepath.Join(tmpDir, "repos.yaml")
+
+	registry, err := config.LoadRepoRegistry(registryPath)
+	if err != nil {
+		t.Fatalf("failed to load registry: %v", err)
+	}
+
+	original := ports.RegistryEntry{URL: "https://github.com/test/original"}
+	if err := registry.Register("test-alias", original, false); err != nil {
+		t.Fatalf("failed to register original entry: %v", err)
+	}
+
+	if err := registry.Save(); err != nil {
+		t.Fatalf("initial save failed: %v", err)
+	}
+
+	if err := os.Chmod(registryPath, 0o444); err != nil {
+		t.Fatalf("failed to make registry read-only: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.Chmod(registryPath, 0o644)
+	})
+
+	logger := &mockLogger{}
+
+	_, err = registerRegistryEntry(
+		registry,
+		" test-alias ",
+		ports.RegistryEntry{URL: "https://github.com/test/updated"},
+		true,
+		logger,
+	)
+	if err == nil {
+		t.Fatal("expected registration save failure, got nil")
+	}
+
+	resolved, exists := registry.Resolve("test-alias")
+	if !exists {
+		t.Fatal("expected original alias to be restored after rollback")
+	}
+
+	if resolved.URL != original.URL {
+		t.Fatalf("expected rollback to restore %q, got %q", original.URL, resolved.URL)
+	}
+}
+
+func TestCanonicalPathStatus_StatFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows - file permissions behave differently")
+	}
+
+	tmpDir := t.TempDir()
+	parent := filepath.Join(tmpDir, "projects")
+	repoPath := filepath.Join(parent, "repo")
+
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatalf("failed to create repo path: %v", err)
+	}
+
+	if err := os.Chmod(parent, 0o000); err != nil {
+		t.Fatalf("failed to remove parent permissions: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.Chmod(parent, 0o755)
+	})
+
+	_, err := canonicalPathStatus(repoPath)
+	if err == nil {
+		t.Fatal("expected stat failure, got nil")
+	}
+
+	var canopyErr *cerrors.CanopyError
+	if !errors.As(err, &canopyErr) {
+		t.Fatalf("expected canopy error, got %T", err)
+	}
+
+	if canopyErr.Code != cerrors.ErrIOFailed {
+		t.Fatalf("expected IO_FAILED, got %s", canopyErr.Code)
 	}
 }

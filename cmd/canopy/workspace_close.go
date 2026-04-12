@@ -22,26 +22,16 @@ var workspaceCloseCmd = &cobra.Command{
 	Use:   "close [ID]",
 	Short: "Close a workspace (keep metadata or delete)",
 	Args: func(cmd *cobra.Command, args []string) error {
-		pattern, _ := cmd.Flags().GetString("pattern")
-
-		all, _ := cmd.Flags().GetBool("all")
-		if all && pattern != "" {
-			return cerrors.NewInvalidArgument("pattern", "cannot use --pattern with --all")
-		}
-
-		if pattern != "" || all {
-			if len(args) != 0 {
-				return cerrors.NewInvalidArgument("id", "cannot provide workspace ID with --pattern or --all")
-			}
-
-			return nil
-		}
-
-		if len(args) != 1 {
-			return cerrors.NewInvalidArgument("id", "workspace ID is required")
-		}
-
-		return nil
+		return validateWorkspaceTargetArgs(
+			cmd,
+			args,
+			1,
+			"id",
+			"workspace ID is required",
+			0,
+			"id",
+			"cannot provide workspace ID with --pattern or --all",
+		)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		force, _ := cmd.Flags().GetBool("force")
@@ -52,24 +42,20 @@ var workspaceCloseCmd = &cobra.Command{
 		noHooks, _ := cmd.Flags().GetBool("no-hooks")
 		hooksOnly, _ := cmd.Flags().GetBool("hooks-only")
 		dryRunHooks, _ := cmd.Flags().GetBool("dry-run-hooks")
-		pattern, _ := cmd.Flags().GetString("pattern")
-		all, _ := cmd.Flags().GetBool("all")
+
+		pattern, err := resolveWorkspaceBulkPattern(cmd)
+		if err != nil {
+			return err
+		}
+
 		noProgress, _ := cmd.Flags().GetBool("no-progress")
 
 		if keepFlag && deleteFlag {
 			return cerrors.NewInvalidArgument("flags", "cannot use --keep and --delete together")
 		}
 
-		if hooksOnly && noHooks {
-			return cerrors.NewInvalidArgument("flags", "cannot use --hooks-only with --no-hooks")
-		}
-
-		if dryRunHooks && noHooks {
-			return cerrors.NewInvalidArgument("flags", "cannot use --dry-run-hooks with --no-hooks")
-		}
-
-		if dryRunHooks && hooksOnly {
-			return cerrors.NewInvalidArgument("flags", "cannot use --dry-run-hooks with --hooks-only")
+		if err := validateHookExecutionFlags(noHooks, hooksOnly, dryRunHooks); err != nil {
+			return err
 		}
 
 		if dryRunHooks && dryRun {
@@ -89,21 +75,12 @@ var workspaceCloseCmd = &cobra.Command{
 			SkipHooks: noHooks || dryRunHooks,
 		}
 
-		if all {
-			pattern = ".*"
-		}
-
 		if pattern != "" {
 			if hooksOnly || dryRunHooks {
 				return cerrors.NewInvalidArgument("flags", "--hooks-only and --dry-run-hooks require a single workspace ID")
 			}
 
-			keepMetadata := configDefaultArchive
-			if keepFlag {
-				keepMetadata = true
-			} else if deleteFlag {
-				keepMetadata = false
-			}
+			keepMetadata := resolveWorkspaceCloseKeepMetadata(configDefaultArchive, keepFlag, deleteFlag, false, false, nil)
 
 			ids, err := resolveBulkWorkspaceIDs(cmd.Context(), service, pattern)
 			if err != nil {
@@ -214,16 +191,17 @@ var workspaceCloseCmd = &cobra.Command{
 			}
 		}
 
-		// Determine keepMetadata based on flags and config.
-		keepMetadata := configDefaultArchive
-		if keepFlag {
-			keepMetadata = true
-		} else if deleteFlag {
-			keepMetadata = false
-		}
-
 		// Handle dry-run mode.
 		if dryRun {
+			keepMetadata := resolveWorkspaceCloseKeepMetadata(
+				configDefaultArchive,
+				keepFlag,
+				deleteFlag,
+				true,
+				false,
+				nil,
+			)
+
 			preview, err := service.PreviewCloseWorkspace(cmd.Context(), id, keepMetadata)
 			if err != nil {
 				return err
@@ -241,112 +219,33 @@ var workspaceCloseCmd = &cobra.Command{
 			return nil
 		}
 
+		var promptReader *bufio.Reader
+		if interactive && !keepFlag && !deleteFlag {
+			promptReader = bufio.NewReader(os.Stdin)
+		}
+
+		keepMetadata := resolveWorkspaceCloseKeepMetadata(
+			configDefaultArchive,
+			keepFlag,
+			deleteFlag,
+			false,
+			interactive,
+			promptReader,
+		)
+
 		if dryRunHooks && !jsonOutput {
 			printHookPreview(string(workspaces.HookPhasePreClose), hookPreviews)
 		}
 
-		if keepFlag {
-			if dryRunHooks && jsonOutput {
-				return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
-			}
+		if dryRunHooks && jsonOutput {
+			return closeWithHookDryRunJSON(cmd.Context(), service, id, force, keepMetadata, closeOpts, hookPreviews)
+		}
 
+		if keepMetadata {
 			return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
 		}
 
-		if deleteFlag {
-			if dryRunHooks && jsonOutput {
-				return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
-			}
-
-			return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
-		}
-
-		if !interactive {
-			if configDefaultArchive {
-				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
-				}
-
-				return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
-			}
-
-			if dryRunHooks && jsonOutput {
-				return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
-			}
-
-			return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
-		}
-
-		reader := bufio.NewReader(os.Stdin)
-
-		promptSuffix := "[y/N]"
-		if configDefaultArchive {
-			promptSuffix = "[Y/n]"
-		}
-
-		output.Printf("Keep workspace record without files? %s: ", promptSuffix)
-
-		answer, err := reader.ReadString('\n')
-		if err != nil {
-			if configDefaultArchive {
-				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
-				}
-
-				return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
-			}
-
-			if dryRunHooks && jsonOutput {
-				return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
-			}
-
-			return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
-		}
-
-		answer = strings.ToLower(strings.TrimSpace(answer))
-
-		switch answer {
-		case "y", "yes":
-			if dryRunHooks && jsonOutput {
-				return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
-			}
-
-			return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
-		case "n", "no":
-			if dryRunHooks && jsonOutput {
-				return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
-			}
-
-			return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
-		case "":
-			if configDefaultArchive {
-				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
-				}
-
-				return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
-			}
-
-			if dryRunHooks && jsonOutput {
-				return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
-			}
-
-			return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
-		default:
-			if configDefaultArchive {
-				if dryRunHooks && jsonOutput {
-					return closeWithHookDryRunJSON(cmd.Context(), service, id, force, true, closeOpts, hookPreviews)
-				}
-
-				return keepAndPrint(cmd.Context(), service, id, force, closeOpts)
-			}
-
-			if dryRunHooks && jsonOutput {
-				return closeWithHookDryRunJSON(cmd.Context(), service, id, force, false, closeOpts, hookPreviews)
-			}
-
-			return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
-		}
+		return closeAndPrint(cmd.Context(), service, id, force, closeOpts)
 	},
 }
 
