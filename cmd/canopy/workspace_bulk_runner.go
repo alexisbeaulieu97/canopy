@@ -5,7 +5,6 @@ import (
 	"context"
 	"os"
 	"strings"
-	"sync"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
@@ -107,32 +106,119 @@ func runBulkWorkspaceOperations[T any](
 		return report
 	}
 
-	parallelism := opts.Parallelism
-	if parallelism <= 0 || parallelism > len(ids) {
-		parallelism = len(ids)
-	}
-
-	var progress *output.Progress
-	if opts.ShowProgress {
-		progress = output.NewProgress(output.DefaultProgressOptions(len(ids)))
-	}
-
 	recorder := bulkWorkspaceRecorder[T]{
 		report:   &report,
 		opts:     opts,
-		progress: progress,
+		progress: newBulkWorkspaceProgress(len(ids), opts.ShowProgress),
 		total:    len(ids),
 	}
 
-	if parallelism == 1 {
-		runBulkWorkspaceSequential(ctx, ids, opts, execute, recorder)
-	} else {
-		runBulkWorkspaceConcurrent(ctx, ids, parallelism, execute, recorder)
-	}
+	runBulkWorkspaceExecution(ctx, ids, normalizeBulkParallelism(len(ids), opts.Parallelism), opts, execute, recorder)
 
 	recorder.finish()
 
 	return report
+}
+
+func normalizeBulkParallelism(total, requested int) int {
+	if requested <= 0 || requested > total {
+		return total
+	}
+
+	return requested
+}
+
+func newBulkWorkspaceProgress(total int, show bool) *output.Progress {
+	if !show {
+		return nil
+	}
+
+	return output.NewProgress(output.DefaultProgressOptions(total))
+}
+
+func runBulkWorkspaceExecution[T any](
+	ctx context.Context,
+	ids []string,
+	parallelism int,
+	opts bulkWorkspaceRunOptions[T],
+	execute func(context.Context, string) (T, error),
+	recorder bulkWorkspaceRecorder[T],
+) {
+	results, runErrCh := startBulkWorkspaceExecution(ctx, ids, parallelism, opts, execute)
+
+	completed := 0
+	for res := range results {
+		completed++
+
+		if ctx.Err() != nil {
+			recorder.cancel()
+		}
+
+		recorder.record(res.index, completed, res.id, res.value, res.err)
+	}
+
+	if err := <-runErrCh; err != nil {
+		recorder.cancel()
+	}
+}
+
+type bulkWorkspaceExecutionResult[T any] struct {
+	index int
+	id    string
+	value T
+	err   error
+}
+
+func startBulkWorkspaceExecution[T any](
+	ctx context.Context,
+	ids []string,
+	parallelism int,
+	opts bulkWorkspaceRunOptions[T],
+	execute func(context.Context, string) (T, error),
+) (<-chan bulkWorkspaceExecutionResult[T], <-chan error) {
+	results := make(chan bulkWorkspaceExecutionResult[T], len(ids))
+	runErrCh := make(chan error, 1)
+	executor := workspaces.NewParallelExecutor(parallelism)
+
+	go func() {
+		runErrCh <- executor.Run(ctx, len(ids), func(runCtx context.Context, index int) error {
+			runBulkWorkspaceTask(runCtx, ids, index, parallelism, opts, execute, results)
+
+			return nil
+		}, workspaces.ParallelOptions{
+			Workers:         parallelism,
+			ContinueOnError: true,
+		})
+
+		close(results)
+	}()
+
+	return results, runErrCh
+}
+
+func runBulkWorkspaceTask[T any](
+	runCtx context.Context,
+	ids []string,
+	index int,
+	parallelism int,
+	opts bulkWorkspaceRunOptions[T],
+	execute func(context.Context, string) (T, error),
+	results chan<- bulkWorkspaceExecutionResult[T],
+) {
+	id := ids[index]
+	if parallelism == 1 && opts.OnStart != nil && !opts.ShowProgress {
+		opts.OnStart(id, index+1, len(ids))
+	}
+
+	if runCtx.Err() != nil {
+		var zero T
+		results <- bulkWorkspaceExecutionResult[T]{index: index, id: id, value: zero, err: runCtx.Err()}
+
+		return
+	}
+
+	value, err := execute(runCtx, id)
+	results <- bulkWorkspaceExecutionResult[T]{index: index, id: id, value: value, err: err}
 }
 
 func (r bulkWorkspaceRecorder[T]) record(index, current int, id string, value T, err error) {
@@ -182,86 +268,5 @@ func (r bulkWorkspaceRecorder[T]) cancel() {
 func (r bulkWorkspaceRecorder[T]) finish() {
 	if r.progress != nil && !r.report.Cancelled {
 		r.progress.Finish()
-	}
-}
-
-func runBulkWorkspaceSequential[T any](
-	ctx context.Context,
-	ids []string,
-	opts bulkWorkspaceRunOptions[T],
-	execute func(context.Context, string) (T, error),
-	recorder bulkWorkspaceRecorder[T],
-) {
-	for i, id := range ids {
-		if ctx.Err() != nil {
-			recorder.cancel()
-			return
-		}
-
-		if opts.OnStart != nil && !opts.ShowProgress {
-			opts.OnStart(id, i+1, len(ids))
-		}
-
-		value, err := execute(ctx, id)
-		recorder.record(i, i+1, id, value, err)
-	}
-}
-
-func runBulkWorkspaceConcurrent[T any](
-	ctx context.Context,
-	ids []string,
-	parallelism int,
-	execute func(context.Context, string) (T, error),
-	recorder bulkWorkspaceRecorder[T],
-) {
-	type job struct {
-		index int
-		id    string
-	}
-
-	type result struct {
-		index int
-		id    string
-		value T
-		err   error
-	}
-
-	jobs := make(chan job, len(ids))
-	results := make(chan result, len(ids))
-
-	for i, id := range ids {
-		jobs <- job{index: i, id: id}
-	}
-
-	close(jobs)
-
-	var wg sync.WaitGroup
-	for i := 0; i < parallelism; i++ {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
-			for job := range jobs {
-				value, err := execute(ctx, job.id)
-				results <- result{index: job.index, id: job.id, value: value, err: err}
-			}
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	completed := 0
-	for res := range results {
-		completed++
-
-		if ctx.Err() != nil {
-			recorder.cancel()
-		}
-
-		recorder.record(res.index, completed, res.id, res.value, res.err)
 	}
 }

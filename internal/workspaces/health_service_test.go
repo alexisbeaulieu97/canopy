@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -197,6 +199,74 @@ func TestWorkspaceHealthService_CheckMetadataConsistency(t *testing.T) {
 	}
 }
 
+func TestWorkspaceHealthService_CheckMetadataConsistency_WorkspacePermissionError(t *testing.T) {
+	requirePOSIXPermissions(t)
+
+	tmpDir := t.TempDir()
+	blockedParent := filepath.Join(tmpDir, "blocked")
+	workspacePath := filepath.Join(blockedParent, "ws1")
+
+	if err := os.MkdirAll(blockedParent, 0o755); err != nil {
+		t.Fatalf("failed to create blocked parent: %v", err)
+	}
+
+	if err := os.Chmod(blockedParent, 0o000); err != nil {
+		t.Fatalf("failed to remove permissions: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.Chmod(blockedParent, 0o755)
+	})
+
+	svc := NewHealthService(&mocks.MockConfigProvider{WorkspacesRoot: tmpDir}, nil, nil, nil, nil)
+	checks := svc.checkMetadataConsistency(&domain.Workspace{ID: "ws1"}, workspacePath)
+
+	if len(checks) != 1 {
+		t.Fatalf("checkMetadataConsistency() got %d checks, want 1", len(checks))
+	}
+
+	if checks[0].Status != domain.HealthStatusCritical {
+		t.Fatalf("checkMetadataConsistency() status = %v, want %v", checks[0].Status, domain.HealthStatusCritical)
+	}
+
+	if checks[0].Description != "Cannot access workspace directory" {
+		t.Fatalf("checkMetadataConsistency() description = %q, want %q", checks[0].Description, "Cannot access workspace directory")
+	}
+}
+
+func TestWorkspaceHealthService_CheckMetadataConsistency_RepoAndReadDirPermissionErrors(t *testing.T) {
+	requirePOSIXPermissions(t)
+
+	tmpDir := t.TempDir()
+	workspacePath := filepath.Join(tmpDir, "ws1")
+
+	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	if err := os.Chmod(workspacePath, 0o000); err != nil {
+		t.Fatalf("failed to remove permissions: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.Chmod(workspacePath, 0o755)
+	})
+
+	svc := NewHealthService(&mocks.MockConfigProvider{WorkspacesRoot: tmpDir}, nil, nil, nil, nil)
+	checks := svc.checkMetadataConsistency(&domain.Workspace{
+		ID:    "ws1",
+		Repos: []domain.Repo{{Name: "repo1"}},
+	}, workspacePath)
+
+	if !hasHealthCheck(checks, "repo_exists:repo1", "Cannot access repository path from metadata") {
+		t.Fatalf("checkMetadataConsistency() missing repository permission error check: %+v", checks)
+	}
+
+	if !hasHealthCheck(checks, "workspace_directory_scan", "Cannot read workspace directory") {
+		t.Fatalf("checkMetadataConsistency() missing workspace read error check: %+v", checks)
+	}
+}
+
 func TestWorkspaceHealthService_CheckWorktreeIntegrity(t *testing.T) {
 	t.Parallel()
 
@@ -270,6 +340,52 @@ func TestWorkspaceHealthService_CheckWorktreeIntegrity(t *testing.T) {
 	}
 }
 
+func TestWorkspaceHealthService_CheckWorktreeIntegrity_GitdirPermissionError(t *testing.T) {
+	requirePOSIXPermissions(t)
+
+	tmpDir := t.TempDir()
+	worktreePath := filepath.Join(tmpDir, "repo1")
+	gitFilePath := filepath.Join(worktreePath, ".git")
+	blockedParent := filepath.Join(tmpDir, "blocked")
+	gitdirPath := filepath.Join(blockedParent, "repo1")
+
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("failed to create worktree directory: %v", err)
+	}
+
+	if err := os.MkdirAll(blockedParent, 0o755); err != nil {
+		t.Fatalf("failed to create blocked parent: %v", err)
+	}
+
+	if err := os.WriteFile(gitFilePath, []byte("gitdir: "+gitdirPath), 0o644); err != nil {
+		t.Fatalf("failed to write .git file: %v", err)
+	}
+
+	if err := os.Chmod(blockedParent, 0o000); err != nil {
+		t.Fatalf("failed to remove permissions: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.Chmod(blockedParent, 0o755)
+	})
+
+	svc := NewHealthService(&mocks.MockConfigProvider{WorkspacesRoot: tmpDir}, nil, nil, nil, nil)
+	report := &domain.WorkspaceHealthReport{}
+	checks := svc.checkWorktreeIntegrity(context.Background(), "repo1", worktreePath, "main", false, report)
+
+	if len(checks) != 1 {
+		t.Fatalf("checkWorktreeIntegrity() got %d checks, want 1", len(checks))
+	}
+
+	if checks[0].Description != "Cannot access referenced git directory" {
+		t.Fatalf("checkWorktreeIntegrity() description = %q, want %q", checks[0].Description, "Cannot access referenced git directory")
+	}
+
+	if checks[0].Fixable {
+		t.Fatalf("checkWorktreeIntegrity() fixable = true, want false")
+	}
+}
+
 func TestWorkspaceHealthService_CheckGitConfig(t *testing.T) {
 	t.Parallel()
 
@@ -322,6 +438,52 @@ func TestWorkspaceHealthService_CheckGitConfig(t *testing.T) {
 				t.Errorf("checkGitConfig() status = %v, want %v", checks[0].Status, tt.wantStatus)
 			}
 		})
+	}
+}
+
+func TestWorkspaceHealthService_CheckGitConfig_LinkedWorktreeUsesCanonicalConfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	worktreePath := filepath.Join(tmpDir, "repo1")
+	gitFilePath := filepath.Join(worktreePath, ".git")
+	gitdirPath := filepath.Join(tmpDir, "canonical", ".git", "worktrees", "repo1")
+	canonicalConfigPath := filepath.Join(tmpDir, "canonical", ".git", "config")
+
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("failed to create worktree directory: %v", err)
+	}
+
+	if err := os.MkdirAll(gitdirPath, 0o755); err != nil {
+		t.Fatalf("failed to create worktree gitdir: %v", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(canonicalConfigPath), 0o755); err != nil {
+		t.Fatalf("failed to create canonical git directory: %v", err)
+	}
+
+	if err := os.WriteFile(gitFilePath, []byte("gitdir: "+gitdirPath), 0o644); err != nil {
+		t.Fatalf("failed to write .git file: %v", err)
+	}
+
+	configContent := `[core]
+	repositoryformatversion = 0
+[remote "origin"]
+	url = https://github.com/example/repo.git
+`
+	if err := os.WriteFile(canonicalConfigPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write canonical config file: %v", err)
+	}
+
+	svc := NewHealthService(nil, nil, nil, nil, nil)
+	checks := svc.checkGitConfig("repo1", worktreePath)
+
+	if len(checks) == 0 {
+		t.Fatalf("checkGitConfig() returned no checks")
+	}
+
+	if checks[0].Status != domain.HealthStatusHealthy {
+		t.Fatalf("checkGitConfig() status = %v, want %v", checks[0].Status, domain.HealthStatusHealthy)
 	}
 }
 
@@ -390,11 +552,18 @@ func TestIsValidRemoteURL(t *testing.T) {
 		{"https://github.com/user/repo.git", true},
 		{"http://github.com/user/repo.git", true},
 		{"git@github.com:user/repo.git", true},
+		{"git@example.com:team/repo.git", true},
+		{"github.com:user/repo.git", true},
 		{"ssh://git@github.com/user/repo.git", true},
 		{"git://github.com/user/repo.git", true},
 		{"file:///path/to/repo", true},
+		{"/path/to/repo", true},
+		{"~/src/repo", true},
+		{"./repo", true},
+		{"../repo", true},
 		{"not-a-url", false},
 		{"ftp://invalid-scheme.com", false},
+		{"host:", false},
 	}
 
 	for _, tt := range tests {
@@ -462,26 +631,93 @@ func TestParseRemoteURL(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config")
-
-	// Write a git config with a remote
-	configContent := `[core]
-	repositoryformatversion = 0
-[remote "origin"]
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{
+			name: "standard spacing",
+			content: `[remote "origin"]
 	url = https://github.com/example/repo.git
-	fetch = +refs/heads/*:refs/remotes/origin/*
-`
-	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
-		t.Fatalf("failed to write config: %v", err)
+`,
+			want: "https://github.com/example/repo.git",
+		},
+		{
+			name: "no spaces around equals",
+			content: `[remote "origin"]
+	url=git@example.com:team/repo.git
+`,
+			want: "git@example.com:team/repo.git",
+		},
+		{
+			name: "quoted value",
+			content: `[remote "origin"]
+	url = "https://github.com/example/repo.git"
+`,
+			want: "https://github.com/example/repo.git",
+		},
+		{
+			name: "surrounding whitespace",
+			content: `[remote "origin"]
+	  url =   '../repo.git'   
+`,
+			want: "../repo.git",
+		},
 	}
 
-	url, err := parseRemoteURL(configPath)
-	if err != nil {
-		t.Fatalf("parseRemoteURL() error = %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			configPath := filepath.Join(tmpDir, strings.ReplaceAll(tt.name, " ", "_")+".config")
+			if err := os.WriteFile(configPath, []byte(tt.content), 0o644); err != nil {
+				t.Fatalf("failed to write config: %v", err)
+			}
+
+			got, err := parseRemoteURL(configPath)
+			if err != nil {
+				t.Fatalf("parseRemoteURL() error = %v", err)
+			}
+
+			if got != tt.want {
+				t.Errorf("parseRemoteURL() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWorkspaceHealthService_FixMissingWorktree_CanonicalPathPermissionError(t *testing.T) {
+	requirePOSIXPermissions(t)
+
+	tmpDir := t.TempDir()
+	blockedProjectsRoot := filepath.Join(tmpDir, "projects")
+	worktreePath := filepath.Join(tmpDir, "worktree")
+
+	if err := os.MkdirAll(blockedProjectsRoot, 0o755); err != nil {
+		t.Fatalf("failed to create projects root: %v", err)
 	}
 
-	if url != "https://github.com/example/repo.git" {
-		t.Errorf("parseRemoteURL() = %v, want %v", url, "https://github.com/example/repo.git")
+	if err := os.MkdirAll(worktreePath, 0o755); err != nil {
+		t.Fatalf("failed to create worktree path: %v", err)
+	}
+
+	if err := os.Chmod(blockedProjectsRoot, 0o000); err != nil {
+		t.Fatalf("failed to remove permissions: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.Chmod(blockedProjectsRoot, 0o755)
+	})
+
+	svc := NewHealthService(&mocks.MockConfigProvider{ProjectsRoot: blockedProjectsRoot}, nil, nil, nil, nil)
+
+	if err := svc.fixMissingWorktree(context.Background(), "repo1", worktreePath, "main"); err == nil {
+		t.Fatal("fixMissingWorktree() error = nil, want permission error")
+	}
+
+	if _, statErr := os.Stat(worktreePath); statErr != nil {
+		t.Fatalf("worktree path should remain untouched, stat error = %v", statErr)
 	}
 }
 
@@ -524,6 +760,28 @@ func TestResolveGitdirPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+func requirePOSIXPermissions(t *testing.T) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("permission-based filesystem tests are not reliable on windows")
+	}
+
+	if os.Geteuid() == 0 {
+		t.Skip("permission-based filesystem tests are not reliable when running as root")
+	}
+}
+
+func hasHealthCheck(checks []domain.HealthCheck, name, description string) bool {
+	for _, check := range checks {
+		if check.Name == name && check.Description == description {
+			return true
+		}
+	}
+
+	return false
 }
 
 func TestWorkspaceHealthService_ContextCancellation(t *testing.T) {
