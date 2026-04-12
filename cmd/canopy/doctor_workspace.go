@@ -82,7 +82,11 @@ func runDoctorWorkspace(cmd *cobra.Command, args []string) error {
 
 	fullReport := buildWorkspaceHealthReport(reports)
 
-	if err := outputWorkspaceHealthReport(cmd.OutOrStdout(), fullReport, jsonOutput); err != nil {
+	if err := output.WriteStructuredReport(cmd.OutOrStdout(), fullReport, jsonOutput, func(outWriter io.Writer) error {
+		printWorkspaceHealthReport(outWriter, fullReport)
+
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -126,17 +130,6 @@ func buildWorkspaceHealthReport(reports []domain.WorkspaceHealthReport) *Workspa
 	}
 
 	return result
-}
-
-// outputWorkspaceHealthReport writes the report to the given writer.
-func outputWorkspaceHealthReport(out io.Writer, report *WorkspaceHealthReport, jsonOutput bool) error {
-	if jsonOutput {
-		return output.WriteIndentedJSON(out, report)
-	}
-
-	printWorkspaceHealthReport(out, report)
-
-	return nil
 }
 
 // printWorkspaceHealthReport outputs the report in human-readable format.

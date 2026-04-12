@@ -13,35 +13,9 @@ import (
 func (s *WorkspaceHealthService) checkGitConfig(repoName, worktreePath string) []domain.HealthCheck {
 	var checks []domain.HealthCheck
 
-	gitPath := filepath.Join(worktreePath, ".git")
-
-	info, err := os.Stat(gitPath)
+	configPath, err := resolveWorktreeGitConfigPath(worktreePath)
 	if err != nil {
 		return checks
-	}
-
-	var configPath string
-	if info.IsDir() {
-		configPath = filepath.Join(gitPath, "config")
-	} else {
-		content, err := os.ReadFile(gitPath) //nolint:gosec // G304: gitPath is constructed from workspace/repo paths, not user input
-		if err != nil {
-			return checks
-		}
-
-		gitdirLine := strings.TrimSpace(string(content))
-		if !strings.HasPrefix(gitdirLine, "gitdir:") {
-			return checks
-		}
-
-		gitdirPath := strings.TrimSpace(strings.TrimPrefix(gitdirLine, "gitdir:"))
-		gitdirPath = resolveGitdirPath(gitdirPath, worktreePath)
-
-		if _, err := os.Stat(gitdirPath); err != nil { //nolint:gosec // G703: gitdirPath parsed from trusted .git worktree link file
-			return checks
-		}
-
-		configPath = resolveGitConfigPath(gitdirPath)
 	}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) { //nolint:gosec // G703: configPath derived from trusted .git worktree link file
@@ -83,31 +57,9 @@ func (s *WorkspaceHealthService) checkGitConfig(repoName, worktreePath string) [
 func (s *WorkspaceHealthService) checkRemoteURLValidity(repoName, worktreePath string) []domain.HealthCheck {
 	var checks []domain.HealthCheck
 
-	gitPath := filepath.Join(worktreePath, ".git")
-
-	info, err := os.Stat(gitPath)
+	configPath, err := resolveWorktreeGitConfigPath(worktreePath)
 	if err != nil {
 		return checks
-	}
-
-	var configPath string
-	if info.IsDir() {
-		configPath = filepath.Join(gitPath, "config")
-	} else {
-		content, err := os.ReadFile(gitPath) //nolint:gosec // G304: gitPath is constructed from workspace/repo paths, not user input
-		if err != nil {
-			return checks
-		}
-
-		gitdirLine := strings.TrimSpace(string(content))
-		if !strings.HasPrefix(gitdirLine, "gitdir:") {
-			return checks
-		}
-
-		gitdirPath := strings.TrimSpace(strings.TrimPrefix(gitdirLine, "gitdir:"))
-		gitdirPath = resolveGitdirPath(gitdirPath, worktreePath)
-
-		configPath = resolveGitConfigPath(gitdirPath)
 	}
 
 	remoteURL, err := parseRemoteURL(configPath)

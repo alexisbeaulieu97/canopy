@@ -2,6 +2,7 @@ package workspaces
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,9 +17,7 @@ import (
 func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, repoName, worktreePath, branchName string, fix bool, report *domain.WorkspaceHealthReport) []domain.HealthCheck {
 	var checks []domain.HealthCheck
 
-	gitPath := filepath.Join(worktreePath, ".git")
-
-	info, err := os.Stat(gitPath)
+	gitPath, info, err := statWorktreeGitPath(worktreePath)
 	if os.IsNotExist(err) {
 		check := domain.HealthCheck{
 			Name:        "worktree_git:" + repoName,
@@ -72,7 +71,27 @@ func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, rep
 		return checks
 	}
 
-	content, err := os.ReadFile(gitPath) //nolint:gosec // G304: gitPath is constructed from workspace/repo paths, not user input
+	gitdirPath, err := resolveWorktreeGitDir(worktreePath)
+	if errors.Is(err, errInvalidGitWorktreeLink) {
+		invalidLine := ""
+
+		var invalidErr invalidGitWorktreeLinkError
+		if errors.As(err, &invalidErr) {
+			invalidLine = invalidErr.Line()
+		}
+
+		checks = append(checks, domain.HealthCheck{
+			Name:        "worktree_format:" + repoName,
+			Category:    domain.HealthCategoryWorktree,
+			Status:      domain.HealthStatusCritical,
+			Description: "Invalid .git worktree link format",
+			Fixable:     false,
+			Details:     "Expected 'gitdir: <path>', got: " + invalidLine,
+		})
+
+		return checks
+	}
+
 	if err != nil {
 		checks = append(checks, domain.HealthCheck{
 			Name:        "worktree_link:" + repoName,
@@ -85,23 +104,6 @@ func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, rep
 
 		return checks
 	}
-
-	gitdirLine := strings.TrimSpace(string(content))
-	if !strings.HasPrefix(gitdirLine, "gitdir:") {
-		checks = append(checks, domain.HealthCheck{
-			Name:        "worktree_format:" + repoName,
-			Category:    domain.HealthCategoryWorktree,
-			Status:      domain.HealthStatusCritical,
-			Description: "Invalid .git worktree link format",
-			Fixable:     false,
-			Details:     "Expected 'gitdir: <path>', got: " + gitdirLine,
-		})
-
-		return checks
-	}
-
-	gitdirPath := strings.TrimSpace(strings.TrimPrefix(gitdirLine, "gitdir:"))
-	gitdirPath = resolveGitdirPath(gitdirPath, worktreePath)
 
 	if _, err := os.Stat(gitdirPath); err != nil { //nolint:gosec // G703: gitdirPath parsed from trusted .git worktree link file
 		check := domain.HealthCheck{
@@ -169,7 +171,7 @@ func (s *WorkspaceHealthService) checkWorktreeIntegrity(ctx context.Context, rep
 }
 
 func (s *WorkspaceHealthService) fixMissingWorktree(ctx context.Context, repoName, worktreePath, branchName string) error {
-	canonicalPath := filepath.Join(s.config.GetProjectsRoot(), repoName)
+	canonicalPath := canonicalRepoPath(s.config.GetProjectsRoot(), repoName)
 	if _, err := os.Stat(canonicalPath); err != nil {
 		if os.IsNotExist(err) {
 			return cerrors.NewRepoNotFound(repoName)
@@ -191,12 +193,4 @@ func (s *WorkspaceHealthService) fixMissingWorktree(ctx context.Context, repoNam
 	}
 
 	return nil
-}
-
-func resolveGitdirPath(gitdirPath, worktreePath string) string {
-	if filepath.IsAbs(gitdirPath) {
-		return gitdirPath
-	}
-
-	return filepath.Join(worktreePath, gitdirPath)
 }

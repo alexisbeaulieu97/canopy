@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 )
@@ -17,7 +16,7 @@ func (s *Service) WorkspacePath(ctx context.Context, workspaceID string) (string
 		return "", err
 	}
 
-	return filepath.Join(s.config.GetWorkspacesRoot(), dirName), nil
+	return workspacePath(s.config.GetWorkspacesRoot(), dirName), nil
 }
 
 // ListWorkspaces returns all active workspaces
@@ -42,7 +41,7 @@ func (s *Service) ListWorkspaces(ctx context.Context) ([]domain.Workspace, error
 			w.DirName = dirName
 		}
 
-		wsPath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
+		wsPath := workspacePath(s.config.GetWorkspacesRoot(), dirName)
 
 		usage, latest, sizeErr := s.diskUsage.CachedUsage(wsPath)
 		if sizeErr != nil {
@@ -97,7 +96,7 @@ func (s *Service) GetStatus(ctx context.Context, workspaceID string) (*domain.Wo
 			return nil, ctx.Err()
 		}
 
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		isDirty, unpushed, behind, branch, err := s.gitEngine.Status(ctx, worktreePath)
 		if err != nil {

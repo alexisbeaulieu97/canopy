@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
-	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
 // ExitCode represents CLI exit codes.
@@ -96,9 +95,4 @@ func userFriendlyMessage(err error) string {
 
 	// For CanopyError, return the message portion without the code prefix
 	return canopyErr.Message
-}
-
-// formatErrorJSON formats an error as JSON for --json output.
-func formatErrorJSON(err error) string {
-	return output.FormatErrorJSON(err)
 }

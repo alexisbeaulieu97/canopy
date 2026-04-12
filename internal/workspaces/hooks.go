@@ -3,7 +3,6 @@ package workspaces
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
@@ -82,12 +81,7 @@ func (s *Service) resolveHookExecution(ctx context.Context, workspaceID string, 
 		return nil, domain.HookContext{}, err
 	}
 
-	return selected, domain.HookContext{
-		WorkspaceID:   workspaceID,
-		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
-		BranchName:    workspace.BranchName,
-		Repos:         workspace.Repos,
-	}, nil
+	return selected, workspaceHookContext(s.config.GetWorkspacesRoot(), workspaceID, dirName, workspace.BranchName, workspace.Repos), nil
 }
 
 func selectHooksForPhase(hooksConfig ports.HooksConfig, phase HookPhase) ([]ports.HookSpec, error) {
