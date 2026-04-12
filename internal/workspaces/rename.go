@@ -26,7 +26,7 @@ func (s *Service) RenameWorkspace(ctx context.Context, oldID, newID string, rena
 
 	newDirName, renameErr := s.renameWorkspaceUnlocked(ctx, oldID, newID, renameBranch, force)
 	if renameErr == nil && newDirName != "" {
-		handle.UpdateLocation(newID, filepath.Join(s.config.GetWorkspacesRoot(), newDirName, lockFileName))
+		handle.UpdateLocation(newID, filepath.Join(workspacePath(s.config.GetWorkspacesRoot(), newDirName), lockFileName))
 	}
 
 	releaseErr := handle.Release()
@@ -157,7 +157,7 @@ func (s *Service) forceDeleteWorkspace(ctx context.Context, workspaceID string) 
 // renameBranchesInRepos renames branches in all repos and returns the list of repos that were renamed.
 func (s *Service) renameBranchesInRepos(ctx context.Context, workspace domain.Workspace, dirName, oldID, newID string) error {
 	for _, repo := range workspace.Repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		if err := s.gitEngine.RenameBranch(ctx, worktreePath, oldID, newID); err != nil {
 			return cerrors.WrapGitError(err, fmt.Sprintf("rename branch in repo %s", repo.Name))
@@ -170,7 +170,7 @@ func (s *Service) renameBranchesInRepos(ctx context.Context, workspace domain.Wo
 // rollbackBranchRenames attempts to rollback branch renames on failure (best effort, ignores errors).
 func (s *Service) rollbackBranchRenames(ctx context.Context, workspace domain.Workspace, dirName, oldID, newID string) {
 	for _, repo := range workspace.Repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		_ = s.gitEngine.RenameBranch(ctx, worktreePath, newID, oldID) // best effort rollback
 	}
 }
@@ -180,7 +180,7 @@ func (s *Service) rollbackBranchRenamesWithError(ctx context.Context, workspace 
 	var errs []error
 
 	for _, repo := range workspace.Repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		if err := s.gitEngine.RenameBranch(ctx, worktreePath, newID, oldID); err != nil {
 			errs = append(errs, cerrors.WrapGitError(err, fmt.Sprintf("rollback branch rename in repo %s", repo.Name)))
 		}

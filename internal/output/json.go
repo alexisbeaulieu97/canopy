@@ -14,12 +14,6 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/formatting"
 )
 
-// Formatter provides consistent success/error formatting.
-type Formatter interface {
-	PrintSuccess(data interface{}) error
-	PrintError(err error) error
-}
-
 // Response is the standard JSON envelope for all CLI output.
 type Response struct {
 	Success bool        `json:"success"`

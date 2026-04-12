@@ -2,7 +2,6 @@ package workspaces
 
 import (
 	"context"
-	"path/filepath"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -140,12 +139,7 @@ func (s *Service) executePreCloseHooks(ctx context.Context, workspace *domain.Wo
 		return nil
 	}
 
-	hookCtx := domain.HookContext{
-		WorkspaceID:   workspaceID,
-		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
-		BranchName:    workspace.BranchName,
-		Repos:         workspace.Repos,
-	}
+	hookCtx := workspaceHookContext(s.config.GetWorkspacesRoot(), workspaceID, dirName, workspace.BranchName, workspace.Repos)
 
 	if _, err := s.hookExecutor.ExecuteHooks(ctx, hooksConfig.PreClose, hookCtx, ports.HookExecuteOptions{
 		ContinueOnError: opts.ContinueOnHookErr,
@@ -167,7 +161,7 @@ func (s *Service) PreviewCloseWorkspace(ctx context.Context, workspaceID string,
 		return nil, err
 	}
 
-	wsPath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
+	wsPath := workspacePath(s.config.GetWorkspacesRoot(), dirName)
 
 	repoNames := []string{}
 	repoStatuses := []domain.RepoCloseStatus{}
@@ -177,7 +171,7 @@ func (s *Service) PreviewCloseWorkspace(ctx context.Context, workspaceID string,
 
 		// Check repo status if git engine is available
 		if s.gitEngine != nil {
-			worktreePath := filepath.Join(wsPath, r.Name)
+			worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, r.Name)
 
 			isDirty, unpushed, _, _, statusErr := s.gitEngine.Status(ctx, worktreePath)
 			if statusErr != nil {
@@ -228,7 +222,7 @@ func (s *Service) ensureWorkspaceClean(ctx context.Context, workspace *domain.Wo
 			return ctx.Err()
 		}
 
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		isDirty, unpushed, _, _, err := s.gitEngine.Status(ctx, worktreePath)
 		if err != nil {
@@ -261,7 +255,7 @@ func (s *Service) removeWorkspaceWorktrees(ctx context.Context, workspace *domai
 			return
 		}
 
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		if err := s.gitEngine.RemoveWorktree(ctx, repo.Name, worktreePath); err != nil {
 			if s.logger != nil {

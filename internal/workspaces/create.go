@@ -96,13 +96,7 @@ func (s *Service) runTemplateSetupCommands(ctx context.Context, workspaceID, dir
 		return false
 	}
 
-	workspacePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
-	hookCtx := domain.HookContext{
-		WorkspaceID:   workspaceID,
-		WorkspacePath: workspacePath,
-		BranchName:    branchName,
-		Repos:         repos,
-	}
+	hookCtx := workspaceHookContext(s.config.GetWorkspacesRoot(), workspaceID, dirName, branchName, repos)
 	failed := false
 
 	for i, command := range commands {
@@ -174,7 +168,7 @@ func (s *Service) executeWorkspaceCreate(ctx context.Context, ws domain.Workspac
 }
 
 func (s *Service) ensureWorkspaceAvailable(workspaceID, dirName string) error {
-	metaPath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, "workspace.yaml")
+	metaPath := filepath.Join(workspacePath(s.config.GetWorkspacesRoot(), dirName), "workspace.yaml")
 	if _, err := os.Stat(metaPath); err == nil {
 		return cerrors.NewWorkspaceExists(workspaceID)
 	} else if err != nil && !os.IsNotExist(err) {
@@ -192,7 +186,7 @@ func (s *Service) removeWorkspaceRepoWorktrees(ctx context.Context, dirName stri
 	var errs []error
 
 	for _, repo := range repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		if err := s.gitEngine.RemoveWorktree(ctx, repo.Name, worktreePath); err != nil {
 			errs = append(errs, err)
 		}
@@ -242,7 +236,7 @@ func (s *Service) cloneWorkspaceRepos(ctx context.Context, repos []domain.Repo, 
 		}
 
 		// Create worktree
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		if err := s.gitEngine.CreateWorktree(ctx, repo.Name, worktreePath, branchName); err != nil {
 			return cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
 		}
@@ -263,12 +257,7 @@ func (s *Service) runPostCreateHooks(ctx context.Context, id, dirName, branchNam
 		return nil
 	}
 
-	hookCtx := domain.HookContext{
-		WorkspaceID:   id,
-		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
-		BranchName:    branchName,
-		Repos:         repos,
-	}
+	hookCtx := workspaceHookContext(s.config.GetWorkspacesRoot(), id, dirName, branchName, repos)
 
 	if _, err := s.hookExecutor.ExecuteHooks(ctx, hooksConfig.PostCreate, hookCtx, ports.HookExecuteOptions{
 		ContinueOnError: opts.ContinueOnHookErr,

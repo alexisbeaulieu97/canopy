@@ -3,7 +3,6 @@ package workspaces
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
@@ -144,7 +143,7 @@ func (s *Service) ensureWorkspaceWorktree(ctx context.Context, repo domain.Repo,
 		return cerrors.WrapGitError(err, fmt.Sprintf("ensure canonical for %s", repo.Name))
 	}
 
-	worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+	worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 	if err := s.gitEngine.CreateWorktree(ctx, repo.Name, worktreePath, branchName); err != nil {
 		return cerrors.WrapGitError(err, fmt.Sprintf("create worktree for %s", repo.Name))
 	}
@@ -216,7 +215,7 @@ func (s *Service) RemoveRepoFromWorkspace(ctx context.Context, workspaceID, repo
 		}
 
 		// 4. Remove worktree using git engine (properly unregisters from canonical)
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repoName)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repoName)
 		if err := s.removeRepoWorktree(ctx, repoName, worktreePath); err != nil {
 			return s.rollbackRepoRemoval(ctx, workspace, repoIndex, removedRepo, worktreePath, err)
 		}

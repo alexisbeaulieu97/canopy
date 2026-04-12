@@ -4,7 +4,6 @@ package workspaces
 import (
 	"context"
 	"os"
-	"path/filepath"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
@@ -108,7 +107,7 @@ func (s *WorkspaceOrphanService) checkWorkspaceForOrphans(
 	var orphans []domain.OrphanedWorktree
 
 	for _, repo := range ws.Repos {
-		worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 		if orphan := s.checkRepoForOrphan(ws.ID, repo.Name, worktreePath, canonicalSet); orphan != nil {
 			orphans = append(orphans, *orphan)
@@ -155,8 +154,8 @@ func (s *WorkspaceOrphanService) checkRepoForOrphan(
 	}
 
 	// Check 3: Valid git directory
-	gitDir := filepath.Join(worktreePath, ".git")
-	if _, err := os.Stat(gitDir); err != nil {
+	gitPath, _, err := statWorktreeGitPath(worktreePath)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return &domain.OrphanedWorktree{
 				WorkspaceID:  workspaceID,
@@ -168,7 +167,7 @@ func (s *WorkspaceOrphanService) checkRepoForOrphan(
 		// Non-existence error (permission, I/O, etc.) - log and skip
 		if s.logger != nil {
 			s.logger.Warn("Unexpected error checking .git directory",
-				"workspace", workspaceID, "repo", repoName, "path", gitDir, "error", err)
+				"workspace", workspaceID, "repo", repoName, "path", gitPath, "error", err)
 		}
 
 		return nil

@@ -3,7 +3,6 @@ package workspaces
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
@@ -123,7 +122,7 @@ func (s *WorkspaceHealthService) checkWorkspaceHealth(ctx context.Context, ws *d
 		Checks:        []domain.HealthCheck{},
 	}
 
-	workspacePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName)
+	workspacePath := workspacePath(s.config.GetWorkspacesRoot(), dirName)
 
 	// Run all health checks
 	checks := []domain.HealthCheck{}
@@ -134,21 +133,21 @@ func (s *WorkspaceHealthService) checkWorkspaceHealth(ctx context.Context, ws *d
 
 	// 2. Worktree integrity checks for each repo
 	for _, repo := range ws.Repos {
-		worktreePath := filepath.Join(workspacePath, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		worktreeChecks := s.checkWorktreeIntegrity(ctx, repo.Name, worktreePath, ws.BranchName, fix, report)
 		checks = append(checks, worktreeChecks...)
 	}
 
 	// 3. Git config validity checks for each repo
 	for _, repo := range ws.Repos {
-		worktreePath := filepath.Join(workspacePath, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		configChecks := s.checkGitConfig(repo.Name, worktreePath)
 		checks = append(checks, configChecks...)
 	}
 
 	// 4. Remote URL validity checks for each repo
 	for _, repo := range ws.Repos {
-		worktreePath := filepath.Join(workspacePath, repo.Name)
+		worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 		remoteChecks := s.checkRemoteURLValidity(repo.Name, worktreePath)
 		checks = append(checks, remoteChecks...)
 	}

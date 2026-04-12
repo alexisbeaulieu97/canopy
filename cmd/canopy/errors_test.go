@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
 func TestExitCodeForError(t *testing.T) {
@@ -199,13 +200,13 @@ func TestFormatErrorJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			json := formatErrorJSON(tt.err)
+			json := output.FormatErrorJSON(tt.err)
 			if tt.wantCode != "" && !strings.Contains(json, tt.wantCode) {
-				t.Errorf("formatErrorJSON() missing code %q in %s", tt.wantCode, json)
+				t.Errorf("FormatErrorJSON() missing code %q in %s", tt.wantCode, json)
 			}
 
 			if !strings.Contains(json, tt.wantContains) {
-				t.Errorf("formatErrorJSON() missing %q in %s", tt.wantContains, json)
+				t.Errorf("FormatErrorJSON() missing %q in %s", tt.wantContains, json)
 			}
 		})
 	}

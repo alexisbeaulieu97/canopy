@@ -3,7 +3,6 @@ package workspaces
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
@@ -92,7 +91,7 @@ func (s *Service) syncRepo(ctx context.Context, dirName string, repo domain.Repo
 		return result
 	}
 
-	worktreePath := filepath.Join(s.config.GetWorkspacesRoot(), dirName, repo.Name)
+	worktreePath := workspaceRepoPath(s.config.GetWorkspacesRoot(), dirName, repo.Name)
 
 	// 2. Get status before pull to see behind count
 	_, _, behind, _, err := s.gitEngine.Status(repoCtx, worktreePath)
