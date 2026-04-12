@@ -106,9 +106,7 @@ func checkDirectory(name, path string, fix bool) []CheckResult {
 		return results
 	}
 
-	testFile := filepath.Join(path, ".canopy_doctor_test")
-
-	file, err := os.Create(testFile) //nolint:gosec // G304: testFile is constructed from validated path parameter
+	file, err := os.CreateTemp(path, ".canopy_doctor_test-*")
 	if err != nil {
 		result.Status = statusFail
 		result.Severity = SeverityError
@@ -119,6 +117,7 @@ func checkDirectory(name, path string, fix bool) []CheckResult {
 		return results
 	}
 
+	testFile := file.Name()
 	_ = file.Close()
 	_ = os.Remove(testFile)
 
@@ -144,7 +143,13 @@ func checkCanonicalRepos(_ context.Context, cfg doctorConfig) []CheckResult {
 
 	entries, err := os.ReadDir(projectsRoot)
 	if err != nil {
-		return results
+		return []CheckResult{{
+			Name:     "Canonical Repositories",
+			Status:   statusFail,
+			Severity: SeverityWarning,
+			Message:  fmt.Sprintf("cannot read projects_root: %s", projectsRoot),
+			Details:  err.Error(),
+		}}
 	}
 
 	staleThreshold := cfg.GetStaleThresholdDays()
@@ -182,8 +187,15 @@ func checkCanonicalRepos(_ context.Context, cfg doctorConfig) []CheckResult {
 		info, err := os.Stat(fetchHead)
 		if err != nil {
 			result.Status = statusFail
-			result.Message = "never fetched"
-			result.Details = "Run: canopy repo sync " + entry.Name()
+
+			if os.IsNotExist(err) {
+				result.Message = "never fetched"
+				result.Details = "Run: canopy repo sync " + entry.Name()
+			} else {
+				result.Message = "cannot inspect FETCH_HEAD"
+				result.Details = err.Error()
+			}
+
 			results = append(results, result)
 
 			continue

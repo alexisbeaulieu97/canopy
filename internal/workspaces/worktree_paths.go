@@ -2,6 +2,7 @@ package workspaces
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,6 +76,9 @@ func resolveWorktreeGitDir(worktreePath string) (string, error) {
 	}
 
 	gitdirPath := strings.TrimSpace(strings.TrimPrefix(gitdirLine, "gitdir:"))
+	if gitdirPath == "" {
+		return "", invalidGitWorktreeLinkError{line: gitdirLine}
+	}
 
 	return resolveGitdirPath(gitdirPath, worktreePath), nil
 }
@@ -83,6 +87,10 @@ func resolveWorktreeGitConfigPath(worktreePath string) (string, error) {
 	gitdirPath, err := resolveWorktreeGitDir(worktreePath)
 	if err != nil {
 		return "", err
+	}
+
+	if _, err := os.Stat(gitdirPath); err != nil {
+		return "", fmt.Errorf("resolved gitdir does not exist: %w", err)
 	}
 
 	return resolveGitConfigPath(gitdirPath), nil
