@@ -86,24 +86,28 @@ func TestValidateHookExecutionFlags(t *testing.T) {
 func TestResolveWorkspaceCloseKeepMetadata(t *testing.T) {
 	t.Parallel()
 
-	if !resolveWorkspaceCloseKeepMetadata(false, true, false, false, nil) {
+	if !resolveWorkspaceCloseKeepMetadata(false, true, false, false, false, nil) {
 		t.Fatal("expected explicit keep flag to win")
 	}
 
-	if resolveWorkspaceCloseKeepMetadata(true, false, true, false, nil) {
+	if resolveWorkspaceCloseKeepMetadata(true, false, true, false, false, nil) {
 		t.Fatal("expected explicit delete flag to win")
 	}
 
-	if !resolveWorkspaceCloseKeepMetadata(true, false, false, true, bufio.NewReader(strings.NewReader("y\n"))) {
+	if !resolveWorkspaceCloseKeepMetadata(true, false, false, false, true, bufio.NewReader(strings.NewReader("y\n"))) {
 		t.Fatal("expected yes answer to keep metadata")
 	}
 
-	if resolveWorkspaceCloseKeepMetadata(true, false, false, true, bufio.NewReader(strings.NewReader("n\n"))) {
+	if resolveWorkspaceCloseKeepMetadata(true, false, false, false, true, bufio.NewReader(strings.NewReader("n\n"))) {
 		t.Fatal("expected no answer to delete metadata")
 	}
 
-	if !resolveWorkspaceCloseKeepMetadata(true, false, false, true, bufio.NewReader(strings.NewReader("maybe\n"))) {
+	if !resolveWorkspaceCloseKeepMetadata(true, false, false, false, true, bufio.NewReader(strings.NewReader("maybe\n"))) {
 		t.Fatal("expected invalid answer to fall back to default")
+	}
+
+	if !resolveWorkspaceCloseKeepMetadata(true, false, false, true, true, bufio.NewReader(strings.NewReader("n\n"))) {
+		t.Fatal("expected dry-run to avoid prompting and keep the default choice")
 	}
 }
 

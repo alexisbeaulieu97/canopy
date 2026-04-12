@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -39,14 +38,7 @@ var repoRegisterCmd = &cobra.Command{
 			Tags:          parseTags(tagsRaw),
 		}
 
-		if err := app.Config.GetRegistry().Register(alias, entry, force); err != nil {
-			return err
-		}
-
-		rollbackFn := func() error {
-			return app.Config.GetRegistry().Unregister(alias)
-		}
-		if err := saveRegistryWithRollback(app.Config.GetRegistry(), rollbackFn, "registration", app.Logger); err != nil {
+		if _, err := registerRegistryEntry(app.Config.GetRegistry(), alias, entry, force, app.Logger); err != nil {
 			return err
 		}
 
@@ -157,11 +149,12 @@ var repoShowCmd = &cobra.Command{
 		repoName := giturl.ExtractRepoName(entry.URL)
 		canonicalPath := filepath.Join(app.Config.GetProjectsRoot(), repoName)
 
-		if _, err := os.Stat(canonicalPath); err == nil {
-			output.Infof("Canonical:    %s (present)", canonicalPath)
-		} else {
-			output.Infof("Canonical:    %s (missing)", canonicalPath)
+		status, err := canonicalPathStatus(canonicalPath)
+		if err != nil {
+			return err
 		}
+
+		output.Infof("Canonical:    %s (%s)", canonicalPath, status)
 
 		return nil
 	},

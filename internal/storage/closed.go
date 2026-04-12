@@ -46,7 +46,7 @@ func (e *Engine) Close(_ context.Context, id string, closedAt time.Time) (*domai
 		return nil, cerrors.NewPathInvalid(dirName, err.Error())
 	}
 
-	closedDir := filepath.Join(e.ClosedRoot, safeDir, closedAt.UTC().Format("20060102T150405Z"))
+	closedDir := filepath.Join(e.ClosedRoot, safeDir, formatClosedEntryTimestamp(closedAt))
 	if err := os.MkdirAll(closedDir, 0o750); err != nil {
 		return nil, cerrors.NewIOFailed("create closed directory", err)
 	}

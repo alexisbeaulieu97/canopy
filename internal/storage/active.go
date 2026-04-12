@@ -13,6 +13,11 @@ import (
 	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
 )
 
+const (
+	closedEntryTimestampLayout       = "20060102T150405.000000000Z"
+	legacyClosedEntryTimestampLayout = "20060102T150405Z"
+)
+
 // Create creates a new workspace from the provided domain object.
 func (e *Engine) Create(_ context.Context, ws domain.Workspace) error {
 	dirName, err := e.workspaceDirName(ws)
@@ -92,49 +97,72 @@ func (e *Engine) List(_ context.Context) ([]domain.Workspace, error) {
 			continue
 		}
 
-		if workspace, ok := e.tryLoadMetadata(filepath.Join(e.WorkspacesRoot, entry.Name())); ok {
-			workspaces = append(workspaces, workspace)
+		workspace, err := e.loadMetadataFromDir(filepath.Join(e.WorkspacesRoot, entry.Name()), false)
+		if err != nil {
+			return nil, err
 		}
+
+		workspaces = append(workspaces, workspace)
 	}
 
 	return workspaces, nil
 }
 
 func (e *Engine) tryLoadMetadata(dirPath string) (domain.Workspace, bool) {
+	workspace, err := e.loadMetadataFromDir(dirPath, true)
+	if err != nil {
+		return domain.Workspace{}, false
+	}
+
+	return workspace, true
+}
+
+func (e *Engine) loadMetadataFromDir(dirPath string, inferClosedAt bool) (domain.Workspace, error) {
 	metaPath := filepath.Join(dirPath, "workspace.yaml")
+	workspaceID := filepath.Base(dirPath)
 
 	f, err := os.Open(metaPath) //nolint:gosec // path is derived from workspace directory
 	if err != nil {
-		return domain.Workspace{}, false
+		return domain.Workspace{}, cerrors.NewWorkspaceMetadataError(workspaceID, "read", err)
 	}
 
 	defer func() { _ = f.Close() }()
 
 	var workspace domain.Workspace
 	if err := yaml.NewDecoder(f).Decode(&workspace); err != nil {
-		return domain.Workspace{}, false
+		return domain.Workspace{}, cerrors.NewWorkspaceMetadataError(workspaceID, "decode", err)
 	}
 
 	workspace.DirName = filepath.Base(dirPath)
 
-	if workspace.ClosedAt == nil {
+	if inferClosedAt && workspace.ClosedAt == nil {
 		if ts, ok := inferClosedTimeFromPath(dirPath); ok {
 			workspace.ClosedAt = &ts
 		}
 	}
 
-	return workspace, true
+	return workspace, nil
 }
 
 func inferClosedTimeFromPath(path string) (time.Time, bool) {
-	parent := filepath.Base(filepath.Dir(path))
+	parent := filepath.Base(path)
 
-	ts, err := time.Parse("20060102T150405Z", parent)
-	if err != nil {
-		return time.Time{}, false
+	return parseClosedEntryTimestamp(parent)
+}
+
+func formatClosedEntryTimestamp(closedAt time.Time) string {
+	return closedAt.UTC().Format(closedEntryTimestampLayout)
+}
+
+func parseClosedEntryTimestamp(value string) (time.Time, bool) {
+	for _, layout := range []string{closedEntryTimestampLayout, legacyClosedEntryTimestampLayout} {
+		ts, err := time.Parse(layout, value)
+		if err == nil {
+			return ts, true
+		}
 	}
 
-	return ts, true
+	return time.Time{}, false
 }
 
 // Load retrieves a workspace by ID.

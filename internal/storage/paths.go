@@ -124,17 +124,15 @@ func (e *Engine) resolveClosedDirectory(id string, closedAt time.Time) (string, 
 		return "", cerrors.NewPathInvalid(id, err.Error())
 	}
 
-	closedDir := filepath.Join(e.ClosedRoot, safeDir, closedAt.UTC().Format("20060102T150405Z"))
-
-	if _, err := os.Stat(closedDir); err != nil {
-		if os.IsNotExist(err) {
-			return "", cerrors.NewWorkspaceNotFound(id).WithContext("state", "closed")
+	for _, closedDir := range closedDirectoryCandidates(e.ClosedRoot, safeDir, closedAt) {
+		if _, err := os.Stat(closedDir); err == nil {
+			return closedDir, nil
+		} else if !os.IsNotExist(err) {
+			return "", cerrors.NewIOFailed("stat closed directory", err)
 		}
-
-		return "", cerrors.NewIOFailed("stat closed directory", err)
 	}
 
-	return closedDir, nil
+	return "", cerrors.NewWorkspaceNotFound(id).WithContext("state", "closed")
 }
 
 func (e *Engine) workspaceDirName(ws domain.Workspace) (string, error) {
@@ -143,4 +141,16 @@ func (e *Engine) workspaceDirName(ws domain.Workspace) (string, error) {
 	}
 
 	return e.dirNameForID(ws.ID)
+}
+
+func closedDirectoryCandidates(root, safeDir string, closedAt time.Time) []string {
+	utc := closedAt.UTC()
+	primary := filepath.Join(root, safeDir, formatClosedEntryTimestamp(utc))
+	legacy := filepath.Join(root, safeDir, utc.Format(legacyClosedEntryTimestampLayout))
+
+	if primary == legacy {
+		return []string{primary}
+	}
+
+	return []string{primary, legacy}
 }

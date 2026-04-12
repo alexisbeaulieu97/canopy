@@ -75,8 +75,12 @@ func (s *Service) GetAllCanonicalRepoStatuses(ctx context.Context) ([]domain.Can
 func (s *Service) getCanonicalRepoStatus(name string, usageMap map[string][]string) (*domain.CanonicalRepoStatus, error) {
 	path := filepath.Join(s.config.GetProjectsRoot(), name)
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, cerrors.NewRepoNotFound(name)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil, cerrors.NewRepoNotFound(name)
+		}
+
+		return nil, cerrors.NewIOFailed(fmt.Sprintf("stat canonical repo %s", name), err)
 	}
 
 	size, err := s.gitEngine.GetRepoSize(name)

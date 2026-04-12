@@ -143,13 +143,13 @@ func closeWithHookDryRunJSON(
 	return printHookPreviewJSON(workspaces.HookPhasePreClose, id, "", "close_delete", previews, nil)
 }
 
-func resolveWorkspaceCloseKeepMetadata(defaultKeep, keepFlag, deleteFlag, interactive bool, reader *bufio.Reader) bool {
+func resolveWorkspaceCloseKeepMetadata(defaultKeep, keepFlag, deleteFlag, dryRun, interactive bool, reader *bufio.Reader) bool {
 	switch {
 	case keepFlag:
 		return true
 	case deleteFlag:
 		return false
-	case !interactive || reader == nil:
+	case dryRun || !interactive || reader == nil:
 		return defaultKeep
 	}
 

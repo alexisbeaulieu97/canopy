@@ -80,7 +80,7 @@ var workspaceCloseCmd = &cobra.Command{
 				return cerrors.NewInvalidArgument("flags", "--hooks-only and --dry-run-hooks require a single workspace ID")
 			}
 
-			keepMetadata := resolveWorkspaceCloseKeepMetadata(configDefaultArchive, keepFlag, deleteFlag, false, nil)
+			keepMetadata := resolveWorkspaceCloseKeepMetadata(configDefaultArchive, keepFlag, deleteFlag, false, false, nil)
 
 			ids, err := resolveBulkWorkspaceIDs(cmd.Context(), service, pattern)
 			if err != nil {
@@ -191,16 +191,17 @@ var workspaceCloseCmd = &cobra.Command{
 			}
 		}
 
-		keepMetadata := resolveWorkspaceCloseKeepMetadata(
-			configDefaultArchive,
-			keepFlag,
-			deleteFlag,
-			interactive,
-			bufio.NewReader(os.Stdin),
-		)
-
 		// Handle dry-run mode.
 		if dryRun {
+			keepMetadata := resolveWorkspaceCloseKeepMetadata(
+				configDefaultArchive,
+				keepFlag,
+				deleteFlag,
+				true,
+				false,
+				nil,
+			)
+
 			preview, err := service.PreviewCloseWorkspace(cmd.Context(), id, keepMetadata)
 			if err != nil {
 				return err
@@ -217,6 +218,20 @@ var workspaceCloseCmd = &cobra.Command{
 
 			return nil
 		}
+
+		var promptReader *bufio.Reader
+		if interactive && !keepFlag && !deleteFlag {
+			promptReader = bufio.NewReader(os.Stdin)
+		}
+
+		keepMetadata := resolveWorkspaceCloseKeepMetadata(
+			configDefaultArchive,
+			keepFlag,
+			deleteFlag,
+			false,
+			interactive,
+			promptReader,
+		)
 
 		if dryRunHooks && !jsonOutput {
 			printHookPreview(string(workspaces.HookPhasePreClose), hookPreviews)
