@@ -12,18 +12,6 @@ import (
 	"github.com/alexisbeaulieu97/canopy/internal/ports"
 )
 
-// OrphanService defines the interface for orphan detection operations.
-type OrphanService interface {
-	// DetectOrphans finds orphaned worktrees across all workspaces.
-	DetectOrphans(ctx context.Context) ([]domain.OrphanedWorktree, error)
-
-	// DetectOrphansForWorkspace returns orphans for a specific workspace.
-	DetectOrphansForWorkspace(ctx context.Context, workspaceID string) ([]domain.OrphanedWorktree, error)
-
-	// PruneAllWorktrees cleans up stale worktree references from all canonical repos.
-	PruneAllWorktrees(ctx context.Context) error
-}
-
 // WorkspaceOrphanService handles orphan detection for workspaces.
 type WorkspaceOrphanService struct {
 	config          ports.ConfigProvider

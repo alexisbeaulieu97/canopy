@@ -17,31 +17,24 @@ var workspaceBranchCmd = &cobra.Command{
 	Use:   "branch [ID] <BRANCH-NAME>",
 	Short: "Switch branch for all repositories in a workspace",
 	Args: func(cmd *cobra.Command, args []string) error {
-		pattern, _ := cmd.Flags().GetString("pattern")
-
-		all, _ := cmd.Flags().GetBool("all")
-		if all && pattern != "" {
-			return cerrors.NewInvalidArgument("pattern", "cannot use --pattern with --all")
-		}
-
-		if pattern != "" || all {
-			if len(args) != 1 {
-				return cerrors.NewInvalidArgument("branch", "branch name is required when using --pattern or --all")
-			}
-
-			return nil
-		}
-
-		if len(args) != 2 {
-			return cerrors.NewInvalidArgument("args", "workspace ID and branch name are required")
-		}
-
-		return nil
+		return validateWorkspaceTargetArgs(
+			cmd,
+			args,
+			2,
+			"args",
+			"workspace ID and branch name are required",
+			1,
+			"branch",
+			"branch name is required when using --pattern or --all",
+		)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		create, _ := cmd.Flags().GetBool("create")
-		pattern, _ := cmd.Flags().GetString("pattern")
-		all, _ := cmd.Flags().GetBool("all")
+
+		pattern, err := resolveWorkspaceBulkPattern(cmd)
+		if err != nil {
+			return err
+		}
 
 		app, err := getApp(cmd)
 		if err != nil {
@@ -49,10 +42,6 @@ var workspaceBranchCmd = &cobra.Command{
 		}
 
 		service := app.Service
-
-		if all {
-			pattern = ".*"
-		}
 
 		if pattern != "" {
 			branchName := args[0]

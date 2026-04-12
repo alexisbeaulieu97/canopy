@@ -34,3 +34,7 @@ go.work.sum
 # Canopy
 config.yaml
 tmp
+
+.gocache
+.golangci-cache
+.gomodcache

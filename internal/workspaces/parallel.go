@@ -100,30 +100,6 @@ func ExtractValues[T any](results []ParallelResult[T]) []T {
 	return values
 }
 
-// FirstError returns the first error in the result slice, if any.
-func FirstError[T any](results []ParallelResult[T]) error {
-	for _, result := range results {
-		if result.Err != nil {
-			return result.Err
-		}
-	}
-
-	return nil
-}
-
-// CountErrors returns the number of results that include errors.
-func CountErrors[T any](results []ParallelResult[T]) int {
-	count := 0
-
-	for _, result := range results {
-		if result.Err != nil {
-			count++
-		}
-	}
-
-	return count
-}
-
 // AggregateErrors joins all errors from the result slice into a single error.
 func AggregateErrors[T any](results []ParallelResult[T]) error {
 	errs := make([]error, 0, len(results))

@@ -166,17 +166,39 @@ func TestParallelExecutor_ErrorHelpers(t *testing.T) {
 		{Value: "c"},
 	}
 
-	if CountErrors(results) != 1 {
-		t.Fatalf("expected 1 error, got %d", CountErrors(results))
+	if got := countParallelErrors(results); got != 1 {
+		t.Fatalf("expected 1 error, got %d", got)
 	}
 
-	if FirstError(results) == nil {
+	if firstParallelError(results) == nil {
 		t.Fatal("expected first error, got nil")
 	}
 
 	if AggregateErrors(results) == nil {
 		t.Fatal("expected aggregate error, got nil")
 	}
+}
+
+func countParallelErrors[T any](results []ParallelResult[T]) int {
+	count := 0
+
+	for _, result := range results {
+		if result.Err != nil {
+			count++
+		}
+	}
+
+	return count
+}
+
+func firstParallelError[T any](results []ParallelResult[T]) error {
+	for _, result := range results {
+		if result.Err != nil {
+			return result.Err
+		}
+	}
+
+	return nil
 }
 
 func TestConfigParallelWorkersValidation(t *testing.T) {

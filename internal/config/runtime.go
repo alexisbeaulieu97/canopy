@@ -91,11 +91,6 @@ func (c *Config) GetHooks() ports.HooksConfig {
 	return toPortHooksConfig(c.Hooks)
 }
 
-// GetTUI returns the TUI configuration.
-func (c *Config) GetTUI() TUIConfig {
-	return c.TUI
-}
-
 // GetKeybindings returns the TUI keybindings with defaults applied.
 func (c *Config) GetKeybindings() ports.Keybindings {
 	return toPortKeybindings(c.TUI.Keybindings.WithDefaults())

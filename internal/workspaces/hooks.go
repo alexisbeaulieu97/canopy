@@ -22,33 +22,13 @@ const (
 
 // RunHooks executes lifecycle hooks for an existing workspace without performing other actions.
 func (s *Service) RunHooks(ctx context.Context, workspaceID string, phase HookPhase, continueOnError bool) error {
-	workspace, dirName, err := s.findWorkspace(ctx, workspaceID)
+	selected, hookCtx, err := s.resolveHookExecution(ctx, workspaceID, phase)
 	if err != nil {
 		return err
 	}
 
-	hooksConfig := s.config.GetHooks()
-
-	var selected []ports.HookSpec
-
-	switch phase {
-	case HookPhasePostCreate:
-		selected = hooksConfig.PostCreate
-	case HookPhasePreClose:
-		selected = hooksConfig.PreClose
-	default:
-		return cerrors.NewInvalidArgument("hook_phase", fmt.Sprintf("unsupported hook phase %q", phase))
-	}
-
 	if len(selected) == 0 {
 		return nil
-	}
-
-	hookCtx := domain.HookContext{
-		WorkspaceID:   workspaceID,
-		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
-		BranchName:    workspace.BranchName,
-		Repos:         workspace.Repos,
 	}
 
 	if _, err := s.hookExecutor.ExecuteHooks(ctx, selected, hookCtx, ports.HookExecuteOptions{
@@ -68,33 +48,13 @@ func (s *Service) RunHooks(ctx context.Context, workspaceID string, phase HookPh
 
 // PreviewHooks returns a dry-run preview of lifecycle hooks for an existing workspace.
 func (s *Service) PreviewHooks(ctx context.Context, workspaceID string, phase HookPhase) ([]domain.HookCommandPreview, error) {
-	workspace, dirName, err := s.findWorkspace(ctx, workspaceID)
+	selected, hookCtx, err := s.resolveHookExecution(ctx, workspaceID, phase)
 	if err != nil {
 		return nil, err
 	}
 
-	hooksConfig := s.config.GetHooks()
-
-	var selected []ports.HookSpec
-
-	switch phase {
-	case HookPhasePostCreate:
-		selected = hooksConfig.PostCreate
-	case HookPhasePreClose:
-		selected = hooksConfig.PreClose
-	default:
-		return nil, cerrors.NewInvalidArgument("hook_phase", fmt.Sprintf("unsupported hook phase %q", phase))
-	}
-
 	if len(selected) == 0 {
 		return nil, nil
-	}
-
-	hookCtx := domain.HookContext{
-		WorkspaceID:   workspaceID,
-		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
-		BranchName:    workspace.BranchName,
-		Repos:         workspace.Repos,
 	}
 
 	previews, err := s.hookExecutor.ExecuteHooks(ctx, selected, hookCtx, ports.HookExecuteOptions{
@@ -109,4 +69,34 @@ func (s *Service) PreviewHooks(ctx context.Context, workspaceID string, phase Ho
 	}
 
 	return previews, nil
+}
+
+func (s *Service) resolveHookExecution(ctx context.Context, workspaceID string, phase HookPhase) ([]ports.HookSpec, domain.HookContext, error) {
+	workspace, dirName, err := s.findWorkspace(ctx, workspaceID)
+	if err != nil {
+		return nil, domain.HookContext{}, err
+	}
+
+	selected, err := selectHooksForPhase(s.config.GetHooks(), phase)
+	if err != nil {
+		return nil, domain.HookContext{}, err
+	}
+
+	return selected, domain.HookContext{
+		WorkspaceID:   workspaceID,
+		WorkspacePath: filepath.Join(s.config.GetWorkspacesRoot(), dirName),
+		BranchName:    workspace.BranchName,
+		Repos:         workspace.Repos,
+	}, nil
+}
+
+func selectHooksForPhase(hooksConfig ports.HooksConfig, phase HookPhase) ([]ports.HookSpec, error) {
+	switch phase {
+	case HookPhasePostCreate:
+		return hooksConfig.PostCreate, nil
+	case HookPhasePreClose:
+		return hooksConfig.PreClose, nil
+	default:
+		return nil, cerrors.NewInvalidArgument("hook_phase", fmt.Sprintf("unsupported hook phase %q", phase))
+	}
 }
