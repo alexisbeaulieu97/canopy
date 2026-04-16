@@ -110,6 +110,30 @@ func TestWorkspaceListStatusShowsMultiSignalSummaryAndNoRepos(t *testing.T) {
 	}
 }
 
+func TestWorkspaceListWithoutStatusKeepsNeutralPlaceholder(t *testing.T) {
+	t.Setenv("CANOPY_COLOR", "0")
+
+	appInstance := newFrictionTestApp(t, map[string]domain.Workspace{
+		"WS-A": {
+			ID:    "WS-A",
+			Repos: []domain.Repo{{Name: "repo-a", URL: "https://github.com/example/repo-a.git"}},
+		},
+	}, nil, nil, nil)
+
+	stdout, stderr, err := executeWorkspaceListCommand(t, appInstance)
+	if err != nil {
+		t.Fatalf("workspace list failed: %v", err)
+	}
+
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
+	}
+
+	if strings.Contains(stdout, "no repos") {
+		t.Fatalf("expected neutral placeholder without --status, got:\n%s", stdout)
+	}
+}
+
 func TestWorkspaceListStatusDoesNotEmitPerWorkspaceWarnings(t *testing.T) {
 	t.Setenv("CANOPY_COLOR", "0")
 
@@ -168,8 +192,6 @@ func TestWorkspaceViewShowsExpandedMetadataAndEmptyState(t *testing.T) {
 }
 
 func TestRuntimeStatusCommandSuppressesUsageAfterParsing(t *testing.T) {
-	t.Parallel()
-
 	tmpDir := t.TempDir()
 	cfg := mocks.NewMockConfigProvider()
 	cfg.WorkspacesRoot = filepath.Join(tmpDir, "workspaces")
@@ -208,24 +230,46 @@ func TestRuntimeStatusCommandSuppressesUsageAfterParsing(t *testing.T) {
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 
-	originalWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd failed: %v", err)
-	}
+	t.Chdir(tmpDir)
 
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("chdir failed: %v", err)
-	}
-
-	defer func() { _ = os.Chdir(originalWD) }()
-
-	err = root.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected status command to fail outside a workspace")
 	}
 
 	if stderr.Len() != 0 {
 		t.Fatalf("expected no Cobra usage output, got %q", stderr.String())
+	}
+}
+
+func TestPrepareRuntimeErrorHandlingDoesNotMaskParseErrors(t *testing.T) {
+	t.Parallel()
+
+	prevPrepared := runtimeErrorHandlingPrepared
+	runtimeErrorHandlingPrepared = false
+
+	t.Cleanup(func() {
+		runtimeErrorHandlingPrepared = prevPrepared
+	})
+
+	root := &cobra.Command{Use: "canopy"}
+	root.Flags().Bool("verbose", false, "verbose output")
+
+	var stderr bytes.Buffer
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"--unknown-flag"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+
+	if runtimeErrorHandlingPrepared {
+		t.Fatal("expected parse error to bypass runtime error handling preparation")
+	}
+
+	if !strings.Contains(stderr.String(), "unknown flag: --unknown-flag") {
+		t.Fatalf("expected cobra parse error output, got %q", stderr.String())
 	}
 }
 
@@ -344,12 +388,20 @@ func captureStdout(t *testing.T, fn func() error) (string, error) {
 		os.Stdout = oldStdout
 	}()
 
+	var buf bytes.Buffer
+
+	copyDone := make(chan error, 1)
+
+	go func() {
+		_, copyErr := io.Copy(&buf, r)
+		copyDone <- copyErr
+	}()
+
 	os.Stdout = w
 	runErr := fn()
 	_ = w.Close()
 
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
+	if err := <-copyDone; err != nil {
 		t.Fatalf("failed to capture stdout: %v", err)
 	}
 
@@ -382,20 +434,33 @@ func captureStdoutAndStderr(t *testing.T, fn func() error) (string, string, erro
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
 
-	runErr := fn()
-	_ = stdoutW.Close()
-	_ = stderrW.Close()
-
 	var (
 		stdoutBuf bytes.Buffer
 		stderrBuf bytes.Buffer
 	)
 
-	if _, err := io.Copy(&stdoutBuf, stdoutR); err != nil {
+	stdoutDone := make(chan error, 1)
+	stderrDone := make(chan error, 1)
+
+	go func() {
+		_, copyErr := io.Copy(&stdoutBuf, stdoutR)
+		stdoutDone <- copyErr
+	}()
+
+	go func() {
+		_, copyErr := io.Copy(&stderrBuf, stderrR)
+		stderrDone <- copyErr
+	}()
+
+	runErr := fn()
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
+
+	if err := <-stdoutDone; err != nil {
 		t.Fatalf("failed to capture stdout: %v", err)
 	}
 
-	if _, err := io.Copy(&stderrBuf, stderrR); err != nil {
+	if err := <-stderrDone; err != nil {
 		t.Fatalf("failed to capture stderr: %v", err)
 	}
 

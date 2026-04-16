@@ -32,6 +32,7 @@ type pushResultMsg struct {
 
 // bulkPushResultMsg is sent when a bulk push operation completes.
 type bulkPushResultMsg struct {
+	// ids is the complete attempted set; succeededIDs and failedIDs partition it.
 	ids          []string
 	succeededIDs []string
 	failedIDs    []string
@@ -40,6 +41,7 @@ type bulkPushResultMsg struct {
 
 // syncResultMsg is sent when a sync operation completes.
 type syncResultMsg struct {
+	// ids is the complete attempted set; succeededIDs and failedIDs partition it.
 	ids          []string
 	succeededIDs []string
 	failedIDs    []string
@@ -77,6 +79,7 @@ type closeWorkspaceErrMsg struct {
 
 // bulkCloseResultMsg is sent when closing multiple workspaces completes.
 type bulkCloseResultMsg struct {
+	// ids is the complete attempted set; succeededIDs and failedIDs partition it.
 	ids          []string
 	succeededIDs []string
 	failedIDs    []string

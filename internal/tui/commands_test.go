@@ -3,12 +3,15 @@ package tui
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	"github.com/alexisbeaulieu97/canopy/internal/mocks"
 	"github.com/alexisbeaulieu97/canopy/internal/tui/components"
+	"github.com/alexisbeaulieu97/canopy/internal/workspaces"
 )
 
 func TestLoadWorkspaces_Success(t *testing.T) {
@@ -83,6 +86,52 @@ func TestLoadWorkspaces_OrphanCheckFailure(t *testing.T) {
 
 	if !listMsg.items[0].OrphanCheckFailed {
 		t.Error("expected orphan check failure to be recorded")
+	}
+}
+
+func TestLoadWorkspaces_LockCheckFailure(t *testing.T) {
+	t.Parallel()
+
+	config := mocks.NewMockConfigProvider()
+	config.WorkspacesRoot = t.TempDir()
+	config.ClosedRoot = t.TempDir()
+	config.LockTimeout = time.Second
+
+	git := mocks.NewMockGitOperations()
+	storage := mocks.NewMockWorkspaceStorage()
+	disk := mocks.NewMockDiskUsage()
+	cache := mocks.NewMockWorkspaceCache()
+
+	addTUIWorkspace(storage, domain.Workspace{ID: "ws-1"})
+
+	lockPath := filepath.Join(config.WorkspacesRoot, "ws-1")
+	if err := os.WriteFile(lockPath, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("write lock sentinel failed: %v", err)
+	}
+
+	svc := workspaces.NewService(
+		config,
+		git,
+		storage,
+		nil,
+		workspaces.WithDiskUsage(disk),
+		workspaces.WithCache(cache),
+	)
+
+	model := NewModel(svc, false)
+	msg := model.loadWorkspaces()
+
+	listMsg, ok := msg.(workspaceListMsg)
+	if !ok {
+		t.Fatalf("expected workspaceListMsg, got %T", msg)
+	}
+
+	if len(listMsg.items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(listMsg.items))
+	}
+
+	if !listMsg.items[0].LockCheckFailed {
+		t.Error("expected lock check failure to be recorded")
 	}
 }
 

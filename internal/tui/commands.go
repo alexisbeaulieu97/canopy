@@ -38,9 +38,13 @@ func (m Model) loadWorkspaces() tea.Msg {
 	var totalUsage int64
 
 	for _, w := range workspaces {
+		lockCheckFailed := false
+
 		locked, err := m.svc.WorkspaceLocked(w.ID)
 		if err == nil {
 			w.Locked = locked
+		} else {
+			lockCheckFailed = true
 		}
 
 		items = append(items, components.WorkspaceItem{
@@ -50,6 +54,7 @@ func (m Model) loadWorkspaces() tea.Msg {
 			},
 			OrphanCount:       orphanCounts[w.ID],
 			OrphanCheckFailed: orphanCheckFailed,
+			LockCheckFailed:   lockCheckFailed,
 			Selected:          m.selectedIDs[w.ID],
 		})
 		totalUsage += w.DiskUsageBytes
@@ -128,6 +133,7 @@ func (m Model) pushWorkspaces(ids []string) tea.Cmd {
 		}
 
 		return bulkPushResultMsg{
+			// ids is the complete attempted set; succeededIDs and failedIDs partition it.
 			ids:          ids,
 			succeededIDs: succeededIDs,
 			failedIDs:    failedIDs,
@@ -171,6 +177,7 @@ func (m Model) closeWorkspaces(ids []string) tea.Cmd {
 		}
 
 		return bulkCloseResultMsg{
+			// ids is the complete attempted set; succeededIDs and failedIDs partition it.
 			ids:          ids,
 			succeededIDs: succeededIDs,
 			failedIDs:    failedIDs,
@@ -203,6 +210,7 @@ func (m Model) syncWorkspaces(ids []string) tea.Cmd {
 		}
 
 		return syncResultMsg{
+			// ids is the complete attempted set; succeededIDs and failedIDs partition it.
 			ids:          ids,
 			succeededIDs: succeededIDs,
 			failedIDs:    failedIDs,

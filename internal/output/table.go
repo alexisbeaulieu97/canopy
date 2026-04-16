@@ -111,7 +111,7 @@ func (b *Box) WithWriter(w io.Writer) *Box {
 func (b *Box) renderLine(content string) {
 	border := Colorize(b.style.Border, b.chars.Vertical)
 
-	padding := b.width - 4 - runeWidth(content)
+	padding := b.width - 6 - lipgloss.Width(content)
 	if padding < 0 {
 		padding = 0
 	}

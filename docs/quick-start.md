@@ -53,14 +53,14 @@ canopy workspace new PROJ-123 --repos backend,frontend
 If you run `canopy workspace new` before repos resolve from `--repos`, templates, or workspace patterns, Canopy now fails with guidance instead of creating an empty workspace.
 
 This creates:
-- A workspace directory at `~/workspaces/PROJ-123/`
+- A workspace directory at `~/.canopy/workspaces/PROJ-123/`
 - Worktrees for `backend` and `frontend` inside it
 - A branch named `PROJ-123` in each repository
 
 ### 4. Start Working
 
 ```bash
-cd ~/workspaces/PROJ-123
+cd ~/.canopy/workspaces/PROJ-123
 ls
 # backend/  frontend/
 ```

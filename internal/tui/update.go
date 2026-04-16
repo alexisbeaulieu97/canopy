@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -210,8 +211,7 @@ func (m *Model) handlePushResult(msg pushResultMsg) (tea.Cmd, bool) {
 func (m *Model) handleBulkPushResult(msg bulkPushResultMsg) (tea.Cmd, bool) {
 	m.pushing = false
 	m.pushTarget = ""
-	m.err = nil
-	m.infoMessage = formatBulkOperationSummary("Push", msg.succeededIDs, msg.failedIDs)
+	m.setBulkOperationFeedback("Push", msg.succeededIDs, msg.failedIDs, msg.err)
 
 	return m.loadWorkspaceStatuses(msg.ids), true
 }
@@ -222,11 +222,11 @@ func (m *Model) handleSyncResult(msg syncResultMsg) (tea.Cmd, bool) {
 		return nil, true
 	}
 
-	m.err = nil
 	if len(msg.ids) == 1 {
+		m.err = nil
 		m.infoMessage = "Sync completed successfully"
 	} else {
-		m.infoMessage = formatBulkOperationSummary("Sync", msg.succeededIDs, msg.failedIDs)
+		m.setBulkOperationFeedback("Sync", msg.succeededIDs, msg.failedIDs, msg.err)
 	}
 
 	return m.loadWorkspaceStatuses(msg.ids), true
@@ -238,8 +238,7 @@ func (m *Model) handleCloseWorkspaceErr(msg closeWorkspaceErrMsg) (tea.Cmd, bool
 }
 
 func (m *Model) handleBulkCloseResult(msg bulkCloseResultMsg) (tea.Cmd, bool) {
-	m.err = nil
-	m.infoMessage = formatBulkOperationSummary("Close", msg.succeededIDs, msg.failedIDs)
+	m.setBulkOperationFeedback("Close", msg.succeededIDs, msg.failedIDs, msg.err)
 
 	return m.loadWorkspaces, true
 }
@@ -272,6 +271,8 @@ func (m *Model) handleErrorMessage(msg tea.Msg) (tea.Cmd, bool) {
 
 func formatBulkOperationSummary(action string, succeededIDs, failedIDs []string) string {
 	switch {
+	case len(succeededIDs) == 0 && len(failedIDs) == 0:
+		return fmt.Sprintf("%s did not run: no workspaces specified", action)
 	case len(failedIDs) == 0:
 		return fmt.Sprintf("%s completed for %d workspace(s)", action, len(succeededIDs))
 	case len(succeededIDs) == 0:
@@ -279,6 +280,32 @@ func formatBulkOperationSummary(action string, succeededIDs, failedIDs []string)
 	default:
 		return fmt.Sprintf("%s completed: %d succeeded, %d failed (%s)", action, len(succeededIDs), len(failedIDs), strings.Join(failedIDs, ", "))
 	}
+}
+
+func (m *Model) setBulkOperationFeedback(action string, succeededIDs, failedIDs []string, opErr error) {
+	summary := formatBulkOperationSummary(action, succeededIDs, failedIDs)
+	if len(failedIDs) > 0 {
+		m.infoMessage = ""
+		if opErr != nil {
+			m.err = fmt.Errorf("%s: %w", summary, opErr)
+
+			return
+		}
+
+		m.err = errors.New(summary)
+
+		return
+	}
+
+	if opErr != nil {
+		m.infoMessage = ""
+		m.err = opErr
+
+		return
+	}
+
+	m.err = nil
+	m.infoMessage = summary
 }
 
 func (m *Model) updateList(msg tea.Msg) tea.Cmd {

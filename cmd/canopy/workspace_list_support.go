@@ -155,7 +155,7 @@ func runClosedWorkspaceList(ctx context.Context, service *workspaces.Service, js
 	}
 
 	for _, archive := range archives {
-		closedDate := "unknown"
+		closedDate := unknownDisplay
 		if archive.Metadata.ClosedAt != nil {
 			closedDate = archive.Metadata.ClosedAt.Format(time.RFC3339)
 		}
@@ -244,6 +244,8 @@ func setWorkspaceRepoStatusError(ws *workspaceWithStatusData, statusErr error) {
 		errorValue = domain.StatusErrorTimeout
 	}
 
+	// Replace any existing repo statuses rather than merging them.
+	// This error path intentionally reuses the backing slice when present.
 	ws.RepoStatuses = ws.RepoStatuses[:0]
 	for _, repo := range ws.Repos {
 		ws.RepoStatuses = append(ws.RepoStatuses, domain.RepoStatus{
@@ -305,7 +307,7 @@ func renderWorkspaceListTable(workspaces []workspaceWithStatusData, showStatus, 
 	)
 
 	for _, workspace := range workspaces {
-		line, dirty, needsSync, rowErrors := formatWorkspaceRow(workspace, showLocks, icons)
+		line, dirty, needsSync, rowErrors := formatWorkspaceRow(workspace, showStatus, showLocks, icons)
 		lines = append(lines, line)
 		totalSize += workspace.DiskUsageBytes
 		dirtyCount += dirty
@@ -336,13 +338,13 @@ func renderWorkspaceListTable(workspaces []workspaceWithStatusData, showStatus, 
 	_, _ = fmt.Fprintln(os.Stdout, output.Summary(summaryParts...)) //nolint:forbidigo // user-facing CLI output
 }
 
-func formatWorkspaceRow(ws workspaceWithStatusData, showLocks bool, icons output.Icons) (line string, dirty, needsSync, rowErrors int) {
+func formatWorkspaceRow(ws workspaceWithStatusData, showStatus, showLocks bool, icons output.Icons) (line string, dirty, needsSync, rowErrors int) {
 	name := ws.ID
 	if len(name) > 14 {
 		name = name[:13] + "…"
 	}
 
-	status, rowErrors := formatWorkspaceStatus(ws.RepoStatuses, icons)
+	status, rowErrors := formatWorkspaceStatus(ws.RepoStatuses, showStatus, icons)
 	if showLocks && ws.Locked {
 		status = joinStatusParts(status, output.Colorize(output.WarningStyle, "locked"))
 	}
@@ -372,8 +374,12 @@ func formatWorkspaceRow(ws workspaceWithStatusData, showLocks bool, icons output
 }
 
 //nolint:gocyclo // UI formatting function with multiple status paths
-func formatWorkspaceStatus(statuses []domain.RepoStatus, icons output.Icons) (string, int) {
+func formatWorkspaceStatus(statuses []domain.RepoStatus, showStatus bool, icons output.Icons) (string, int) {
 	if len(statuses) == 0 {
+		if !showStatus {
+			return output.Colorize(output.MutedStyle, "-"), 0
+		}
+
 		return output.Colorize(output.MutedStyle, "no repos"), 0
 	}
 

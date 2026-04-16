@@ -2,7 +2,10 @@
 
 ## Why
 
-Several high-frequency flows still create avoidable friction:
+Several high-frequency flows still create avoidable friction through dead-end workspace creation, noisy runtime failures, low-signal list/detail output, and TUI feedback that does not match real triage workflows.
+
+## Problem Details
+
 - `workspace new` can create empty, dead-end workspaces
 - runtime command failures still leak Cobra usage noise
 - list/detail surfaces hide useful triage context
@@ -10,7 +13,7 @@ Several high-frequency flows still create avoidable friction:
 
 ## What Changes
 
-- Guard workspace creation when no repositories resolve and return actionable guidance
+- **BREAKING** Guard workspace creation when no repositories resolve and return actionable guidance
 - Suppress Cobra usage for runtime/domain failures while preserving parse-time help
 - Expand list/detail output with richer metadata and multi-signal status summaries
 - Improve TUI search, bulk-operation summaries, and stale error clearing

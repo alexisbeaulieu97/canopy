@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -156,11 +157,17 @@ func TestHandleBulkPushResultShowsPartialSummary(t *testing.T) {
 		err:          errors.New("push failed"),
 	})
 
-	if model.err != nil {
-		t.Fatalf("expected partial result to clear stale error, got %v", model.err)
+	if model.err == nil {
+		t.Fatal("expected partial result to surface an error")
 	}
 
-	if model.infoMessage != "Push completed: 2 succeeded, 1 failed (ws-3)" {
-		t.Fatalf("unexpected info message %q", model.infoMessage)
+	if model.infoMessage != "" {
+		t.Fatalf("expected partial failure to avoid success banner, got %q", model.infoMessage)
+	}
+
+	for _, want := range []string{"2 succeeded", "1 failed", "ws-3"} {
+		if !strings.Contains(model.err.Error(), want) {
+			t.Fatalf("expected error summary to contain %q, got %q", want, model.err.Error())
+		}
 	}
 }
