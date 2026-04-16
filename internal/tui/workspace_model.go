@@ -120,7 +120,7 @@ func (wm *workspaceModel) ApplyFilters(searchValue string) []list.Item {
 			continue
 		}
 
-		if search != "" && !strings.Contains(strings.ToLower(it.Workspace.ID), search) {
+		if search != "" && !workspaceMatchesSearch(it, wm.statusCache[it.Workspace.ID], search, wm.staleThresholdDays) {
 			continue
 		}
 
@@ -128,4 +128,140 @@ func (wm *workspaceModel) ApplyFilters(searchValue string) []list.Item {
 	}
 
 	return items
+}
+
+func workspaceMatchesSearch(
+	item components.WorkspaceItem,
+	status *domain.WorkspaceStatus,
+	search string,
+	staleThresholdDays int,
+) bool {
+	matchers := workspaceSearchTerms(item, status, staleThresholdDays)
+
+	return containsSearchTerm(matchers, search)
+}
+
+func workspaceSearchTerms(
+	item components.WorkspaceItem,
+	status *domain.WorkspaceStatus,
+	staleThresholdDays int,
+) []string {
+	matchers := []string{
+		item.Workspace.ID,
+		item.Workspace.BranchName,
+	}
+
+	matchers = append(matchers, workspaceStateSearchTerms(item, staleThresholdDays)...)
+	matchers = append(matchers, workspaceRepoNames(item)...)
+	matchers = append(matchers, cachedStatusSearchTerms(status)...)
+
+	return matchers
+}
+
+func workspaceStateSearchTerms(item components.WorkspaceItem, staleThresholdDays int) []string {
+	var terms []string
+
+	terms = append(terms, workspaceFlagTerms(item, staleThresholdDays)...)
+	terms = append(terms, workspaceSummaryTerms(item)...)
+
+	return terms
+}
+
+func workspaceFlagTerms(item components.WorkspaceItem, staleThresholdDays int) []string {
+	var terms []string
+
+	if item.Workspace.Locked {
+		terms = append(terms, "locked")
+	}
+
+	if item.Workspace.IsStale(staleThresholdDays) {
+		terms = append(terms, "stale")
+	}
+
+	if item.OrphanCount > 0 || item.OrphanCheckFailed {
+		terms = append(terms, "orphan")
+	}
+
+	if item.Err != nil {
+		terms = append(terms, "error", item.Err.Error())
+	}
+
+	return terms
+}
+
+func workspaceSummaryTerms(item components.WorkspaceItem) []string {
+	var terms []string
+
+	if item.Summary.DirtyRepos > 0 {
+		terms = append(terms, "dirty")
+	}
+
+	if item.Summary.UnpushedRepos > 0 {
+		terms = append(terms, "unpushed")
+	}
+
+	if item.Summary.BehindRepos > 0 {
+		terms = append(terms, "behind")
+	}
+
+	if item.Summary.ErrorRepos > 0 || item.OrphanCheckFailed {
+		terms = append(terms, "error")
+	}
+
+	return terms
+}
+
+func workspaceRepoNames(item components.WorkspaceItem) []string {
+	terms := make([]string, 0, len(item.Workspace.Repos))
+	for _, repo := range item.Workspace.Repos {
+		terms = append(terms, repo.Name)
+	}
+
+	return terms
+}
+
+func cachedStatusSearchTerms(status *domain.WorkspaceStatus) []string {
+	if status == nil {
+		return nil
+	}
+
+	terms := []string{status.BranchName}
+	for _, repo := range status.Repos {
+		terms = append(terms, repo.Name, repo.Branch)
+		terms = append(terms, repoStatusKeywords(repo)...)
+	}
+
+	return terms
+}
+
+func repoStatusKeywords(repo domain.RepoStatus) []string {
+	var terms []string
+
+	if repo.IsDirty {
+		terms = append(terms, "dirty")
+	}
+
+	if repo.UnpushedCommits > 0 {
+		terms = append(terms, "unpushed")
+	}
+
+	if repo.BehindRemote > 0 {
+		terms = append(terms, "behind")
+	}
+
+	if repo.Error != "" {
+		terms = append(terms, "error", string(repo.Error))
+	}
+
+	return terms
+}
+
+func containsSearchTerm(matchers []string, search string) bool {
+	for _, matcher := range matchers {
+		if strings.Contains(strings.ToLower(strings.TrimSpace(matcher)), search) {
+			return true
+		}
+	}
+
+	return false
 }

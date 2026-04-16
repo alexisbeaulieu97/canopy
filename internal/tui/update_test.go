@@ -127,3 +127,40 @@ func TestUpdate_ErrorMessage(t *testing.T) {
 		t.Error("expected detail state to stop loading")
 	}
 }
+
+func TestUpdate_WorkspaceListMessageClearsStaleError(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTUITestModel(t)
+	model.err = errors.New("stale")
+
+	updatedModel, _ := model.Update(workspaceListMsg{items: []components.WorkspaceItem{}, totalUsage: 0})
+	updated := updatedModel.(Model)
+
+	if updated.err != nil {
+		t.Fatalf("expected reload to clear stale error, got %v", updated.err)
+	}
+}
+
+func TestHandleBulkPushResultShowsPartialSummary(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTUITestModel(t)
+	model.pushing = true
+	model.err = errors.New("stale")
+
+	_, _ = model.handleBulkPushResult(bulkPushResultMsg{
+		ids:          []string{"ws-1", "ws-2", "ws-3"},
+		succeededIDs: []string{"ws-1", "ws-2"},
+		failedIDs:    []string{"ws-3"},
+		err:          errors.New("push failed"),
+	})
+
+	if model.err != nil {
+		t.Fatalf("expected partial result to clear stale error, got %v", model.err)
+	}
+
+	if model.infoMessage != "Push completed: 2 succeeded, 1 failed (ws-3)" {
+		t.Fatalf("unexpected info message %q", model.infoMessage)
+	}
+}

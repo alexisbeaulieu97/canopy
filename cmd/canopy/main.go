@@ -30,6 +30,8 @@ var (
 				return nil
 			}
 
+			prepareRuntimeErrorHandling(cmd)
+
 			appInstance, err := app.New(debug, app.WithConfigPath(configPath))
 			if err != nil {
 				return err
@@ -73,11 +75,22 @@ func main() {
 			os.Exit(exitErr.Code)
 		}
 
+		if !rootCmd.SilenceErrors {
+			os.Exit(int(exitCodeForError(err)))
+		}
+
 		// Map CanopyError types to their documented exit codes
 		exitCode := exitCodeForError(err)
 		fmt.Fprintln(os.Stderr, userFriendlyMessage(err))
 		os.Exit(int(exitCode))
 	}
+}
+
+func prepareRuntimeErrorHandling(cmd *cobra.Command) {
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.Root().SilenceErrors = true
+	cmd.Root().SilenceUsage = true
 }
 
 func getApp(cmd *cobra.Command) (*app.App, error) {

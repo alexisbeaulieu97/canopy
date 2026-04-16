@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -208,10 +209,6 @@ func populateWorkspaceStatusesParallel(ctx context.Context, service *workspaces.
 
 		if result.Err != nil {
 			setWorkspaceRepoStatusError(ws, result.Err)
-
-			if !errors.Is(result.Err, context.DeadlineExceeded) {
-				output.Warnf("Failed to get status for %s: %v", ws.ID, result.Err)
-			}
 		}
 	}
 
@@ -233,10 +230,6 @@ func populateWorkspaceStatusesSequential(ctx context.Context, service *workspace
 
 		if statusErr != nil {
 			setWorkspaceRepoStatusError(ws, statusErr)
-
-			if !errors.Is(statusErr, context.DeadlineExceeded) {
-				output.Warnf("Failed to get status for %s: %v", workspace.ID, statusErr)
-			}
 		}
 	}
 }
@@ -299,24 +292,25 @@ func workspaceListJSONPayload(list []domain.Workspace, workspacesWithStatus []wo
 //nolint:gocyclo // UI rendering function with multiple format paths
 func renderWorkspaceListTable(workspaces []workspaceWithStatusData, showStatus, showLocks bool) {
 	icons := output.NewIcons()
-	box := output.NewBox("Workspaces").WithWidth(70)
+	box := output.NewBox("Workspaces").WithWidth(92)
 
 	lines := []string{
 		fmt.Sprintf("  %-16s %-6s %-10s %-12s %s", "WORKSPACE", "REPOS", "SIZE", "MODIFIED", "STATUS"),
-		"  " + output.HorizontalRule(64),
+		"  " + output.HorizontalRule(84),
 	}
 
 	var (
-		totalSize                  int64
-		dirtyCount, needsSyncCount int
+		totalSize                              int64
+		dirtyCount, needsSyncCount, errorCount int
 	)
 
 	for _, workspace := range workspaces {
-		line, dirty, needsSync := formatWorkspaceRow(workspace, showLocks, icons)
+		line, dirty, needsSync, rowErrors := formatWorkspaceRow(workspace, showLocks, icons)
 		lines = append(lines, line)
 		totalSize += workspace.DiskUsageBytes
 		dirtyCount += dirty
 		needsSyncCount += needsSync
+		errorCount += rowErrors
 	}
 
 	box.Render(lines)
@@ -334,19 +328,23 @@ func renderWorkspaceListTable(workspaces []workspaceWithStatusData, showStatus, 
 		summaryParts = append(summaryParts, fmt.Sprintf("%d needs sync", needsSyncCount))
 	}
 
+	if showStatus && errorCount > 0 {
+		summaryParts = append(summaryParts, fmt.Sprintf("%d status errors", errorCount))
+	}
+
 	_, _ = fmt.Fprintln(os.Stdout)                                  //nolint:forbidigo // user-facing CLI output
 	_, _ = fmt.Fprintln(os.Stdout, output.Summary(summaryParts...)) //nolint:forbidigo // user-facing CLI output
 }
 
-func formatWorkspaceRow(ws workspaceWithStatusData, showLocks bool, icons output.Icons) (line string, dirty, needsSync int) {
+func formatWorkspaceRow(ws workspaceWithStatusData, showLocks bool, icons output.Icons) (line string, dirty, needsSync, rowErrors int) {
 	name := ws.ID
 	if len(name) > 14 {
 		name = name[:13] + "…"
 	}
 
-	status := formatWorkspaceStatus(ws.RepoStatuses, icons)
+	status, rowErrors := formatWorkspaceStatus(ws.RepoStatuses, icons)
 	if showLocks && ws.Locked {
-		status += output.Colorize(output.WarningStyle, " [locked]")
+		status = joinStatusParts(status, output.Colorize(output.WarningStyle, "locked"))
 	}
 
 	for _, repoStatus := range ws.RepoStatuses {
@@ -370,31 +368,56 @@ func formatWorkspaceRow(ws workspaceWithStatusData, showLocks bool, icons output
 		status,
 	)
 
-	return line, dirty, needsSync
+	return line, dirty, needsSync, rowErrors
 }
 
 //nolint:gocyclo // UI formatting function with multiple status paths
-func formatWorkspaceStatus(statuses []domain.RepoStatus, icons output.Icons) string {
+func formatWorkspaceStatus(statuses []domain.RepoStatus, icons output.Icons) (string, int) {
 	if len(statuses) == 0 {
-		return output.Colorize(output.MutedStyle, "-")
+		return output.Colorize(output.MutedStyle, "no repos"), 0
 	}
 
-	dirty, unpushed, behind, hasError := countStatusValues(statuses)
-	if hasError {
-		return output.Colorize(output.ErrorStyle, icons.Error()+" error")
+	dirty, unpushed, behind, errorCount, timeoutCount := countStatusValues(statuses)
+	if dirty == 0 && unpushed == 0 && behind == 0 && errorCount == 0 {
+		return output.Colorize(output.SuccessStyle, icons.Success()+" clean"), 0
 	}
 
-	if dirty == 0 && unpushed == 0 && behind == 0 {
-		return output.Colorize(output.SuccessStyle, icons.Success()+" clean")
+	var parts []string
+
+	if errorCount > 0 {
+		label := fmt.Sprintf("%d status errors", errorCount)
+		if timeoutCount == errorCount {
+			label = fmt.Sprintf("%d timeouts", timeoutCount)
+		}
+
+		parts = append(parts, output.Colorize(output.ErrorStyle, fmt.Sprintf("%s %s", icons.Error(), label)))
 	}
 
-	return formatFirstStatusIssue(dirty, unpushed, behind, icons)
+	if dirty > 0 {
+		parts = append(parts, output.Colorize(output.ErrorStyle, fmt.Sprintf("%d dirty", dirty)))
+	}
+
+	if unpushed > 0 {
+		parts = append(parts, output.Colorize(output.ErrorStyle, fmt.Sprintf("%d unpushed", unpushed)))
+	}
+
+	if behind > 0 {
+		parts = append(parts, output.Colorize(output.WarningStyle, fmt.Sprintf("%d behind", behind)))
+	}
+
+	return strings.Join(parts, output.Colorize(output.MutedStyle, " • ")), errorCount
 }
 
-func countStatusValues(statuses []domain.RepoStatus) (dirty, unpushed, behind int, hasError bool) {
+func countStatusValues(statuses []domain.RepoStatus) (dirty, unpushed, behind, errorCount, timeoutCount int) {
 	for _, status := range statuses {
 		if status.Error != "" {
-			return 0, 0, 0, true
+			errorCount++
+
+			if status.Error == domain.StatusErrorTimeout {
+				timeoutCount++
+			}
+
+			continue
 		}
 
 		if status.IsDirty {
@@ -410,18 +433,13 @@ func countStatusValues(statuses []domain.RepoStatus) (dirty, unpushed, behind in
 		}
 	}
 
-	return dirty, unpushed, behind, false
+	return dirty, unpushed, behind, errorCount, timeoutCount
 }
 
-func formatFirstStatusIssue(dirty, unpushed, behind int, icons output.Icons) string {
-	if dirty > 0 {
-		return output.Colorize(output.ErrorStyle, fmt.Sprintf("%s %d dirty", icons.Dirty(), dirty))
+func joinStatusParts(base, extra string) string {
+	if base == "" {
+		return extra
 	}
 
-	if unpushed > 0 {
-		return output.Colorize(output.ErrorStyle, fmt.Sprintf("%s %d unpushed", icons.Unpushed(), unpushed))
-	}
-
-	// behind > 0 guaranteed by caller
-	return output.Colorize(output.WarningStyle, fmt.Sprintf("%s %d behind", icons.Behind(), behind))
+	return base + output.Colorize(output.MutedStyle, " • ") + extra
 }

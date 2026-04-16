@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/alexisbeaulieu97/canopy/internal/domain"
+	cerrors "github.com/alexisbeaulieu97/canopy/internal/errors"
+	"github.com/alexisbeaulieu97/canopy/internal/formatting"
 	"github.com/alexisbeaulieu97/canopy/internal/output"
 )
 
@@ -25,22 +30,26 @@ var workspaceViewCmd = &cobra.Command{
 			return err
 		}
 
-		service := app.Service
-
-		status, err := service.GetStatus(cmd.Context(), id)
+		viewData, err := loadWorkspaceViewData(cmd.Context(), app.Service, id)
 		if err != nil {
 			return err
 		}
 
 		if jsonOutput {
 			return output.PrintJSON(map[string]interface{}{
-				"workspace": status.ID,
-				"branch":    status.BranchName,
-				"repos":     status.Repos,
+				"workspace":        viewData.Workspace.ID,
+				"branch":           viewData.Status.BranchName,
+				"repos":            viewData.Status.Repos,
+				"path":             viewData.Path,
+				"repo_count":       len(viewData.Workspace.Repos),
+				"disk_usage_bytes": viewData.Workspace.DiskUsageBytes,
+				"last_modified":    viewData.Workspace.LastModified,
+				"locked":           viewData.Locked,
+				"orphans":          viewData.Orphans,
 			})
 		}
 
-		renderWorkspaceView(status)
+		renderWorkspaceView(cmd.OutOrStdout(), viewData)
 
 		return nil
 	},
@@ -52,70 +61,162 @@ func init() {
 	workspaceViewCmd.Flags().Bool("json", false, "Output in JSON format")
 }
 
-func renderWorkspaceView(status *domain.WorkspaceStatus) {
+type workspaceViewService interface {
+	GetStatus(ctx context.Context, workspaceID string) (*domain.WorkspaceStatus, error)
+	ListWorkspaces(ctx context.Context) ([]domain.Workspace, error)
+	WorkspacePath(ctx context.Context, workspaceID string) (string, error)
+	WorkspaceLocked(workspaceID string) (bool, error)
+	DetectOrphansForWorkspace(ctx context.Context, workspaceID string) ([]domain.OrphanedWorktree, error)
+}
+
+type workspaceViewData struct {
+	Workspace domain.Workspace
+	Status    *domain.WorkspaceStatus
+	Path      string
+	Locked    bool
+	Orphans   []domain.OrphanedWorktree
+}
+
+func loadWorkspaceViewData(ctx context.Context, service workspaceViewService, id string) (*workspaceViewData, error) {
+	status, err := service.GetStatus(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	workspaces, err := service.ListWorkspaces(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var workspace *domain.Workspace
+
+	for i := range workspaces {
+		if workspaces[i].ID == id {
+			workspace = &workspaces[i]
+			break
+		}
+	}
+
+	if workspace == nil {
+		return nil, cerrors.NewWorkspaceNotFound(id)
+	}
+
+	path, err := service.WorkspacePath(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	locked, err := service.WorkspaceLocked(id)
+	if err != nil {
+		locked = false
+	}
+
+	orphans, err := service.DetectOrphansForWorkspace(ctx, id)
+	if err != nil {
+		orphans = nil
+	}
+
+	return &workspaceViewData{
+		Workspace: *workspace,
+		Status:    status,
+		Path:      path,
+		Locked:    locked,
+		Orphans:   orphans,
+	}, nil
+}
+
+func renderWorkspaceView(out io.Writer, viewData *workspaceViewData) {
+	if viewData == nil || viewData.Status == nil {
+		return
+	}
+
 	icons := output.NewIcons()
 
-	// Build sections for the workspace view
 	var sections []output.BoxSection
 
-	// Metadata section (no title since it's the first section)
 	var metadataLines []string
 
-	metadataLines = append(metadataLines, output.FormatKeyValue("Branch", status.BranchName, 12))
-	// TODO: Add path, disk size, modified, created when available in the status
+	metadataLines = append(metadataLines, output.FormatKeyValue("Path", viewData.Path, 12))
+	metadataLines = append(metadataLines, output.FormatKeyValue("Branch", viewData.Status.BranchName, 12))
+	metadataLines = append(metadataLines, output.FormatKeyValue("Repos", fmt.Sprintf("%d", len(viewData.Workspace.Repos)), 12))
+	metadataLines = append(metadataLines, output.FormatKeyValue("Disk", output.FormatBytes(viewData.Workspace.DiskUsageBytes), 12))
+	metadataLines = append(metadataLines, output.FormatKeyValue("Modified", formatWorkspaceModified(viewData.Workspace.LastModified), 12))
+
+	if viewData.Locked {
+		metadataLines = append(metadataLines, output.FormatKeyValue("Lock", "locked", 12))
+	}
 
 	sections = append(sections, output.BoxSection{
 		Title: "",
 		Lines: metadataLines,
 	})
 
-	// Repositories section
+	if len(viewData.Orphans) > 0 {
+		orphanLines := []string{
+			fmt.Sprintf("  %d orphaned worktree(s) need attention", len(viewData.Orphans)),
+		}
+
+		for _, orphan := range viewData.Orphans {
+			orphanLines = append(orphanLines, fmt.Sprintf("  - %s: %s", orphan.RepoName, orphan.ReasonDescription()))
+		}
+
+		sections = append(sections, output.BoxSection{
+			Title: "Orphans",
+			Lines: orphanLines,
+		})
+	}
+
 	var repoLines []string
+	if len(viewData.Status.Repos) == 0 {
+		repoLines = append(repoLines, "  No repositories in this workspace.")
+		repoLines = append(repoLines, fmt.Sprintf("  Add one with: canopy workspace repo add %s <repo>", viewData.Workspace.ID))
+	} else {
+		header := fmt.Sprintf("  %-14s %-20s %s", "NAME", "BRANCH", "STATUS")
+		repoLines = append(repoLines, header)
+		repoLines = append(repoLines, "  "+output.HorizontalRule(72))
 
-	// Header
-	header := fmt.Sprintf("  %-14s %-20s %s", "NAME", "BRANCH", "STATUS")
-	repoLines = append(repoLines, header)
-	repoLines = append(repoLines, "  "+output.HorizontalRule(56))
+		for _, repo := range viewData.Status.Repos {
+			name := repo.Name
+			if len(name) > 12 {
+				name = name[:11] + "…"
+			}
 
-	for _, r := range status.Repos {
-		name := r.Name
-		if len(name) > 12 {
-			name = name[:11] + "…"
+			branch := repo.Branch
+			if len(branch) > 18 {
+				branch = branch[:17] + "…"
+			}
+
+			line := fmt.Sprintf("  %-14s %-20s %s", name, branch, formatRepoViewStatus(repo, icons))
+			repoLines = append(repoLines, line)
 		}
-
-		branch := r.Branch
-		if len(branch) > 18 {
-			branch = branch[:17] + "…"
-		}
-
-		statusStr := formatRepoViewStatus(r, icons)
-
-		line := fmt.Sprintf("  %-14s %-20s %s", name, branch, statusStr)
-		repoLines = append(repoLines, line)
 	}
 
 	sections = append(sections, output.BoxSection{
-		Title: fmt.Sprintf("Repositories (%d)", len(status.Repos)),
+		Title: fmt.Sprintf("Repositories (%d)", len(viewData.Status.Repos)),
 		Lines: repoLines,
 	})
 
-	// Render the box
-	title := "Workspace: " + status.ID
-	box := output.NewBox(title).WithWidth(70)
+	box := output.NewBox("Workspace: " + viewData.Workspace.ID).WithWidth(88).WithWriter(out)
 	box.RenderWithSections(sections)
+}
 
-	// Print any warnings below the box
-	// (In the future, we could detect orphaned worktrees and show a warning box)
+func formatWorkspaceModified(ts time.Time) string {
+	if ts.IsZero() {
+		return "unknown"
+	}
+
+	return formatting.RelativeTime(ts, formatting.RelativeTimeOptions{
+		Zero:          "unknown",
+		Compact:       true,
+		Yesterday:     true,
+		UseWeeks:      true,
+		AbsoluteAfter: 30 * 24 * time.Hour,
+	})
 }
 
 func formatRepoViewStatus(r domain.RepoStatus, icons output.Icons) string {
 	if r.Error != "" {
-		errText := strings.ReplaceAll(string(r.Error), "\n", " ")
-		if len(errText) > 30 {
-			errText = errText[:27] + "..."
-		}
-
-		return output.Colorize(output.ErrorStyle, icons.Error()+" error: "+errText)
+		return output.Colorize(output.ErrorStyle, icons.Error()+" status error: "+string(r.Error))
 	}
 
 	var parts []string
@@ -136,5 +237,9 @@ func formatRepoViewStatus(r domain.RepoStatus, icons output.Icons) string {
 		return output.Colorize(output.SuccessStyle, icons.Success()+" clean")
 	}
 
-	return strings.Join(parts, "  ")
+	return joinOutputParts(parts)
+}
+
+func joinOutputParts(parts []string) string {
+	return strings.Join(parts, output.Colorize(output.MutedStyle, " • "))
 }

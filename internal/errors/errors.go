@@ -224,7 +224,7 @@ func Wrap(code ErrorCode, message string, cause error) *CanopyError {
 func NewNotInWorkspace(path string) *CanopyError {
 	return &CanopyError{
 		Code:    ErrNotInWorkspace,
-		Message: "not inside a workspace",
+		Message: fmt.Sprintf("not inside a workspace: %s. Change into a workspace directory or run 'canopy workspace list' to find one", path),
 		Context: map[string]string{"path": path},
 	}
 }
@@ -349,7 +349,7 @@ func NewWorkspaceMetadataError(workspaceID, operation string, cause error) *Cano
 func NewNoReposConfigured(workspaceID string) *CanopyError {
 	return &CanopyError{
 		Code:    ErrNoReposConfigured,
-		Message: fmt.Sprintf("no repositories configured for workspace %s", workspaceID),
+		Message: fmt.Sprintf("no repositories configured for workspace %s. Add repos with --repos, choose a template with --template, register aliases with 'canopy repo add' or 'canopy repo register', or configure defaults.workspace_patterns", workspaceID),
 		Context: map[string]string{"workspace_id": workspaceID},
 	}
 }

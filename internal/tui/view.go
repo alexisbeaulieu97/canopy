@@ -367,7 +367,10 @@ func (m Model) renderDetailRepos() string {
 	b.WriteString("\n")
 
 	if m.wsStatus == nil || len(m.wsStatus.Repos) == 0 {
-		b.WriteString(components.SubtleTextStyle.Render("  No repositories found."))
+		b.WriteString(components.SubtleTextStyle.Render("  No repositories in this workspace."))
+		b.WriteString("\n")
+		b.WriteString(components.SubtleTextStyle.Render(fmt.Sprintf("  Add one with: canopy workspace repo add %s <repo>", m.selectedWS.ID)))
+
 		return b.String()
 	}
 
