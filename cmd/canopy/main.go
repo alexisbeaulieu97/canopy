@@ -18,10 +18,11 @@ type contextKey string
 const appContextKey contextKey = "app"
 
 var (
-	debug       bool
-	showVersion bool
-	configPath  string
-	rootCmd     = &cobra.Command{
+	debug                        bool
+	showVersion                  bool
+	configPath                   string
+	runtimeErrorHandlingPrepared bool
+	rootCmd                      = &cobra.Command{
 		Use:   "canopy",
 		Short: "Workspace-centric development",
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
@@ -29,6 +30,8 @@ var (
 			if cmd.Name() == "version" || showVersion {
 				return nil
 			}
+
+			prepareRuntimeErrorHandling(cmd)
 
 			appInstance, err := app.New(debug, app.WithConfigPath(configPath))
 			if err != nil {
@@ -73,11 +76,23 @@ func main() {
 			os.Exit(exitErr.Code)
 		}
 
+		if !runtimeErrorHandlingPrepared {
+			os.Exit(int(exitCodeForError(err)))
+		}
+
 		// Map CanopyError types to their documented exit codes
 		exitCode := exitCodeForError(err)
 		fmt.Fprintln(os.Stderr, userFriendlyMessage(err))
 		os.Exit(int(exitCode))
 	}
+}
+
+func prepareRuntimeErrorHandling(cmd *cobra.Command) {
+	runtimeErrorHandlingPrepared = true
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.Root().SilenceErrors = true
+	cmd.Root().SilenceUsage = true
 }
 
 func getApp(cmd *cobra.Command) (*app.App, error) {

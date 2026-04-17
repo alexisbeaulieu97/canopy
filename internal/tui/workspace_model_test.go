@@ -190,3 +190,54 @@ func TestWorkspaceModel_ApplyFilters_Stale(t *testing.T) {
 		t.Error("ApplyFilters() with stale filter returned wrong item")
 	}
 }
+
+func TestWorkspaceModel_ApplyFilters_SearchesRepoBranchAndStatusKeywords(t *testing.T) {
+	wm := newWorkspaceModel(30)
+
+	items := []components.WorkspaceItem{
+		{
+			Workspace: domain.Workspace{
+				ID:         "project-alpha",
+				BranchName: "feature/auth",
+				Repos:      []domain.Repo{{Name: "backend"}},
+				Locked:     true,
+			},
+			Summary: components.WorkspaceSummary{
+				DirtyRepos: 1,
+			},
+		},
+		{
+			Workspace:   domain.Workspace{ID: "project-beta"},
+			OrphanCount: 1,
+		},
+	}
+
+	wm.SetItems(items, 0)
+	wm.CacheStatus("project-alpha", &domain.WorkspaceStatus{
+		ID:         "project-alpha",
+		BranchName: "feature/auth",
+		Repos: []domain.RepoStatus{
+			{Name: "backend", Branch: "feature/auth", IsDirty: true},
+		},
+	})
+
+	tests := map[string]string{
+		"backend":      "project-alpha",
+		"feature/auth": "project-alpha",
+		"dirty":        "project-alpha",
+		"locked":       "project-alpha",
+		"orphan":       "project-beta",
+	}
+
+	for search, wantID := range tests {
+		result := wm.ApplyFilters(search)
+		if len(result) != 1 {
+			t.Fatalf("ApplyFilters(%q) = %d items, want 1", search, len(result))
+		}
+
+		got := result[0].(components.WorkspaceItem).Workspace.ID
+		if got != wantID {
+			t.Fatalf("ApplyFilters(%q) returned %q, want %q", search, got, wantID)
+		}
+	}
+}

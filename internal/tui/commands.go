@@ -38,6 +38,15 @@ func (m Model) loadWorkspaces() tea.Msg {
 	var totalUsage int64
 
 	for _, w := range workspaces {
+		lockCheckFailed := false
+
+		locked, err := m.svc.WorkspaceLocked(w.ID)
+		if err == nil {
+			w.Locked = locked
+		} else {
+			lockCheckFailed = true
+		}
+
 		items = append(items, components.WorkspaceItem{
 			Workspace: w,
 			Summary: components.WorkspaceSummary{
@@ -45,6 +54,7 @@ func (m Model) loadWorkspaces() tea.Msg {
 			},
 			OrphanCount:       orphanCounts[w.ID],
 			OrphanCheckFailed: orphanCheckFailed,
+			LockCheckFailed:   lockCheckFailed,
 			Selected:          m.selectedIDs[w.ID],
 		})
 		totalUsage += w.DiskUsageBytes
@@ -105,15 +115,29 @@ func (m Model) pushWorkspaces(ids []string) tea.Cmd {
 	return func() tea.Msg {
 		var firstErr error
 
+		succeededIDs := make([]string, 0, len(ids))
+		failedIDs := make([]string, 0)
+
 		for _, id := range ids {
-			if err := m.svc.PushWorkspace(context.Background(), id); err != nil && firstErr == nil {
-				firstErr = err
+			if err := m.svc.PushWorkspace(context.Background(), id); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+
+				failedIDs = append(failedIDs, id)
+
+				continue
 			}
+
+			succeededIDs = append(succeededIDs, id)
 		}
 
 		return bulkPushResultMsg{
-			ids: ids,
-			err: firstErr,
+			// ids is the complete attempted set; succeededIDs and failedIDs partition it.
+			ids:          ids,
+			succeededIDs: succeededIDs,
+			failedIDs:    failedIDs,
+			err:          firstErr,
 		}
 	}
 }
@@ -135,15 +159,29 @@ func (m Model) closeWorkspaces(ids []string) tea.Cmd {
 	return func() tea.Msg {
 		var firstErr error
 
+		succeededIDs := make([]string, 0, len(ids))
+		failedIDs := make([]string, 0)
+
 		for _, id := range ids {
-			if err := m.svc.CloseWorkspace(context.Background(), id, false); err != nil && firstErr == nil {
-				firstErr = err
+			if err := m.svc.CloseWorkspace(context.Background(), id, false); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+
+				failedIDs = append(failedIDs, id)
+
+				continue
 			}
+
+			succeededIDs = append(succeededIDs, id)
 		}
 
 		return bulkCloseResultMsg{
-			ids: ids,
-			err: firstErr,
+			// ids is the complete attempted set; succeededIDs and failedIDs partition it.
+			ids:          ids,
+			succeededIDs: succeededIDs,
+			failedIDs:    failedIDs,
+			err:          firstErr,
 		}
 	}
 }
@@ -153,16 +191,30 @@ func (m Model) syncWorkspaces(ids []string) tea.Cmd {
 	return func() tea.Msg {
 		var firstErr error
 
+		succeededIDs := make([]string, 0, len(ids))
+		failedIDs := make([]string, 0)
+
 		for _, id := range ids {
 			_, err := m.svc.SyncWorkspace(context.Background(), id, workspaces.SyncOptions{})
-			if err != nil && firstErr == nil {
-				firstErr = err
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+
+				failedIDs = append(failedIDs, id)
+
+				continue
 			}
+
+			succeededIDs = append(succeededIDs, id)
 		}
 
 		return syncResultMsg{
-			ids: ids,
-			err: firstErr,
+			// ids is the complete attempted set; succeededIDs and failedIDs partition it.
+			ids:          ids,
+			succeededIDs: succeededIDs,
+			failedIDs:    failedIDs,
+			err:          firstErr,
 		}
 	}
 }

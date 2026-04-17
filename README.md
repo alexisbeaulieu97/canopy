@@ -70,6 +70,8 @@ cd ~/workspaces/PROJ-123
 
 See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 
+`canopy workspace new` now fails fast if no repositories resolve. Add repos first with `canopy repo add`, register aliases with `canopy repo register`, or configure `defaults.workspace_patterns`/templates before creating a workspace.
+
 ## Documentation
 
 | Guide | Description |
@@ -109,11 +111,15 @@ See the [Quick Start Guide](docs/quick-start.md) for a complete walkthrough.
 - `--no-hooks` — Skip post_create hooks
 - `--hooks-only` — Run post_create hooks without creating workspace
 
+Running `canopy workspace new <ID>` without resolvable repos now returns actionable guidance instead of creating an empty workspace.
+
 **Flags for `workspace list`:**
 - `--status` — Show git status for each repository
 - `--timeout` — Timeout for status check per workspace (default: 5s)
 - `--closed` — List closed workspaces
 - `--json` — Output in JSON format
+
+`workspace list --status` now shows combined summaries such as `1 dirty • 2 unpushed • 1 behind`, uses `no repos` for empty workspaces, and keeps status failures in-row instead of printing warning lines between rows.
 
 **Flags for `workspace close`:**
 - `--keep` — Keep metadata for later restoration
@@ -178,6 +184,8 @@ canopy tui
 | `q` | Quit |
 
 See [Configuration](docs/configuration.md#tui-keybindings) to customize keybindings.
+
+TUI search now matches workspace IDs, repo names, branch names, and status keywords like `dirty`, `unpushed`, `behind`, `stale`, `locked`, and `orphan`.
 
 ### Other Commands
 

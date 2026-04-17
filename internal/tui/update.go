@@ -2,7 +2,9 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -83,6 +85,7 @@ func (m *Model) handleWindowSizeMessage(msg tea.Msg) (tea.Cmd, bool) {
 func (m *Model) handleWorkspaceListMessage(msg tea.Msg) (tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case workspaceListMsg:
+		m.err = nil
 		m.workspaces.SetItems(msg.items, msg.totalUsage)
 		m.pruneSelectionIDs(msg.items)
 		m.applySelectionToItems()
@@ -199,6 +202,7 @@ func (m *Model) handlePushResult(msg pushResultMsg) (tea.Cmd, bool) {
 		return nil, true
 	}
 
+	m.err = nil
 	m.infoMessage = "Push completed successfully"
 
 	return m.loadWorkspaceStatus(msg.id), true
@@ -207,27 +211,22 @@ func (m *Model) handlePushResult(msg pushResultMsg) (tea.Cmd, bool) {
 func (m *Model) handleBulkPushResult(msg bulkPushResultMsg) (tea.Cmd, bool) {
 	m.pushing = false
 	m.pushTarget = ""
-
-	if msg.err != nil {
-		m.err = msg.err
-		return nil, true
-	}
-
-	m.infoMessage = fmt.Sprintf("Push completed for %d workspaces", len(msg.ids))
+	m.setBulkOperationFeedback("Push", msg.succeededIDs, msg.failedIDs, msg.err)
 
 	return m.loadWorkspaceStatuses(msg.ids), true
 }
 
 func (m *Model) handleSyncResult(msg syncResultMsg) (tea.Cmd, bool) {
-	if msg.err != nil {
+	if msg.err != nil && len(msg.ids) == 1 {
 		m.err = msg.err
 		return nil, true
 	}
 
 	if len(msg.ids) == 1 {
+		m.err = nil
 		m.infoMessage = "Sync completed successfully"
 	} else {
-		m.infoMessage = fmt.Sprintf("Sync completed for %d workspaces", len(msg.ids))
+		m.setBulkOperationFeedback("Sync", msg.succeededIDs, msg.failedIDs, msg.err)
 	}
 
 	return m.loadWorkspaceStatuses(msg.ids), true
@@ -239,11 +238,7 @@ func (m *Model) handleCloseWorkspaceErr(msg closeWorkspaceErrMsg) (tea.Cmd, bool
 }
 
 func (m *Model) handleBulkCloseResult(msg bulkCloseResultMsg) (tea.Cmd, bool) {
-	if msg.err != nil {
-		m.err = msg.err
-	} else {
-		m.infoMessage = fmt.Sprintf("Closed %d workspaces", len(msg.ids))
-	}
+	m.setBulkOperationFeedback("Close", msg.succeededIDs, msg.failedIDs, msg.err)
 
 	return m.loadWorkspaces, true
 }
@@ -253,6 +248,7 @@ func (m *Model) handleOpenEditorResult(msg openEditorResultMsg) (tea.Cmd, bool) 
 		m.err = msg.err
 		m.infoMessage = ""
 	} else {
+		m.err = nil
 		m.infoMessage = "Opened in editor"
 	}
 
@@ -271,6 +267,45 @@ func (m *Model) handleErrorMessage(msg tea.Msg) (tea.Cmd, bool) {
 	}
 
 	return nil, true
+}
+
+func formatBulkOperationSummary(action string, succeededIDs, failedIDs []string) string {
+	switch {
+	case len(succeededIDs) == 0 && len(failedIDs) == 0:
+		return fmt.Sprintf("%s did not run: no workspaces specified", action)
+	case len(failedIDs) == 0:
+		return fmt.Sprintf("%s completed for %d workspace(s)", action, len(succeededIDs))
+	case len(succeededIDs) == 0:
+		return fmt.Sprintf("%s failed for %d workspace(s): %s", action, len(failedIDs), strings.Join(failedIDs, ", "))
+	default:
+		return fmt.Sprintf("%s completed: %d succeeded, %d failed (%s)", action, len(succeededIDs), len(failedIDs), strings.Join(failedIDs, ", "))
+	}
+}
+
+func (m *Model) setBulkOperationFeedback(action string, succeededIDs, failedIDs []string, opErr error) {
+	summary := formatBulkOperationSummary(action, succeededIDs, failedIDs)
+	if len(failedIDs) > 0 {
+		m.infoMessage = ""
+		if opErr != nil {
+			m.err = fmt.Errorf("%s: %w", summary, opErr)
+
+			return
+		}
+
+		m.err = errors.New(summary)
+
+		return
+	}
+
+	if opErr != nil {
+		m.infoMessage = ""
+		m.err = opErr
+
+		return
+	}
+
+	m.err = nil
+	m.infoMessage = summary
 }
 
 func (m *Model) updateList(msg tea.Msg) tea.Cmd {

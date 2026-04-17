@@ -30,6 +30,7 @@ canopy init
 ```
 
 This creates `~/.canopy/config.yaml` with sensible defaults.
+The generated file contains starter examples, and the command prints the next setup commands you need.
 
 ### 2. Add Your Repositories
 
@@ -41,6 +42,7 @@ canopy repo add https://github.com/myorg/frontend.git
 ```
 
 Canopy clones these once and reuses them for all workspaces.
+If you prefer aliases without cloning yet, you can also use `canopy repo register <alias> <repository-url>`.
 
 ### 3. Create Your First Workspace
 
@@ -48,15 +50,17 @@ Canopy clones these once and reuses them for all workspaces.
 canopy workspace new PROJ-123 --repos backend,frontend
 ```
 
+If you run `canopy workspace new` before repos resolve from `--repos`, templates, or workspace patterns, Canopy now fails with guidance instead of creating an empty workspace.
+
 This creates:
-- A workspace directory at `~/workspaces/PROJ-123/`
+- A workspace directory at `~/.canopy/workspaces/PROJ-123/`
 - Worktrees for `backend` and `frontend` inside it
 - A branch named `PROJ-123` in each repository
 
 ### 4. Start Working
 
 ```bash
-cd ~/workspaces/PROJ-123
+cd ~/.canopy/workspaces/PROJ-123
 ls
 # backend/  frontend/
 ```

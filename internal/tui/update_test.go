@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -125,5 +126,48 @@ func TestUpdate_ErrorMessage(t *testing.T) {
 
 	if ds := updated.getDetailState(); ds == nil || ds.Loading {
 		t.Error("expected detail state to stop loading")
+	}
+}
+
+func TestUpdate_WorkspaceListMessageClearsStaleError(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTUITestModel(t)
+	model.err = errors.New("stale")
+
+	updatedModel, _ := model.Update(workspaceListMsg{items: []components.WorkspaceItem{}, totalUsage: 0})
+	updated := updatedModel.(Model)
+
+	if updated.err != nil {
+		t.Fatalf("expected reload to clear stale error, got %v", updated.err)
+	}
+}
+
+func TestHandleBulkPushResultShowsPartialSummary(t *testing.T) {
+	t.Parallel()
+
+	model, _ := newTUITestModel(t)
+	model.pushing = true
+	model.err = errors.New("stale")
+
+	_, _ = model.handleBulkPushResult(bulkPushResultMsg{
+		ids:          []string{"ws-1", "ws-2", "ws-3"},
+		succeededIDs: []string{"ws-1", "ws-2"},
+		failedIDs:    []string{"ws-3"},
+		err:          errors.New("push failed"),
+	})
+
+	if model.err == nil {
+		t.Fatal("expected partial result to surface an error")
+	}
+
+	if model.infoMessage != "" {
+		t.Fatalf("expected partial failure to avoid success banner, got %q", model.infoMessage)
+	}
+
+	for _, want := range []string{"2 succeeded", "1 failed", "ws-3"} {
+		if !strings.Contains(model.err.Error(), want) {
+			t.Fatalf("expected error summary to contain %q, got %q", want, model.err.Error())
+		}
 	}
 }

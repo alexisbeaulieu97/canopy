@@ -20,6 +20,7 @@ type WorkspaceItem struct {
 	Summary           WorkspaceSummary
 	OrphanCount       int
 	OrphanCheckFailed bool // true if orphan detection failed for this workspace
+	LockCheckFailed   bool // true if lock detection failed for this workspace
 	Err               error
 	Loaded            bool
 	Selected          bool
@@ -152,6 +153,10 @@ func (d WorkspaceDelegate) buildLoadedStatusPills(wsItem WorkspaceItem) []string
 
 	if wsItem.Summary.ErrorRepos > 0 {
 		pills = append(pills, StatusDirtyStyle.Render(fmt.Sprintf("%s%d", IconError, wsItem.Summary.ErrorRepos)))
+	}
+
+	if wsItem.LockCheckFailed {
+		pills = append(pills, StatusWarnStyle.Render("lock?"))
 	}
 
 	// Show orphan check failure warning

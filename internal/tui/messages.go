@@ -32,14 +32,20 @@ type pushResultMsg struct {
 
 // bulkPushResultMsg is sent when a bulk push operation completes.
 type bulkPushResultMsg struct {
-	ids []string
-	err error
+	// ids is the complete attempted set; succeededIDs and failedIDs partition it.
+	ids          []string
+	succeededIDs []string
+	failedIDs    []string
+	err          error
 }
 
 // syncResultMsg is sent when a sync operation completes.
 type syncResultMsg struct {
-	ids []string
-	err error
+	// ids is the complete attempted set; succeededIDs and failedIDs partition it.
+	ids          []string
+	succeededIDs []string
+	failedIDs    []string
+	err          error
 }
 
 // openEditorResultMsg is sent when opening an editor completes.
@@ -73,6 +79,9 @@ type closeWorkspaceErrMsg struct {
 
 // bulkCloseResultMsg is sent when closing multiple workspaces completes.
 type bulkCloseResultMsg struct {
-	ids []string
-	err error
+	// ids is the complete attempted set; succeededIDs and failedIDs partition it.
+	ids          []string
+	succeededIDs []string
+	failedIDs    []string
+	err          error
 }

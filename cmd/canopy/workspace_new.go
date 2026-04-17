@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"path/filepath"
 	"strings"
 
@@ -100,11 +99,7 @@ var workspaceNewCmd = &cobra.Command{
 		} else {
 			resolvedRepos, err = service.ResolveRepos(id, nil)
 			if err != nil {
-				if errors.Is(err, cerrors.NoReposConfigured) {
-					resolvedRepos = []domain.Repo{}
-				} else {
-					return err
-				}
+				return err
 			}
 		}
 

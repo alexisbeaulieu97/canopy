@@ -94,6 +94,8 @@ canopy workspace reopen PROJ-123
 canopy workspace new PROJ-123 --repos backend,frontend
 ```
 
+If no repositories resolve from `--repos`, `--template`, or `defaults.workspace_patterns`, the command now fails fast and tells you how to recover instead of creating an empty workspace.
+
 **With custom branch name:**
 ```bash
 canopy workspace new PROJ-123 --repos backend --branch feature/auth
@@ -131,6 +133,7 @@ canopy workspace list --status --json
 ```
 
 Status entries include an `Error` field for status failures (e.g., `timeout`). When `Error` is set, `Branch` is empty.
+Human-readable status output now combines signals in one row, for example `1 dirty • 2 unpushed • 1 behind`, and shows `no repos` for empty workspaces.
 
 The `--show-locks` flag displays lock status for each workspace. Workspaces can be locked during long-running operations to prevent concurrent access. Stale locks (older than `lock_stale_threshold`) are automatically released.
 
@@ -143,8 +146,11 @@ canopy workspace view PROJ-123
 Shows:
 - Workspace ID and path
 - Branch name
+- Repo count
+- Disk usage
+- Last modified timestamp
 - Included repositories
-- Creation date
+- Lock state and orphaned worktrees when present
 
 ### Getting Workspace Path
 
@@ -460,6 +466,8 @@ canopy tui
 | `/` | Search/filter workspaces |
 | `Esc` | Clear search / go back |
 
+Search matches workspace IDs, repo names, branch names, and status keywords such as `dirty`, `unpushed`, `behind`, `stale`, `locked`, and `orphan`.
+
 ### Actions
 
 | Key | Action |
@@ -473,6 +481,8 @@ canopy tui
 | `A` | Deselect all workspaces |
 | `t` | Toggle stale workspace filter |
 | `q` | Quit |
+
+Bulk push, sync, and close actions now report how many workspaces succeeded, how many failed, and which workspace IDs failed.
 
 ### Customizing Keybindings
 

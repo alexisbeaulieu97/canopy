@@ -120,7 +120,7 @@ func (wm *workspaceModel) ApplyFilters(searchValue string) []list.Item {
 			continue
 		}
 
-		if search != "" && !strings.Contains(strings.ToLower(it.Workspace.ID), search) {
+		if search != "" && !workspaceMatchesSearch(it, wm.statusCache[it.Workspace.ID], search, wm.staleThresholdDays) {
 			continue
 		}
 
@@ -128,4 +128,150 @@ func (wm *workspaceModel) ApplyFilters(searchValue string) []list.Item {
 	}
 
 	return items
+}
+
+func workspaceMatchesSearch(
+	item components.WorkspaceItem,
+	status *domain.WorkspaceStatus,
+	search string,
+	staleThresholdDays int,
+) bool {
+	matchers := workspaceSearchTerms(item, status, staleThresholdDays)
+
+	return containsSearchTerm(matchers, search)
+}
+
+func workspaceSearchTerms(
+	item components.WorkspaceItem,
+	status *domain.WorkspaceStatus,
+	staleThresholdDays int,
+) []string {
+	matchers := []string{
+		normalizeSearchTerm(item.Workspace.ID),
+		normalizeSearchTerm(item.Workspace.BranchName),
+	}
+
+	matchers = append(matchers, workspaceStateSearchTerms(item, staleThresholdDays)...)
+	matchers = append(matchers, workspaceRepoNames(item)...)
+	matchers = append(matchers, cachedStatusSearchTerms(status)...)
+
+	return matchers
+}
+
+func workspaceStateSearchTerms(item components.WorkspaceItem, staleThresholdDays int) []string {
+	var terms []string
+
+	terms = append(terms, workspaceFlagTerms(item, staleThresholdDays)...)
+	terms = append(terms, workspaceSummaryTerms(item)...)
+
+	return terms
+}
+
+func workspaceFlagTerms(item components.WorkspaceItem, staleThresholdDays int) []string {
+	var terms []string
+
+	if item.Workspace.Locked {
+		terms = append(terms, normalizeSearchTerm("locked"))
+	}
+
+	if item.Workspace.IsStale(staleThresholdDays) {
+		terms = append(terms, normalizeSearchTerm("stale"))
+	}
+
+	if item.OrphanCount > 0 || item.OrphanCheckFailed {
+		terms = append(terms, normalizeSearchTerm("orphan"))
+	}
+
+	if item.Err != nil {
+		terms = append(terms, normalizeSearchTerm("error"), normalizeSearchTerm(item.Err.Error()))
+	}
+
+	if item.LockCheckFailed {
+		terms = append(terms, normalizeSearchTerm("lock"), normalizeSearchTerm("error"))
+	}
+
+	return terms
+}
+
+func workspaceSummaryTerms(item components.WorkspaceItem) []string {
+	var terms []string
+
+	if item.Summary.DirtyRepos > 0 {
+		terms = append(terms, normalizeSearchTerm("dirty"))
+	}
+
+	if item.Summary.UnpushedRepos > 0 {
+		terms = append(terms, normalizeSearchTerm("unpushed"))
+	}
+
+	if item.Summary.BehindRepos > 0 {
+		terms = append(terms, normalizeSearchTerm("behind"))
+	}
+
+	if item.Summary.ErrorRepos > 0 || item.OrphanCheckFailed || item.LockCheckFailed {
+		terms = append(terms, normalizeSearchTerm("error"))
+	}
+
+	return terms
+}
+
+func workspaceRepoNames(item components.WorkspaceItem) []string {
+	terms := make([]string, 0, len(item.Workspace.Repos))
+	for _, repo := range item.Workspace.Repos {
+		terms = append(terms, normalizeSearchTerm(repo.Name))
+	}
+
+	return terms
+}
+
+func cachedStatusSearchTerms(status *domain.WorkspaceStatus) []string {
+	if status == nil {
+		return nil
+	}
+
+	terms := []string{normalizeSearchTerm(status.BranchName)}
+	for _, repo := range status.Repos {
+		terms = append(terms, normalizeSearchTerm(repo.Name), normalizeSearchTerm(repo.Branch))
+		terms = append(terms, repoStatusKeywords(repo)...)
+	}
+
+	return terms
+}
+
+func repoStatusKeywords(repo domain.RepoStatus) []string {
+	var terms []string
+
+	if repo.IsDirty {
+		terms = append(terms, normalizeSearchTerm("dirty"))
+	}
+
+	if repo.UnpushedCommits > 0 {
+		terms = append(terms, normalizeSearchTerm("unpushed"))
+	}
+
+	if repo.BehindRemote > 0 {
+		terms = append(terms, normalizeSearchTerm("behind"))
+	}
+
+	if repo.Error != "" {
+		terms = append(terms, normalizeSearchTerm("error"), normalizeSearchTerm(string(repo.Error)))
+	}
+
+	return terms
+}
+
+func containsSearchTerm(matchers []string, search string) bool {
+	search = normalizeSearchTerm(search)
+
+	for _, matcher := range matchers {
+		if strings.Contains(matcher, search) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func normalizeSearchTerm(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
